@@ -34,7 +34,7 @@ Przykład na stronie głównej przechodzi przez cały stack: formularz → `/api
 2. Project Settings → API: URL i *publishable key* wklejcie do `apps/web/.env.local`.
 3. Connect → *Transaction pooler* → `DATABASE_URL` w `apps/web/.env.local`.
 4. Connect → *Session pooler* → `DATABASE_URL` w `packages/db/.env`.
-5. `pnpm db:migrate` tworzy tabele.
+5. Tabele na produkcji tworzy workflow wdrożenia (niżej). Na własnej bazie deweloperskiej: `pnpm db:migrate`.
 
 Bez Supabase aplikacja i serwis ML też działają, tylko bez logowania i bazy.
 
@@ -59,6 +59,19 @@ pnpm api:generate   # po zmianie endpointów w services/ml
 - Gałąź na funkcję, krótkie PR-y, merge w ciągu dnia.
 - Migracje bazy robi jedna osoba (2), żeby nie było konfliktów.
 - Zasady dla agentów AI są w [CLAUDE.md](CLAUDE.md). Zmiany w nim przez osobny PR.
+
+### Wdrożenie bazy (Supabase)
+
+Migracje na produkcyjną bazę Supabase wdraża workflow **Deploy bazy (Supabase)**:
+Actions → *Deploy bazy (Supabase)* → *Run workflow* (gałąź `main`).
+
+- Uruchomić go może **tylko @FerrisOfficial**. U innych przerywa się od razu.
+- Działa tylko z `main` i tylko wtedy, gdy CI na tym commicie jest zielone.
+- Sekret `DATABASE_URL` (adres *Session pooler*) siedzi w środowisku `production`, ustawianym raz:
+
+  ```bash
+  gh secret set DATABASE_URL --env production --repo FerrisOfficial/vibe-stack
+  ```
 
 ### Zasady na GitHubie
 
