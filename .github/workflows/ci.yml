@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, typy, testy, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v10
+
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --locked
+        working-directory: services/ml
+
+      # Dokładnie to samo, co `pnpm check` lokalnie (TS + Python).
+      - run: pnpm check
+      - run: pnpm build
+
+      - name: Kontrakt API (typy TS zgodne z FastAPI)
+        run: |
+          pnpm api:generate
+          git diff --exit-code -- packages/api-ml || {
+            echo "::error::Typy klienta ML są nieaktualne. Uruchom 'pnpm api:generate' i scommituj zmiany."
+            exit 1
+          }
+
+  e2e:
+    name: Testy e2e (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @app/web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

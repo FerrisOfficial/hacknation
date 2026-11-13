@@ -1,0 +1,27 @@
+{
+  "name": "vibe-stack",
+  "private": true,
+  "packageManager": "pnpm@12.4.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "format": "biome check --write . && pnpm --filter @app/ml format",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "check": "turbo run lint typecheck test",
+    "db:generate": "pnpm --filter @app/db generate",
+    "db:migrate": "pnpm --filter @app/db migrate",
+    "db:studio": "pnpm --filter @app/db studio",
+    "api:generate": "pnpm --filter @app/ml openapi && pnpm --filter @app/api-ml generate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.2",
+    "turbo": "^2.11.11",
+    "typescript": "^5.9.3"
+  }
+}

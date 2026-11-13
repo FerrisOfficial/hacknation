@@ -1,0 +1,38 @@
+# zależności
+node_modules/
+.pnp
+.pnp.*
+
+# build i cache
+.next/
+out/
+build/
+dist/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+
+# testy
+coverage/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# sekrety: commitujemy tylko .env.example
+.env*
+!.env.example
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# logi i system
+*.log
+.DS_Store
+Thumbs.db

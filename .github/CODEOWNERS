@@ -1,0 +1,19 @@
+# Kto robi review czego. Wpiszcie swoje loginy GitHub i odkomentujcie linie.
+# Ostatnie pasujące dopasowanie wygrywa.
+
+# *                      @login-osoby-1 @login-osoby-2 @login-osoby-3
+
+# Osoba 1 — frontend
+# /apps/web/src/app/                @login-osoby-1
+# /apps/web/src/components/         @login-osoby-1
+
+# Osoba 2 — backend (route handlery) i baza
+# /apps/web/src/app/api/            @login-osoby-2
+# /packages/db/                     @login-osoby-2
+
+# Osoba 3 — ML
+# /services/ml/                     @login-osoby-3
+# /packages/api-ml/                 @login-osoby-3
+
+# Pliki wspólne — dowolna osoba z zespołu, ale zawsze przez PR
+# /CLAUDE.md                        @login-osoby-1 @login-osoby-2 @login-osoby-3

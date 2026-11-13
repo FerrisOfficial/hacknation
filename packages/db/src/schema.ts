@@ -1,0 +1,17 @@
+import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+
+// Przykładowa tabela — zmień albo usuń. Po każdej zmianie schematu: `pnpm db:generate`.
+// Użytkownicy żyją w Supabase Auth (schemat `auth`), tutaj trzymamy tylko ich id.
+export const notes = pgTable(
+  "notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("notes_user_id_idx").on(table.userId)],
+);
+
+export type Note = typeof notes.$inferSelect;
+export type NewNote = typeof notes.$inferInsert;

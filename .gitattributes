@@ -1,0 +1,7 @@
+# Jednolite końce linii (LF) niezależnie od systemu — Biome, Ruff i CI tego oczekują.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
