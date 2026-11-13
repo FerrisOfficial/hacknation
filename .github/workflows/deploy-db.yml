@@ -1,0 +1,81 @@
+name: Deploy bazy (Supabase)
+
+# Uruchamiany ręcznie: Actions → "Deploy bazy (Supabase)" → Run workflow (gałąź main).
+#
+# Kto może uruchomić — trzy warstwy:
+#  1. Job `authorize` przerywa, jeśli uruchamia ktoś inny niż właściciel repo albo nie z main.
+#  2. Sekret DATABASE_URL jest w środowisku `production`, które przyjmuje tylko chronione gałęzie,
+#     więc workflow zmieniony na innej gałęzi nie dostanie sekretu.
+#  3. Zmiana tego pliku na main wymaga PR-a zaakceptowanego przez właściciela (CODEOWNERS).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  authorize:
+    name: Sprawdź uprawnienia i CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tylko właściciel repo, tylko z main
+        env:
+          ACTOR: ${{ github.triggering_actor }}
+          OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$ACTOR" != "$OWNER" ]; then
+            echo "::error::Wdrożenie może uruchomić tylko $OWNER (uruchomił: $ACTOR)."
+            exit 1
+          fi
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Wdrażamy tylko z main (wybrano: $REF)."
+            exit 1
+          fi
+
+      - name: CI na tym commicie musi być zielone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
+            --limit 1 --json conclusion --jq '.[0].conclusion')
+          if [ "$status" != "success" ]; then
+            echo "::error::CI dla ${GITHUB_SHA::7} nie jest zielone (status: ${status:-brak}). Poczekaj na CI albo je napraw."
+            exit 1
+          fi
+
+  migrate:
+    name: Migracje bazy
+    needs: authorize
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Sprawdź sekret DATABASE_URL
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Brak sekretu DATABASE_URL w środowisku production (Settings → Environments → production)."
+            exit 1
+          fi
+
+      # Runnery GitHuba nie mają IPv6, a "Direct connection" Supabase jest tylko po IPv6.
+      # Dlatego DATABASE_URL musi być adresem "Session pooler" (port 5432).
+      - name: Zastosuj migracje
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm db:migrate
