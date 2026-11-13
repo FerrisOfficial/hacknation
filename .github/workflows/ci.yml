@@ -20,7 +20,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv nie publikuje tagów głównych (v10) — tylko pełne wersje.
+      - uses: astral-sh/setup-uv@v10.3.3
 
       - run: pnpm install --frozen-lockfile
       - run: uv sync --locked
