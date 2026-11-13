@@ -60,8 +60,8 @@ pnpm api:generate   # po zmianie endpointów w services/ml
 - Migracje bazy robi jedna osoba (2), żeby nie było konfliktów.
 - Zasady dla agentów AI są w [CLAUDE.md](CLAUDE.md). Zmiany w nim przez osobny PR.
 
-### Ustawienia GitHuba (raz, po utworzeniu repo)
+### Zasady na GitHubie
 
-1. **Settings → Branches → Add rule** dla `main`: *Require a pull request* + *Require status checks* (wybierzcie `Lint, typy, testy, build` i `Testy e2e (Playwright)`).
-2. **Settings → Collaborators**: dodajcie pozostałe dwie osoby.
-3. Uzupełnijcie loginy w [.github/CODEOWNERS](.github/CODEOWNERS).
+- `main` jest chroniony: zmiany tylko przez PR, wymagane zielone CI i **akceptacja @FerrisOfficial** (CODEOWNERS).
+- Nowy push po akceptacji ją unieważnia, więc trzeba poprosić o ponowne review.
+- Własne PR-y właściciel repo merguje z opcją *bypass*, bo GitHub nie pozwala zatwierdzić własnego PR-a.
