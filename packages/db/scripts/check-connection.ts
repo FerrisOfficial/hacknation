@@ -66,7 +66,7 @@ if (!raw) {
   fail(
     inCi
       ? "Brak DATABASE_URL (sekret w Settings → Environments → production)."
-      : "Brak DATABASE_URL. Skopiuj packages/db/.env.example do packages/db/.env i uzupełnij.",
+      : "Brak DATABASE_URL. Uruchom pnpm env:pull (pobiera dane dev z GitHuba) albo skopiuj packages/db/.env.example do packages/db/.env i uzupełnij.",
   );
 }
 

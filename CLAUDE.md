@@ -22,6 +22,7 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 | `pnpm check` | lint + typecheck + testy, TS i Python. **Uruchom przed każdym PR.** |
 | `pnpm format` | auto-fix formatowania (Biome + Ruff) |
 | `pnpm test:e2e` | build + Playwright |
+| `pnpm env:pull` | pliki `.env` bazy dev ze zmiennych repo `DEV_WEB_ENV` / `DEV_DB_ENV` (`--force` nadpisuje) |
 | `pnpm db:generate` | migracja SQL ze zmian w `packages/db/src/schema.ts` |
 | `pnpm db:migrate` | zastosowanie migracji na bazie (najpierw sprawdza połączenie) |
 | `pnpm db:check` | test połączenia z bazą z `packages/db/.env` — pokazuje kod błędu i podpowiedź |
@@ -40,6 +41,7 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 - Każda nowa tabela w `packages/db/src/schema.ts` musi mieć `.enableRLS()`. Bez tego Supabase wystawia ją publicznie przez REST API.
 - Na produkcyjną bazę migracje wdraża tylko właściciel repo, workflowem „Deploy bazy (Supabase)”. Nie uruchamiaj `pnpm db:migrate` z produkcyjnym `DATABASE_URL`.
 - Sekrety tylko w `.env*` (ignorowane przez git). Nowa zmienna = dopisz ją do odpowiedniego `.env.example`.
+- Zmienne repo `DEV_WEB_ENV` / `DEV_DB_ENV` zawierają hasło do bazy dev i nie są maskowane w logach. Nie używaj `vars.*` w workflowach i nigdy nie wrzucaj tam danych produkcyjnych.
 - Auth zawsze przez Supabase (`@/lib/supabase/*`). Nie pisz własnej obsługi haseł ani sesji.
 - Nie zmieniaj plików poza obszarem zadania (formatowanie "przy okazji" = konflikty u innych).
 
