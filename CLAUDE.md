@@ -1,4 +1,4 @@
-# Vibe Stack — instrukcje dla agentów
+# hacknation — instrukcje dla agentów
 
 Monorepo: Next.js (frontend + backend) + FastAPI (ML) + Supabase (Postgres, Auth).
 Zespół 3 osób, każdy z własnym agentem. Piszemy tak, żeby PR-y się nie gryzły.
