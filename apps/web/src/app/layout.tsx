@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vibe Stack",
+  title: "hacknation",
   description: "Next.js + FastAPI + Supabase",
 };
 

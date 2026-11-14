@@ -1,4 +1,4 @@
-# Vibe Stack
+# hacknation
 
 Next.js 16 + FastAPI + Supabase w jednym monorepo (pnpm + Turborepo).
 
@@ -70,7 +70,7 @@ Actions → *Deploy bazy (Supabase)* → *Run workflow* (gałąź `main`).
 - Sekret `DATABASE_URL` (adres *Session pooler*) siedzi w środowisku `production`, ustawianym raz:
 
   ```bash
-  gh secret set DATABASE_URL --env production --repo FerrisOfficial/vibe-stack
+  gh secret set DATABASE_URL --env production --repo FerrisOfficial/hacknation
   ```
 
 ### Zasady na GitHubie
