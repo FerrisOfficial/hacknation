@@ -13,15 +13,17 @@ Next.js 16 + FastAPI + Supabase w jednym monorepo (pnpm + Turborepo).
 
 ## Pierwsze uruchomienie
 
-**Wymagania:** Node 24, pnpm (`corepack enable`), [uv](https://docs.astral.sh/uv/getting-started/installation/), git.
+**Wymagania:** Node 24, pnpm (`corepack enable`), [uv](https://docs.astral.sh/uv/getting-started/installation/), git, [GitHub CLI](https://cli.github.com) (`winget install GitHub.cli` / `brew install gh`).
 
 ```bash
-pnpm install
+gh auth login       # raz na komputer
+pnpm install        # sam pobiera .env z danymi bazy dev (zmienne repo na GitHubie)
 cd services/ml && uv sync && cd ../..
-cp apps/web/.env.example apps/web/.env.local
-cp packages/db/.env.example packages/db/.env
 pnpm dev
 ```
+
+Pliki `.env` pobiera `pnpm env:pull`. Uruchamia się samo po `pnpm install` i przy `pnpm dev`, jeśli pliku brakuje.
+Bez `gh`: skopiuj `apps/web/.env.example` do `apps/web/.env.local` i `packages/db/.env.example` do `packages/db/.env`, a dane dev weź od właściciela repo.
 
 - http://localhost:3000 — aplikacja
 - http://127.0.0.1:8000/docs — dokumentacja API serwisu ML
@@ -35,6 +37,18 @@ Przykład na stronie głównej przechodzi przez cały stack: formularz → `/api
 3. Connect → *Transaction pooler* → `DATABASE_URL` w `apps/web/.env.local`.
 4. Connect → *Session pooler* → `DATABASE_URL` w `packages/db/.env`.
 5. Tabele na produkcji tworzy workflow wdrożenia (niżej). Na własnej bazie deweloperskiej: `pnpm db:migrate`.
+6. Udostępnij dane dev zespołowi (każdy współpracownik dostanie je przez `pnpm env:pull`):
+
+   ```bash
+   gh variable set DEV_WEB_ENV < apps/web/.env.local
+   gh variable set DEV_DB_ENV < packages/db/.env
+   ```
+
+   Po zmianie danych dev powtórz to, a zespół niech uruchomi `pnpm env:pull --force`.
+
+Zmienne repo (w przeciwieństwie do sekretów) każdy współpracownik może odczytać, ale w logach Actions nie są maskowane.
+Dlatego trzymamy w nich **tylko dane dev** i nie używamy ich w workflowach. Prod jest wyłącznie w sekrecie środowiska `production`.
+Gdy ktoś traci dostęp do repo, zresetuj hasło bazy dev (Project Settings → Database) i zaktualizuj `DEV_*_ENV`.
 
 Bez Supabase aplikacja i serwis ML też działają, tylko bez logowania i bazy.
 
@@ -44,6 +58,7 @@ Bez Supabase aplikacja i serwis ML też działają, tylko bez logowania i bazy.
 pnpm dev            # web + ml
 pnpm check          # lint + typy + testy (TS i Python) — przed każdym PR
 pnpm format         # auto-fix formatowania
+pnpm env:pull       # dane bazy dev do .env z GitHuba (--force nadpisuje istniejące)
 pnpm db:generate    # po zmianie packages/db/src/schema.ts
 pnpm db:check       # nie łączy się z bazą? pokaże kod błędu i co poprawić w .env
 pnpm api:generate   # po zmianie endpointów w services/ml
