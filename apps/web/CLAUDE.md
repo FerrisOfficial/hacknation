@@ -11,3 +11,6 @@
 - Pobieranie danych w komponentach klienta: TanStack Query (`useQuery` / `useMutation`).
 - Serwis ML wołamy tylko z serwera przez `@/lib/ml` (typowany klient z `@app/api-ml`).
 - Supabase: `@/lib/supabase/server` w kodzie serwerowym, `@/lib/supabase/client` w `"use client"`.
+- Produkcja to Cloudflare Workers przez OpenNext (`wrangler.jsonc`, `open-next.config.ts`). Nie dodawaj `export const runtime = "edge"`. Nie trzymaj połączeń ani stanu żądania w zmiennych modułu — Workers nie pozwala ich współdzielić między żądaniami. `getDb()` wołaj raz na żądanie.
+- Nowa zmienna środowiskowa na produkcji: publiczne `NEXT_PUBLIC_*` dopisz w kroku „Zbuduj (OpenNext)” w `.github/workflows/deploy.yml`, a sekretne dodaj do pliku sekretów w kroku „Wdróż na Cloudflare” (i jako sekret środowiska `production`).
+- `next/image` z optymalizacją wymaga bindingu `IMAGES` w `wrangler.jsonc` — dodaj go, zanim go użyjesz.

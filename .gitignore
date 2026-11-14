@@ -12,6 +12,8 @@ dist/
 *.tsbuildinfo
 next-env.d.ts
 .vercel
+.open-next/
+.wrangler/
 
 # testy
 coverage/
@@ -23,6 +25,7 @@ playwright/.cache/
 # sekrety: commitujemy tylko .env.example
 .env*
 !.env.example
+.dev.vars*
 *.pem
 
 # Python

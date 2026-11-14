@@ -1,6 +1,6 @@
 // Sprawdza połączenie z bazą z DATABASE_URL i tłumaczy typowe błędy Supabase.
 // drizzle-kit przy nieudanym połączeniu kończy się bez treści błędu, dlatego `pnpm db:migrate`
-// i workflow „Deploy bazy (Supabase)” uruchamiają ten skrypt przed migracjami.
+// i workflow „Deploy (baza + aplikacja)” uruchamiają ten skrypt przed migracjami.
 // Node uruchamia ten plik bezpośrednio (type stripping), bez kompilacji.
 import { existsSync } from "node:fs";
 import postgres from "postgres";
@@ -62,11 +62,11 @@ function hintFor(code: string, message: string): string {
 }
 
 // Mamy jedną bazę (prod), a lokalny .env wskazuje właśnie na nią. Migracje trafiają na nią tylko
-// z main po zielonym CI (workflow „Deploy bazy (Supabase)”), żeby baza nie dostała migracji
+// z main po zielonym CI (workflow „Deploy (baza + aplikacja)”), żeby baza nie dostała migracji
 // z gałęzi, której reszta zespołu jeszcze nie ma.
 if (process.argv.includes("--before-migrate") && !inCi) {
   fail(
-    "Lokalnie nie migrujemy — jest jedna, wspólna baza. Zrób pnpm db:generate, scommituj migrację w PR, a po merge'u do main workflow „Deploy bazy (Supabase)” zastosuje ją sam.",
+    "Lokalnie nie migrujemy — jest jedna, wspólna baza. Zrób pnpm db:generate, scommituj migrację w PR, a po merge'u do main workflow „Deploy (baza + aplikacja)” zastosuje ją sam.",
   );
 }
 

@@ -29,7 +29,26 @@ jobs:
 
       # Dokładnie to samo, co `pnpm check` lokalnie (TS + Python).
       - run: pnpm check
-      - run: pnpm build
+
+      # Ten sam build, który idzie na Cloudflare (next build + OpenNext). Lokalnie na Windowsie
+      # OpenNext nie działa (symlinki), więc to jedyne miejsce, gdzie sprawdzamy go przed merge'em.
+      - name: Build (Next.js na Cloudflare)
+        run: pnpm --filter @app/web cf:build
+
+      - name: Rozmiar Workera (plan Free — maks. 3 MiB po kompresji)
+        working-directory: apps/web
+        run: |
+          set -o pipefail
+          pnpm exec wrangler deploy --dry-run --outdir "$RUNNER_TEMP/worker" | tee "$RUNNER_TEMP/dry-run.log"
+          kib=$(grep -oE 'gzip: [0-9.]+ KiB' "$RUNNER_TEMP/dry-run.log" | grep -oE '[0-9.]+' | tail -1)
+          if [ -z "$kib" ]; then
+            echo "::warning::Nie odczytałem rozmiaru Workera z wranglera."
+          elif awk -v k="$kib" 'BEGIN { exit !(k > 3072) }'; then
+            echo "::error::Worker ma ${kib} KiB po kompresji, a plan Free Cloudflare pozwala na 3072 KiB. Odchudź zależności albo przejdźcie na Workers Paid (10 MiB)."
+            exit 1
+          else
+            echo "Worker: ${kib} KiB po kompresji (limit planu Free: 3072 KiB)."
+          fi
 
       - name: Kontrakt API (typy TS zgodne z FastAPI)
         run: |
