@@ -17,13 +17,13 @@ Next.js 16 + FastAPI + Supabase w jednym monorepo (pnpm + Turborepo).
 
 ```bash
 gh auth login       # raz na komputer
-pnpm install        # sam pobiera .env z danymi bazy dev (zmienne repo na GitHubie)
+pnpm install        # sam pobiera .env z danymi bazy (zmienne repo na GitHubie)
 cd services/ml && uv sync && cd ../..
 pnpm dev
 ```
 
 Pliki `.env` pobiera `pnpm env:pull`. Uruchamia się samo po `pnpm install` i przy `pnpm dev`, jeśli pliku brakuje.
-Bez `gh`: skopiuj `apps/web/.env.example` do `apps/web/.env.local` i `packages/db/.env.example` do `packages/db/.env`, a dane dev weź od właściciela repo.
+Bez `gh`: skopiuj `apps/web/.env.example` do `apps/web/.env.local` i `packages/db/.env.example` do `packages/db/.env`, a dane do bazy weź od właściciela repo.
 
 - http://localhost:3000 — aplikacja
 - http://127.0.0.1:8000/docs — dokumentacja API serwisu ML
@@ -32,23 +32,26 @@ Przykład na stronie głównej przechodzi przez cały stack: formularz → `/api
 
 ## Supabase (raz na zespół)
 
+Mamy **jedną bazę**: projekt Supabase `hacknation`. Lokalnie, na hostingu i w workflowie wdrożenia to ta sama baza.
+
 1. Załóżcie projekt na [supabase.com](https://supabase.com).
 2. Project Settings → API: URL i *publishable key* wklejcie do `apps/web/.env.local`.
 3. Connect → *Transaction pooler* → `DATABASE_URL` w `apps/web/.env.local`.
-4. Connect → *Session pooler* → `DATABASE_URL` w `packages/db/.env`.
-5. Tabele na produkcji tworzy workflow wdrożenia (niżej). Na własnej bazie deweloperskiej: `pnpm db:migrate`.
-6. Udostępnij dane dev zespołowi (każdy współpracownik dostanie je przez `pnpm env:pull`):
+4. Connect → *Session pooler* → `DATABASE_URL` w `packages/db/.env` i w sekrecie środowiska `production` (niżej).
+5. Udostępnij dane zespołowi (każdy współpracownik dostanie je przez `pnpm env:pull`):
 
    ```bash
-   gh variable set DEV_WEB_ENV < apps/web/.env.local
-   gh variable set DEV_DB_ENV < packages/db/.env
+   gh variable set WEB_ENV < apps/web/.env.local
+   gh variable set DB_ENV < packages/db/.env
    ```
 
-   Po zmianie danych dev powtórz to, a zespół niech uruchomi `pnpm env:pull --force`.
+   Po zmianie danych (np. hasła) powtórz to, a zespół niech uruchomi `pnpm env:pull --force`.
 
-Zmienne repo (w przeciwieństwie do sekretów) każdy współpracownik może odczytać, ale w logach Actions nie są maskowane.
-Dlatego trzymamy w nich **tylko dane dev** i nie używamy ich w workflowach. Prod jest wyłącznie w sekrecie środowiska `production`.
-Gdy ktoś traci dostęp do repo, zresetuj hasło bazy dev (Project Settings → Database) i zaktualizuj `DEV_*_ENV`.
+Tabele tworzy workflow wdrożenia (niżej), sam po każdym merge'u do `main`. Lokalnie `pnpm db:migrate` odmawia.
+
+Zmienne repo (w przeciwieństwie do sekretów) każdy współpracownik może odczytać, ale w logach Actions nie są maskowane, więc nie używamy ich w workflowach.
+Lokalny `.env` wskazuje na prawdziwą bazę, tę samą co demo: nie czyśćcie tabel i nie testujcie na niej niczego destrukcyjnego.
+Gdy ktoś traci dostęp do repo, zresetuj hasło bazy (Project Settings → Database) i zaktualizuj `WEB_ENV`, `DB_ENV`, sekret `DATABASE_URL` i zmienne na hostingu.
 
 Bez Supabase aplikacja i serwis ML też działają, tylko bez logowania i bazy.
 
@@ -58,7 +61,7 @@ Bez Supabase aplikacja i serwis ML też działają, tylko bez logowania i bazy.
 pnpm dev            # web + ml
 pnpm check          # lint + typy + testy (TS i Python) — przed każdym PR
 pnpm format         # auto-fix formatowania
-pnpm env:pull       # dane bazy dev do .env z GitHuba (--force nadpisuje istniejące)
+pnpm env:pull       # dane bazy do .env z GitHuba (--force nadpisuje istniejące)
 pnpm db:generate    # po zmianie packages/db/src/schema.ts
 pnpm db:check       # nie łączy się z bazą? pokaże kod błędu i co poprawić w .env
 pnpm api:generate   # po zmianie endpointów w services/ml
@@ -73,16 +76,15 @@ pnpm api:generate   # po zmianie endpointów w services/ml
 | 3 | `services/ml` + `packages/api-ml` — ML |
 
 - Gałąź na funkcję, krótkie PR-y, merge w ciągu dnia.
-- Migracje bazy robi jedna osoba (2), żeby nie było konfliktów.
+- Migracje (`pnpm db:generate`) robi jedna osoba (2), żeby nie było konfliktów. Na bazę trafiają same po merge'u do `main`.
 - Zasady dla agentów AI są w [CLAUDE.md](CLAUDE.md). Zmiany w nim przez osobny PR.
 
 ### Wdrożenie bazy (Supabase)
 
-Migracje na produkcyjną bazę Supabase wdraża workflow **Deploy bazy (Supabase)**:
-Actions → *Deploy bazy (Supabase)* → *Run workflow* (gałąź `main`).
+Migracje na bazę wdraża workflow **Deploy bazy (Supabase)**. Startuje sam, gdy CI na `main` skończy się na zielono, czyli po każdym merge'u, i wdraża dokładnie commit, który przeszedł CI.
 
-- Uruchomić go może **tylko @FerrisOfficial**. U innych przerywa się od razu.
-- Działa tylko z `main` i tylko wtedy, gdy CI na tym commicie jest zielone.
+- Ręcznie (np. żeby ponowić): Actions → *Deploy bazy (Supabase)* → *Run workflow* (gałąź `main`). Ręcznie może go uruchomić **tylko @FerrisOfficial**.
+- Bez nowych migracji nic nie zmienia w bazie.
 - Sekret `DATABASE_URL` (adres *Session pooler*) siedzi w środowisku `production`, ustawianym raz:
 
   ```bash
