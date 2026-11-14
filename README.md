@@ -45,6 +45,7 @@ pnpm dev            # web + ml
 pnpm check          # lint + typy + testy (TS i Python) — przed każdym PR
 pnpm format         # auto-fix formatowania
 pnpm db:generate    # po zmianie packages/db/src/schema.ts
+pnpm db:check       # nie łączy się z bazą? pokaże kod błędu i co poprawić w .env
 pnpm api:generate   # po zmianie endpointów w services/ml
 ```
 

@@ -8,7 +8,8 @@
   },
   "scripts": {
     "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate",
+    "check-connection": "node scripts/check-connection.ts",
+    "migrate": "node scripts/check-connection.ts && drizzle-kit migrate",
     "studio": "drizzle-kit studio",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit"

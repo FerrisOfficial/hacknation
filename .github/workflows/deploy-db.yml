@@ -75,6 +75,13 @@ jobs:
 
       # Runnery GitHuba nie mają IPv6, a "Direct connection" Supabase jest tylko po IPv6.
       # Dlatego DATABASE_URL musi być adresem "Session pooler" (port 5432).
+      # drizzle-kit przy nieudanym połączeniu nie pokazuje błędu — ten krok pokazuje kod
+      # (np. 28P01 = złe hasło) i podpowiedź, co poprawić w sekrecie.
+      - name: Sprawdź połączenie z bazą
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm db:check
+
       - name: Zastosuj migracje
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

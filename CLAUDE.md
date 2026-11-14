@@ -23,7 +23,8 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 | `pnpm format` | auto-fix formatowania (Biome + Ruff) |
 | `pnpm test:e2e` | build + Playwright |
 | `pnpm db:generate` | migracja SQL ze zmian w `packages/db/src/schema.ts` |
-| `pnpm db:migrate` | zastosowanie migracji na bazie |
+| `pnpm db:migrate` | zastosowanie migracji na bazie (najpierw sprawdza połączenie) |
+| `pnpm db:check` | test połączenia z bazą z `packages/db/.env` — pokazuje kod błędu i podpowiedź |
 | `pnpm api:generate` | OpenAPI z FastAPI → typy TS w `packages/api-ml` |
 
 ## Zasady
