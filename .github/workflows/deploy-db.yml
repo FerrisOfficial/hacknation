@@ -1,14 +1,22 @@
 name: Deploy bazy (Supabase)
 
-# Uruchamiany ręcznie: Actions → "Deploy bazy (Supabase)" → Run workflow (gałąź main).
+# Wdraża migracje na jedyną bazę (Supabase, projekt hacknation):
+#  - samo, gdy CI na main skończy się na zielono (czyli po każdym merge'u),
+#  - ręcznie: Actions → "Deploy bazy (Supabase)" → Run workflow (gałąź main) — np. żeby ponowić.
 #
-# Kto może uruchomić — trzy warstwy:
-#  1. Job `authorize` przerywa, jeśli uruchamia ktoś inny niż właściciel repo albo nie z main.
+# Kto może wdrożyć — trzy warstwy:
+#  1. Automatycznie tylko kod z main po zielonym CI. Ręcznie tylko właściciel repo i tylko z main.
 #  2. Sekret DATABASE_URL jest w środowisku `production`, które przyjmuje tylko chronione gałęzie,
 #     więc workflow zmieniony na innej gałęzi nie dostanie sekretu.
 #  3. Zmiana tego pliku na main wymaga PR-a zaakceptowanego przez właściciela (CODEOWNERS).
+#
+# drizzle-kit migrate stosuje tylko nowe migracje, więc uruchomienie bez zmian w schemacie nic nie robi.
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -22,16 +30,25 @@ permissions:
 jobs:
   authorize:
     name: Sprawdź uprawnienia i CI
+    # Automatycznie tylko po zielonym CI z pusha na main (nie z PR-ów).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.target.outputs.sha }}
     steps:
-      - name: Tylko właściciel repo, tylko z main
+      - name: Ręcznie tylko właściciel repo, tylko z main
+        if: github.event_name == 'workflow_dispatch'
         env:
           ACTOR: ${{ github.triggering_actor }}
           OWNER: ${{ github.repository_owner }}
           REF: ${{ github.ref }}
         run: |
           if [ "$ACTOR" != "$OWNER" ]; then
-            echo "::error::Wdrożenie może uruchomić tylko $OWNER (uruchomił: $ACTOR)."
+            echo "::error::Ręczne wdrożenie może uruchomić tylko $OWNER (uruchomił: $ACTOR)."
             exit 1
           fi
           if [ "$REF" != "refs/heads/main" ]; then
@@ -39,14 +56,22 @@ jobs:
             exit 1
           fi
 
+      # Przy starcie po CI wdrażamy dokładnie ten commit, który CI sprawdziło.
+      - name: Commit do wdrożenia
+        id: target
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
       - name: CI na tym commicie musi być zielone
         env:
           GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.target.outputs.sha }}
         run: |
-          status=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
+          status=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$SHA" \
             --limit 1 --json conclusion --jq '.[0].conclusion')
           if [ "$status" != "success" ]; then
-            echo "::error::CI dla ${GITHUB_SHA::7} nie jest zielone (status: ${status:-brak}). Poczekaj na CI albo je napraw."
+            echo "::error::CI dla ${SHA::7} nie jest zielone (status: ${status:-brak}). Poczekaj na CI albo je napraw."
             exit 1
           fi
 
@@ -57,6 +82,8 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.authorize.outputs.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:

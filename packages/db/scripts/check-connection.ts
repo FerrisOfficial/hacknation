@@ -61,12 +61,21 @@ function hintFor(code: string, message: string): string {
   return "Porównaj adres z Supabase → Connect → Direct → URI (Session pooler).";
 }
 
+// Mamy jedną bazę (prod), a lokalny .env wskazuje właśnie na nią. Migracje trafiają na nią tylko
+// z main po zielonym CI (workflow „Deploy bazy (Supabase)”), żeby baza nie dostała migracji
+// z gałęzi, której reszta zespołu jeszcze nie ma.
+if (process.argv.includes("--before-migrate") && !inCi) {
+  fail(
+    "Lokalnie nie migrujemy — jest jedna, wspólna baza. Zrób pnpm db:generate, scommituj migrację w PR, a po merge'u do main workflow „Deploy bazy (Supabase)” zastosuje ją sam.",
+  );
+}
+
 const raw = process.env.DATABASE_URL ?? "";
 if (!raw) {
   fail(
     inCi
       ? "Brak DATABASE_URL (sekret w Settings → Environments → production)."
-      : "Brak DATABASE_URL. Uruchom pnpm env:pull (pobiera dane dev z GitHuba) albo skopiuj packages/db/.env.example do packages/db/.env i uzupełnij.",
+      : "Brak DATABASE_URL. Uruchom pnpm env:pull (pobiera dane z GitHuba) albo skopiuj packages/db/.env.example do packages/db/.env i uzupełnij.",
   );
 }
 

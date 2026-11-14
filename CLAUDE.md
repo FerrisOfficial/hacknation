@@ -22,9 +22,9 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 | `pnpm check` | lint + typecheck + testy, TS i Python. **Uruchom przed każdym PR.** |
 | `pnpm format` | auto-fix formatowania (Biome + Ruff) |
 | `pnpm test:e2e` | build + Playwright |
-| `pnpm env:pull` | pliki `.env` bazy dev ze zmiennych repo `DEV_WEB_ENV` / `DEV_DB_ENV` (`--force` nadpisuje) |
+| `pnpm env:pull` | pliki `.env` ze zmiennych repo `WEB_ENV` / `DB_ENV` (`--force` nadpisuje) |
 | `pnpm db:generate` | migracja SQL ze zmian w `packages/db/src/schema.ts` |
-| `pnpm db:migrate` | zastosowanie migracji na bazie (najpierw sprawdza połączenie) |
+| `pnpm db:migrate` | tylko w CI — lokalnie odmawia; migracje trafiają na bazę same po merge'u do `main` |
 | `pnpm db:check` | test połączenia z bazą z `packages/db/.env` — pokazuje kod błędu i podpowiedź |
 | `pnpm api:generate` | OpenAPI z FastAPI → typy TS w `packages/api-ml` |
 
@@ -39,9 +39,10 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 - Zmiana API w `services/ml` = w tym samym PR `pnpm api:generate` i commit wygenerowanych plików (CI to sprawdza).
 - Zmiana schematu bazy = w tym samym PR `pnpm db:generate` i commit migracji. Nie edytuj starych migracji.
 - Każda nowa tabela w `packages/db/src/schema.ts` musi mieć `.enableRLS()`. Bez tego Supabase wystawia ją publicznie przez REST API.
-- Na produkcyjną bazę migracje wdraża tylko właściciel repo, workflowem „Deploy bazy (Supabase)”. Nie uruchamiaj `pnpm db:migrate` z produkcyjnym `DATABASE_URL`.
+- Jest **jedna baza** (Supabase `hacknation`) i lokalny `.env` wskazuje na nią — to te same dane, które widzi demo. Nie czyść tabel, nie usuwaj danych hurtowo i nie uruchamiaj destrukcyjnego SQL.
+- Schemat zmieniasz tylko migracją (`pnpm db:generate` + PR). Na bazę trafia sama po merge'u do `main` (workflow „Deploy bazy (Supabase)”). Nie omijaj tego przez `drizzle-kit migrate` ani `drizzle-kit push`.
 - Sekrety tylko w `.env*` (ignorowane przez git). Nowa zmienna = dopisz ją do odpowiedniego `.env.example`.
-- Zmienne repo `DEV_WEB_ENV` / `DEV_DB_ENV` zawierają hasło do bazy dev i nie są maskowane w logach. Nie używaj `vars.*` w workflowach i nigdy nie wrzucaj tam danych produkcyjnych.
+- Zmienne repo `WEB_ENV` / `DB_ENV` zawierają hasło do bazy i nie są maskowane w logach. Nie używaj `vars.*` w workflowach.
 - Auth zawsze przez Supabase (`@/lib/supabase/*`). Nie pisz własnej obsługi haseł ani sesji.
 - Nie zmieniaj plików poza obszarem zadania (formatowanie "przy okazji" = konflikty u innych).
 
