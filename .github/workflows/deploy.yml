@@ -1,13 +1,14 @@
-name: Deploy bazy (Supabase)
+name: Deploy (baza + aplikacja)
 
-# Wdraża migracje na jedyną bazę (Supabase, projekt hacknation):
+# Wdraża najpierw migracje na jedyną bazę (Supabase, projekt hacknation), potem aplikację
+# na Cloudflare Workers — więc kod nigdy nie wyprzedza schematu bazy:
 #  - samo, gdy CI na main skończy się na zielono (czyli po każdym merge'u),
-#  - ręcznie: Actions → "Deploy bazy (Supabase)" → Run workflow (gałąź main) — np. żeby ponowić.
+#  - ręcznie: Actions → "Deploy (baza + aplikacja)" → Run workflow (gałąź main) — np. żeby ponowić.
 #
 # Kto może wdrożyć — trzy warstwy:
 #  1. Automatycznie tylko kod z main po zielonym CI. Ręcznie tylko właściciel repo i tylko z main.
-#  2. Sekret DATABASE_URL jest w środowisku `production`, które przyjmuje tylko chronione gałęzie,
-#     więc workflow zmieniony na innej gałęzi nie dostanie sekretu.
+#  2. Sekrety (DATABASE_URL, CLOUDFLARE_*) są w środowisku `production`, które przyjmuje tylko
+#     chronione gałęzie, więc workflow zmieniony na innej gałęzi ich nie dostanie.
 #  3. Zmiana tego pliku na main wymaga PR-a zaakceptowanego przez właściciela (CODEOWNERS).
 #
 # drizzle-kit migrate stosuje tylko nowe migracje, więc uruchomienie bez zmian w schemacie nic nie robi.
@@ -113,3 +114,82 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm db:migrate
+
+  web:
+    name: Aplikacja (Cloudflare Workers)
+    needs: [authorize, migrate]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.authorize.outputs.sha }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Sprawdź sekrety Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Brak sekretu $name w środowisku production (Settings → Environments → production)."
+              exit 1
+            fi
+          done
+
+      # NEXT_PUBLIC_* trafiają do kodu przeglądarki już w czasie buildu. To wartości publiczne
+      # z założenia (URL projektu i publishable key Supabase), więc mogą być w repo.
+      - name: Zbuduj (OpenNext)
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://gzttmqjlvcjfwtwpgcrc.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_I3GI6XCNEu_sZn43yXkHOg_QsKrPfUk
+        run: pnpm cf:build
+
+      # Worker łączy się z bazą przez Transaction pooler: ten sam adres co sekret DATABASE_URL
+      # (Session pooler, port 5432), tylko na porcie 6543. Sekret Workera idzie razem z wersją.
+      - name: Wdróż na Cloudflare
+        id: deploy
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -o pipefail
+          db="${DATABASE_URL/:5432\//:6543/}"
+          if [ "$db" = "$DATABASE_URL" ]; then
+            echo "::error::Sekret DATABASE_URL powinien być adresem Session poolera (port 5432)."
+            exit 1
+          fi
+          echo "::add-mask::$db"
+          secrets="$RUNNER_TEMP/worker-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          jq -n --arg db "$db" '{DATABASE_URL: $db}' > "$secrets"
+          pnpm exec opennextjs-cloudflare deploy -- --keep-vars --secrets-file "$secrets" \
+            | tee "$RUNNER_TEMP/deploy.log"
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Sprawdź aplikację i połączenie z bazą
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$URL" ]; then
+            echo "::warning::Nie znalazłem adresu workers.dev w logu wdrożenia — pomijam test."
+            exit 0
+          fi
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS "$URL/api/health?db=1"; then echo; echo "Działa: $URL"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::$URL/api/health?db=1 nie odpowiada poprawnie. Logi: Cloudflare → Workers & Pages → hacknation → Logs."
+          exit 1

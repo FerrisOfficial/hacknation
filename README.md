@@ -7,6 +7,7 @@ Next.js 16 + FastAPI + Supabase w jednym monorepo (pnpm + Turborepo).
 | Frontend | Next.js (App Router), React 19, Tailwind 4, shadcn/ui, TanStack Query, React Hook Form + Zod |
 | Backend | Route handlery i Server Actions w Next.js |
 | Baza i auth | Supabase (Postgres + Auth), Drizzle ORM |
+| Hosting | Cloudflare Workers (adapter OpenNext), wdrażane z GitHub Actions |
 | ML | Python 3.14, FastAPI, pydantic, uv |
 | Kontrakt TS ↔ Python | OpenAPI → `openapi-typescript` + `openapi-fetch` |
 | Jakość | Biome, Ruff, Pyright, Vitest, pytest, Playwright, GitHub Actions |
@@ -79,17 +80,32 @@ pnpm api:generate   # po zmianie endpointów w services/ml
 - Migracje (`pnpm db:generate`) robi jedna osoba (2), żeby nie było konfliktów. Na bazę trafiają same po merge'u do `main`.
 - Zasady dla agentów AI są w [CLAUDE.md](CLAUDE.md). Zmiany w nim przez osobny PR.
 
-### Wdrożenie bazy (Supabase)
+### Wdrożenie (Supabase + Cloudflare)
 
-Migracje na bazę wdraża workflow **Deploy bazy (Supabase)**. Startuje sam, gdy CI na `main` skończy się na zielono, czyli po każdym merge'u, i wdraża dokładnie commit, który przeszedł CI.
+Workflow **Deploy (baza + aplikacja)** startuje sam, gdy CI na `main` skończy się na zielono, czyli po każdym merge'u, i wdraża dokładnie commit, który przeszedł CI:
 
-- Ręcznie (np. żeby ponowić): Actions → *Deploy bazy (Supabase)* → *Run workflow* (gałąź `main`). Ręcznie może go uruchomić **tylko @FerrisOfficial**.
-- Bez nowych migracji nic nie zmienia w bazie.
-- Sekret `DATABASE_URL` (adres *Session pooler*) siedzi w środowisku `production`, ustawianym raz:
+1. migracje na bazę (Supabase),
+2. aplikację Next.js na Cloudflare Workers (adapter OpenNext) — dopiero po udanych migracjach,
+3. test `/api/health?db=1` na adresie `*.workers.dev`.
 
-  ```bash
-  gh secret set DATABASE_URL --env production --repo FerrisOfficial/hacknation
-  ```
+- Ręcznie (np. żeby ponowić): Actions → *Deploy (baza + aplikacja)* → *Run workflow* (gałąź `main`). Ręcznie może go uruchomić **tylko @FerrisOfficial**.
+- Bez nowych migracji baza się nie zmienia.
+- Serwis ML nie jest wdrażany, więc na produkcji `/api/predict` odpowiada 503.
+- Build na Cloudflare nie działa na Windowsie (OpenNext), dlatego robi go CI. Każdy PR sprawdza też, czy Worker mieści się w 3 MiB (plan Free).
+
+Sekrety w środowisku `production` (Settings → Environments → production), ustawiane raz:
+
+| Sekret | Skąd |
+|---|---|
+| `DATABASE_URL` | Supabase → Connect → *Session pooler* (5432). Worker dostaje ten sam adres na porcie 6543. |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → *Create Token* → szablon **Edit Cloudflare Workers** |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare → Workers & Pages → *Account ID* w panelu bocznym |
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN --env production --repo FerrisOfficial/hacknation
+```
+
+Konto Cloudflare musi mieć wybraną subdomenę `workers.dev` (Workers & Pages przy pierwszym wejściu). Po pierwszym wdrożeniu dopisz adres aplikacji w Supabase → Authentication → URL Configuration (*Site URL* i *Redirect URLs*).
 
 ### Zasady na GitHubie
 

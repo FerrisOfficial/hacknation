@@ -6,7 +6,7 @@ Zespół 3 osób, każdy z własnym agentem. Piszemy tak, żeby PR-y się nie gr
 ## Struktura
 
 ```
-apps/web/          Next.js 16 — UI, route handlery (src/app/api), Server Actions
+apps/web/          Next.js 16 — UI, route handlery (src/app/api), Server Actions; produkcja: Cloudflare Workers
 packages/db/       Drizzle — schemat bazy (src/schema.ts) i migracje (drizzle/)
 packages/api-ml/   Typowany klient serwisu ML — GENEROWANY z OpenAPI, nie edytuj src/schema.d.ts
 services/ml/       FastAPI + uv — modele ML, endpointy
@@ -40,7 +40,7 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 - Zmiana schematu bazy = w tym samym PR `pnpm db:generate` i commit migracji. Nie edytuj starych migracji.
 - Każda nowa tabela w `packages/db/src/schema.ts` musi mieć `.enableRLS()`. Bez tego Supabase wystawia ją publicznie przez REST API.
 - Jest **jedna baza** (Supabase `hacknation`) i lokalny `.env` wskazuje na nią — to te same dane, które widzi demo. Nie czyść tabel, nie usuwaj danych hurtowo i nie uruchamiaj destrukcyjnego SQL.
-- Schemat zmieniasz tylko migracją (`pnpm db:generate` + PR). Na bazę trafia sama po merge'u do `main` (workflow „Deploy bazy (Supabase)”). Nie omijaj tego przez `drizzle-kit migrate` ani `drizzle-kit push`.
+- Schemat zmieniasz tylko migracją (`pnpm db:generate` + PR). Na bazę trafia sama po merge'u do `main` (workflow „Deploy (baza + aplikacja)”). Nie omijaj tego przez `drizzle-kit migrate` ani `drizzle-kit push`.
 - Sekrety tylko w `.env*` (ignorowane przez git). Nowa zmienna = dopisz ją do odpowiedniego `.env.example`.
 - Zmienne repo `WEB_ENV` / `DB_ENV` zawierają hasło do bazy i nie są maskowane w logach. Nie używaj `vars.*` w workflowach.
 - Auth zawsze przez Supabase (`@/lib/supabase/*`). Nie pisz własnej obsługi haseł ani sesji.

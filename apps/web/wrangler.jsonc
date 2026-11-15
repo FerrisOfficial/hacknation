@@ -1,0 +1,26 @@
+// Worker na Cloudflare dla aplikacji Next.js (adapter OpenNext).
+// Wdraża go workflow „Deploy” po zielonym CI na main — lokalnie nie wdrażamy.
+// Sekret DATABASE_URL (Transaction pooler) workflow wgrywa razem z każdą wersją.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hacknation",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Wymagane przez OpenNext (cache i revalidacja). Musi się zgadzać z "name".
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "hacknation"
+    }
+  ],
+  // Logi Workera w panelu Cloudflare (Workers & Pages → hacknation → Logs).
+  "observability": {
+    "enabled": true
+  }
+  // next/image z optymalizacją wymaga bindingu "images": { "binding": "IMAGES" } (Cloudflare Images).
+}
