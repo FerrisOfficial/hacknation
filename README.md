@@ -26,7 +26,7 @@ pnpm dev
 Pliki `.env` pobiera `pnpm env:pull`. Uruchamia się samo po `pnpm install` i przy `pnpm dev`, jeśli pliku brakuje.
 Bez `gh`: skopiuj `apps/web/.env.example` do `apps/web/.env.local` i `packages/db/.env.example` do `packages/db/.env`, a dane do bazy weź od właściciela repo.
 
-- http://localhost:3000 — aplikacja
+- http://localhost:3000/hacknation — aplikacja (produkcja: https://maciejstempniak.com/hacknation)
 - http://127.0.0.1:8000/docs — dokumentacja API serwisu ML
 
 Przykład na stronie głównej przechodzi przez cały stack: formularz → `/api/predict` (Next.js) → FastAPI → wynik.
@@ -86,7 +86,7 @@ Workflow **Deploy (baza + aplikacja)** startuje sam, gdy CI na `main` skończy s
 
 1. migracje na bazę (Supabase),
 2. aplikację Next.js na Cloudflare Workers (adapter OpenNext) — dopiero po udanych migracjach,
-3. test `/api/health?db=1` na adresie `*.workers.dev`.
+3. test `/api/health?db=1` na https://maciejstempniak.com/hacknation.
 
 - Ręcznie (np. żeby ponowić): Actions → *Deploy (baza + aplikacja)* → *Run workflow* (gałąź `main`). Ręcznie może go uruchomić **tylko @FerrisOfficial**.
 - Bez nowych migracji baza się nie zmienia.
@@ -105,7 +105,9 @@ Sekrety w środowisku `production` (Settings → Environments → production), u
 gh secret set CLOUDFLARE_API_TOKEN --env production --repo FerrisOfficial/hacknation
 ```
 
-Konto Cloudflare musi mieć wybraną subdomenę `workers.dev` (Workers & Pages przy pierwszym wejściu). Po pierwszym wdrożeniu dopisz adres aplikacji w Supabase → Authentication → URL Configuration (*Site URL* i *Redirect URLs*).
+Aplikacja działa pod ścieżką `/hacknation` domeny `maciejstempniak.com` (`basePath` w Next, `routes` w `apps/web/wrangler.jsonc`). Reszta domeny to osobna strona na GitHub Pages. DNS domeny jest w Cloudflare, a jej rekordy muszą być *Proxied* (pomarańczowa chmurka) — inaczej żądania nie trafią do Workera.
+
+Supabase → Authentication → URL Configuration: *Site URL* `https://maciejstempniak.com/hacknation`, *Redirect URLs* `https://maciejstempniak.com/hacknation/**` i `http://localhost:3000/**`.
 
 ### Zasady na GitHubie
 

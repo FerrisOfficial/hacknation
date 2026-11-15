@@ -15,3 +15,4 @@
 - Produkcja to Cloudflare Workers przez OpenNext (`wrangler.jsonc`, `open-next.config.ts`). Nie dodawaj `export const runtime = "edge"`. Nie trzymaj połączeń ani stanu żądania w zmiennych modułu — Workers nie pozwala ich współdzielić między żądaniami. `getDb()` wołaj raz na żądanie.
 - Nowa zmienna środowiskowa na produkcji: publiczne `NEXT_PUBLIC_*` dopisz w kroku „Zbuduj (OpenNext)” w `.github/workflows/deploy.yml`, a sekretne dodaj do pliku sekretów w kroku „Wdróż na Cloudflare” (i jako sekret środowiska `production`).
 - `next/image` z optymalizacją wymaga bindingu `IMAGES` w `wrangler.jsonc` — dodaj go, zanim go użyjesz.
+- Aplikacja działa pod `/hacknation` (`basePath`, produkcja: https://maciejstempniak.com/hacknation, lokalnie http://localhost:3000/hacknation). `<Link>` i router dodają prefiks same. W `fetch()` na własne API i w `src` obrazków z `public/` użyj `withBasePath()` z `@/lib/base-path` — gołe `"/api/..."` trafi poza aplikację.

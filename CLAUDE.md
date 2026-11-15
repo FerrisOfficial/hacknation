@@ -6,7 +6,7 @@ Zespół 3 osób, każdy z własnym agentem. Piszemy tak, żeby PR-y się nie gr
 ## Struktura
 
 ```
-apps/web/          Next.js 16 — UI, route handlery (src/app/api), Server Actions; produkcja: Cloudflare Workers
+apps/web/          Next.js 16 — UI, route handlery (src/app/api), Server Actions; produkcja: Cloudflare Workers, https://maciejstempniak.com/hacknation
 packages/db/       Drizzle — schemat bazy (src/schema.ts) i migracje (drizzle/)
 packages/api-ml/   Typowany klient serwisu ML — GENEROWANY z OpenAPI, nie edytuj src/schema.d.ts
 services/ml/       FastAPI + uv — modele ML, endpointy
