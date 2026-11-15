@@ -34,6 +34,10 @@ jobs:
       # OpenNext nie działa (symlinki), więc to jedyne miejsce, gdzie sprawdzamy go przed merge'em.
       - name: Build (Next.js na Cloudflare)
         run: pnpm --filter @app/web cf:build
+        # Te same publiczne wartości co w deploy.yml, żeby testować dokładnie to, co idzie na produkcję.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://gzttmqjlvcjfwtwpgcrc.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_I3GI6XCNEu_sZn43yXkHOg_QsKrPfUk
 
       - name: Rozmiar Workera (plan Free — maks. 3 MiB po kompresji)
         working-directory: apps/web
@@ -49,6 +53,30 @@ jobs:
           else
             echo "Worker: ${kib} KiB po kompresji (limit planu Free: 3072 KiB)."
           fi
+
+      # Uruchamia zbudowanego Workera w workerd (ten sam runtime co Cloudflare) i sprawdza, czy strony
+      # się renderują. Sam build tego nie łapie — błąd wychodzi dopiero przy pierwszym żądaniu.
+      - name: Worker odpowiada (wrangler dev)
+        working-directory: apps/web
+        run: |
+          log="$RUNNER_TEMP/wrangler-dev.log"
+          pnpm exec wrangler dev --ip 127.0.0.1 --port 8787 > "$log" 2>&1 &
+          for _ in $(seq 1 45); do
+            curl -s -o /dev/null "http://127.0.0.1:8787/api/health" && break
+            sleep 2
+          done
+          fail=0
+          for path in / /api/health; do
+            code=$(curl -s -o "$RUNNER_TEMP/body" -w '%{http_code}' "http://127.0.0.1:8787$path" || true)
+            echo "$path -> $code"
+            if [ "$code" != "200" ]; then
+              fail=1
+              echo "::error::Worker zwrócił $code na $path (na Cloudflare to zwykle błąd 1101)."
+              head -c 1000 "$RUNNER_TEMP/body"; echo
+            fi
+          done
+          kill %1 2>/dev/null || true
+          if [ "$fail" = 1 ]; then echo "--- log wranglera ---"; cat "$log"; exit 1; fi
 
       - name: Kontrakt API (typy TS zgodne z FastAPI)
         run: |

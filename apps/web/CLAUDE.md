@@ -2,7 +2,8 @@
 
 # apps/web — Next.js (frontend + backend)
 
-- Next.js 16 z App Router i włączonym `cacheComponents`. Przed użyciem API, którego nie jesteś pewien, czytaj `node_modules/next/dist/docs/`.
+- Next.js 16 z App Router. Przed użyciem API, którego nie jesteś pewien, czytaj `node_modules/next/dist/docs/`.
+- `cacheComponents` jest wyłączone, bo na Cloudflare Workers zawiesza strony (błąd 1101). Nie włączaj go i nie używaj `'use cache'`, `cacheLife` ani `cacheTag`.
 - "Middleware" to w Next 16 `src/proxy.ts`.
 - Backend = route handlery (`src/app/api/**/route.ts`) i Server Actions. Osobnego serwera Node nie ma.
 - Komponenty UI: shadcn/ui w `src/components/ui`. Nowe dodawaj przez `pnpm dlx shadcn@latest add <nazwa>`, nie pisz ich ręcznie.
