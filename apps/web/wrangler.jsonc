@@ -18,6 +18,16 @@
       "service": "hacknation"
     }
   ],
+  // Aplikacja żyje pod https://maciejstempniak.com/hacknation (basePath w next.config.ts).
+  // Resztę domeny (strona na GitHub Pages) Cloudflare przepuszcza bez Workera.
+  // Domena musi być strefą na tym koncie Cloudflare (DNS w Cloudflare, rekordy z pomarańczową chmurką).
+  "routes": [
+    { "pattern": "maciejstempniak.com/hacknation", "zone_name": "maciejstempniak.com" },
+    { "pattern": "maciejstempniak.com/hacknation/*", "zone_name": "maciejstempniak.com" }
+  ],
+  // Jeden adres aplikacji — bez *.workers.dev.
+  "workers_dev": false,
+  "preview_urls": false,
   // Logi Workera w panelu Cloudflare (Workers & Pages → hacknation → Logs).
   "observability": {
     "enabled": true

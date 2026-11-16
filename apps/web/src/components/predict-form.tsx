@@ -8,10 +8,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { withBasePath } from "@/lib/base-path";
 import { type PredictInput, predictInputSchema } from "@/lib/schemas";
 
 async function predict(input: PredictInput): Promise<Prediction> {
-  const res = await fetch("/api/predict", {
+  const res = await fetch(withBasePath("/api/predict"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

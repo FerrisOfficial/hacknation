@@ -61,20 +61,26 @@ jobs:
         run: |
           log="$RUNNER_TEMP/wrangler-dev.log"
           pnpm exec wrangler dev --ip 127.0.0.1 --port 8787 > "$log" 2>&1 &
+          base=http://127.0.0.1:8787/hacknation
           for _ in $(seq 1 45); do
-            curl -s -o /dev/null "http://127.0.0.1:8787/api/health" && break
+            curl -s -o /dev/null "$base/api/health" && break
             sleep 2
           done
           fail=0
-          for path in / /api/health; do
-            code=$(curl -s -o "$RUNNER_TEMP/body" -w '%{http_code}' "http://127.0.0.1:8787$path" || true)
-            echo "$path -> $code"
+          check() {
+            code=$(curl -s -o "$RUNNER_TEMP/body" -w '%{http_code}' "$1" || true)
+            echo "$1 -> $code"
             if [ "$code" != "200" ]; then
               fail=1
-              echo "::error::Worker zwrócił $code na $path (na Cloudflare to zwykle błąd 1101)."
+              echo "::error::Worker zwrócił $code na $1 (na Cloudflare to zwykle błąd 1101)."
               head -c 1000 "$RUNNER_TEMP/body"; echo
             fi
-          done
+          }
+          check "$base"
+          # CSS ze strony głównej — sprawdza, że pliki z _next idą spod /hacknation.
+          css=$(grep -oE '/hacknation/_next/static/[^"]+\.css' "$RUNNER_TEMP/body" | head -1)
+          if [ -n "$css" ]; then check "http://127.0.0.1:8787$css"; else fail=1; echo "::error::Na stronie nie ma CSS spod /hacknation/_next."; fi
+          check "$base/api/health"
           kill %1 2>/dev/null || true
           if [ "$fail" = 1 ]; then echo "--- log wranglera ---"; cat "$log"; exit 1; fi
 

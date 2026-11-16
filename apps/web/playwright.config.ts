@@ -16,7 +16,7 @@ export default defineConfig({
   // Testy e2e lecą na zbudowanej aplikacji (pnpm build), na osobnym porcie niż `pnpm dev`.
   webServer: {
     command: `pnpm start --port ${port}`,
-    url: `http://localhost:${port}/api/health`,
+    url: `http://localhost:${port}/hacknation/api/health`,
     reuseExistingServer: !process.env.CI,
   },
 });
