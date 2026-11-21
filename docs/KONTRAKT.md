@@ -225,6 +225,7 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 **AI (`services/ml`)**
 - [ ] `POST /analyze` zwraca kształt z punktu 2: `findings[]` per reguła (`result`, `confidence`, `quote`, `reason`) oraz `label`, `probability`, `summary`. Wejście jak w punkcie 1 — jeden moduł i lista reguł na wywołanie.
 - [ ] `pnpm api:generate` w tym samym PR.
+- [ ] Wagi reguł M2 (`RULE_WEIGHTS` w `services/ml/src/ml/risk.py`): zdecydować, czy trenujemy je na oznaczonych fragmentach (regresja logistyczna, razem z kalibracją `confidence`), czy zostawiamy obecne, ustawione ręcznie (0,3 dla reguł 1 i 2, 1,0 dla pozostałych).
 
 **Backend (`apps/web`)**
 - [x] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory`).
