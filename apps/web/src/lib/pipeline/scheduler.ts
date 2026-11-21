@@ -1,5 +1,6 @@
 import "server-only";
-import { and, type Db, eq, isNull, or, scrapeJobs, sources, sql } from "@app/db";
+import { and, type Db, eq, isNull, materials, or, scrapeJobs, sources, sql } from "@app/db";
+import { materialsLimit } from "@/lib/materials-limit";
 import { enqueueScrape } from "./enqueue";
 
 // Harmonogram (mechanizm okresowej aktualizacji): co minutę cron pg-boss odpala tick, a tick
@@ -10,6 +11,12 @@ import { enqueueScrape } from "./enqueue";
 export const SCHEDULER_BATCH = 4;
 
 export async function enqueueDueSources(db: Db): Promise<number> {
+  // Po osiągnięciu limitu materiałów harmonogram stoi (ręczne uruchomienie i API działają dalej).
+  const limit = materialsLimit(process.env.MATERIALS_LIMIT);
+  if (limit > 0) {
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(materials);
+    if ((row?.count ?? 0) >= limit) return 0;
+  }
   const due = await db
     .select({ id: sources.id })
     .from(sources)
