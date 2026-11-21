@@ -229,12 +229,25 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 **Backend (`apps/web`)**
 - [ ] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory`).
 - [ ] `analysis_results.details` w kształcie z punktu 3: wyszukanie cytatu w `materials.text` (`start`, `end`; `evidence = null`, gdy nie znaleziono), `timestamp_s` dla filmów, `link`, `entity` z rejestru KNF i listy ostrzeżeń, `score` liczony z wyjścia AI.
-- [ ] `GET /api/incidents`: jeden rekord na (materiał, moduł) w kształcie z punktu 4, zamiast grupowania per materiał. Parametry `min_score`, `from`, `to` jak w kontrakcie.
-- [ ] `GET /api/incidents/:id` (punkt 5) i `GET /api/incidents/:id/snapshot` (`raw_html` jako `text/html`).
-- [ ] `PATCH /api/incidents/:id` ze statusem (punkt 6) zamiast `PATCH /results/:id`.
-- [ ] `GET /api/stats/trend?from=&to=` w kształcie z punktu 7.
-- [ ] `GET/PUT /api/settings/threshold` z dwoma progami na moduł, `flag` i `alert` (punkt 8). Zmiana schematu `module_settings` = migracja (`pnpm db:generate`).
-- [ ] `GET /api/calibration?module=&threshold=` w kształcie z punktu 9.
-- [ ] Zdarzenie Socket.io `incident.high_risk` (punkt 10), wysyłane, gdy `score ≥ alert` modułu. Typy w `apps/web/src/lib/realtime/events.ts`.
-- [ ] Stare ścieżki (`/thresholds`, `PATCH /results/:id`, zdarzenie `alert`) można usunąć, gdy UI przejdzie na nowe — UI z nich nie korzysta.
-- [ ] Aktualizacja [BACKEND.md](BACKEND.md).
+- [x] `GET /api/incidents`: jeden rekord na (materiał, moduł) w kształcie z punktu 4, zamiast grupowania per materiał. Parametry `min_score`, `from`, `to` jak w kontrakcie.
+- [x] `GET /api/incidents/:id` (punkt 5) i `GET /api/incidents/:id/snapshot` (`raw_html` jako `text/html`).
+- [x] `PATCH /api/incidents/:id` ze statusem (punkt 6) zamiast `PATCH /results/:id`.
+- [x] `GET /api/stats/trend?from=&to=` w kształcie z punktu 7.
+- [x] `GET/PUT /api/settings/threshold` z dwoma progami na moduł, `flag` i `alert` (punkt 8). Zmiana schematu `module_settings` = migracja (`pnpm db:generate`).
+- [x] `GET /api/calibration?module=&threshold=` w kształcie z punktu 9.
+- [x] Zdarzenie Socket.io `incident.high_risk` (punkt 10), wysyłane, gdy `score ≥ alert` modułu. Typy w `apps/web/src/lib/realtime/events.ts`.
+- [x] Usunięte stare ścieżki: `GET/PUT /thresholds`, `PATCH /results/:id`, zdarzenie `alert`.
+- [x] Aktualizacja [BACKEND.md](BACKEND.md).
+
+## Ustalenia implementacyjne (REST, punkty 4–10)
+
+- **Incydent = wynik ze `score ≥ flag` modułu.** `GET /api/incidents` i trend pokazują tylko takie wyniki, więc zmiana progu `flag` od razu zmienia listę. `min_score` zawęża dodatkowo. Sortowanie: najnowsze pierwsze.
+- **Poza kontraktem, opcjonalnie:** `page_size` (domyślnie 25, max 200). `module`, `platform`, `status` przyjmują też listy po przecinku (`?status=new,in_review`).
+- **Typy pól:** w `entity` każde pole może być `null`, gdy moduł go nie ustalił. `summary` to zawsze string (pusty, gdy brak). `precision` i `recall` są `null`, gdy nie da się ich policzyć (brak oznaczonych rekordów).
+- **`PATCH /api/incidents/:id`** zwraca szczegół incydentu po zmianie (kształt z punktu 5).
+- **`PUT /api/settings/threshold`:** można wysłać tylko zmieniane moduły. Wartości 0,01–0,99 (zaokrąglane do setnych), `alert ≥ flag`, inaczej 400. Odpowiedź: wszystkie progi.
+- **Trend:** dni kalendarzowe w strefie Europe/Warsaw, dni bez incydentów mają zera, bez `from` — ostatnie 30 dni.
+- **Kopia strony:** serwowana z nagłówkiem CSP `sandbox` (bez skryptów, formularzy i połączeń). Style i obrazki ładują się ze strony źródłowej. W UI osadzaj w `<iframe>`.
+- **`incident.high_risk`** leci raz, gdy wynik przekroczy `alert` (nowy albo wcześniej poniżej). Ponowna analiza już wysokiego wyniku nie wysyła go drugi raz. Socket.io wysyła tylko pola z punktu 10, bez `type`.
+- **Typy TS** odpowiedzi i zdarzeń dla UI: `apps/web/src/lib/incidents/contract.ts` (`IncidentList`, `IncidentDetail`, `Trend`, `Calibration`, `HighRiskIncidentEvent`), progi: `ThresholdSettings` w `apps/web/src/lib/analysis/modules.ts`.
+- **Zgodność wstecz:** `details` w starym kształcie (`explanation`, `entity.name`, `entity.registered`, `advertiser`) jest czytany jako `summary`, `firm_name`, `in_register`, `advertiser`. Flagi pojawią się, gdy pipeline zacznie zapisywać kształt z punktu 3.

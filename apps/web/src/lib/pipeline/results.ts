@@ -9,21 +9,22 @@ import {
   sql,
 } from "@app/db";
 import type { AnalysisResultInput } from "@/lib/analysis/contract";
-import { riskLevel } from "@/lib/analysis/modules";
+import { readIncidentDetails } from "@/lib/incidents/contract";
 import { publishEvent } from "@/lib/realtime/publish";
-import { getThresholds } from "./thresholds";
+import { getThresholdSettings } from "./thresholds";
 
 type AnalyzedMaterial = Pick<Material, "id" | "title" | "url" | "author" | "contentHash">;
 
 // Agregacja wyników modułów 1–3 dla materiału: upsert po (materiał, moduł) — ponowna analiza
 // nadpisuje score/label/details, a status przeglądu analityka zostaje. Wynik, który właśnie
-// przekroczył próg swojego modułu (nowy albo wcześniej poniżej), idzie jako alert do Socket.io.
+// przekroczył próg `alert` swojego modułu (nowy albo wcześniej poniżej), idzie do Socket.io jako
+// `incident.high_risk` (docs/KONTRAKT.md §10).
 export async function saveAnalysisResults(
   db: Db,
   material: AnalyzedMaterial,
   results: AnalysisResultInput[],
 ): Promise<AnalysisResult[]> {
-  const thresholds = await getThresholds(db);
+  const settings = await getThresholdSettings(db);
   const now = new Date();
   return db.transaction(async (tx) => {
     const previous = new Map(
@@ -59,25 +60,18 @@ export async function saveAnalysisResults(
       .where(eq(materials.id, material.id));
 
     for (const result of saved) {
-      const threshold = thresholds[result.module];
-      const level = riskLevel(result.score, threshold);
+      const alert = settings[result.module].alert;
       const before = previous.get(result.module);
-      if (level === "low" || (before !== undefined && before >= threshold)) continue;
+      if (result.score < alert || (before !== undefined && before >= alert)) continue;
       // NOTIFY w transakcji wychodzi dopiero po COMMIT — przeglądarka nie dostanie alertu
       // o wyniku, którego nie ma w bazie.
       await publishEvent(tx, {
-        type: "alert",
-        resultId: result.id,
-        materialId: material.id,
+        type: "incident.high_risk",
+        id: result.id,
         module: result.module,
-        score: result.score,
-        threshold,
-        riskLevel: level,
-        label: result.label,
-        title: material.title,
+        score: Math.round(result.score * 10_000) / 10_000,
+        summary: readIncidentDetails(result.details).summary,
         url: material.url,
-        author: material.author,
-        detectedAt: result.updatedAt.toISOString(),
       });
     }
     return saved;

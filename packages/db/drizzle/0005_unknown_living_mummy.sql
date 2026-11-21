@@ -1,0 +1,1 @@
+ALTER TABLE "module_settings" ADD COLUMN "alert_threshold" real;

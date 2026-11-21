@@ -45,7 +45,29 @@ export const MODULE_LABELS: Record<AnalysisModule, string> = {
 // Próg, gdy nikt go jeszcze nie skalibrował (brak wiersza w `module_settings`).
 export const DEFAULT_THRESHOLD = 0.5;
 
+// Domyślny próg `alert` — od niego leci powiadomienie `incident.high_risk` (docs/KONTRAKT.md §8, §10).
+export const DEFAULT_ALERT_THRESHOLD = 0.85;
+
+// Progi `flag` per moduł — tym operują listy, statystyki i raporty.
 export type Thresholds = Record<AnalysisModule, number>;
+
+// Pełne ustawienia progów z panelu kalibracji (GET/PUT /api/settings/threshold).
+export type ModuleThreshold = { flag: number; alert: number };
+export type ThresholdSettings = Record<AnalysisModule, ModuleThreshold>;
+
+export const DEFAULT_THRESHOLD_SETTINGS: ThresholdSettings = {
+  finfluencer: { flag: DEFAULT_THRESHOLD, alert: DEFAULT_ALERT_THRESHOLD },
+  risk_disclosure: { flag: DEFAULT_THRESHOLD, alert: DEFAULT_ALERT_THRESHOLD },
+  unauthorized_advisory: { flag: DEFAULT_THRESHOLD, alert: DEFAULT_ALERT_THRESHOLD },
+};
+
+export function flagThresholds(settings: ThresholdSettings): Thresholds {
+  return {
+    finfluencer: settings.finfluencer.flag,
+    risk_disclosure: settings.risk_disclosure.flag,
+    unauthorized_advisory: settings.unauthorized_advisory.flag,
+  };
+}
 
 export const DEFAULT_THRESHOLDS: Thresholds = {
   finfluencer: DEFAULT_THRESHOLD,
