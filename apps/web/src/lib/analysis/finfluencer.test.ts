@@ -215,11 +215,25 @@ describe("kody polecające z tekstu", () => {
     return (result.details as { flags: { reason: string }[] }).flags[0]?.reason ?? "";
   };
 
-  it("kod po słowie albo dwukropku, bez ucinania końcówki", () => {
-    expect(codeOf("Wpisz kod DETERMINACJA przy rejestracji")).toContain("kod DETERMINACJA;");
+  it("kod po słowie polecającym, po dwukropku albo z cyfrą, bez ucinania końcówki", () => {
+    expect(codeOf("Wpisz kod polecający DETERMINACJA przy rejestracji")).toContain(
+      "kod DETERMINACJA;",
+    );
     expect(codeOf("Z kodem promocyjnym XTB2024 dostaniesz akcje")).toContain("kod XTB2024");
     expect(codeOf("Kod: ZGRZYT")).toContain("kod ZGRZYT;");
+    expect(codeOf("Wpisz kod KANAL50")).toContain("kod KANAL50;");
+  });
+
+  it("nie bierze skrótów ani zwykłych wielkich słów za kod", () => {
+    expect(codeOf("Jak znaleźć ETF po kodzie ISIN")).not.toContain("kod ");
+    expect(codeOf("Wpisz kod DETERMINACJA przy rejestracji")).not.toContain("kod ");
     expect(codeOf("Kod źródłowy aplikacji jest na GitHubie")).not.toContain("kod ");
+  });
+
+  it("„link partnerski” to fraza reklamowa", () => {
+    expect(codeOf("Po kliknięciu w nasz link partnerski trafisz na stronę XTB")).toContain(
+      "„link partnerski”",
+    );
   });
 });
 
@@ -249,5 +263,16 @@ describe("pomocnicze", () => {
     expect(quote).toContain("z moim kodem");
     expect(quote?.length).toBeLessThanOrEqual(300);
     expect(signalQuote(text, [{ kind: "paid_promotion", detail: "", at: null }])).toBeNull();
+  });
+
+  it("signalQuote w długiej transkrypcji zaczyna od początku zdania, kończy na słowie", () => {
+    const filler = "To jest zdanie wypełniające o inwestowaniu w fundusze ETF. ".repeat(6);
+    const text = `${filler}Po kliknięciu w nasz link partnerski trafisz na stronę dedykowaną IKE w XTB. ${filler}`;
+    const at = text.indexOf("link partnerski");
+    const quote = signalQuote(text, [{ kind: "ad_phrase", detail: "", at }]) ?? "";
+    expect(quote.startsWith("Po kliknięciu w nasz link partnerski")).toBe(true);
+    expect(quote.length).toBeLessThanOrEqual(300);
+    expect(text.includes(quote)).toBe(true);
+    expect(quote).toMatch(/[.!?…]$|\p{L}$/u);
   });
 });
