@@ -47,6 +47,10 @@ class ScrapeResult(BaseModel):
     user_agent: str
     fetched_at: datetime
     html: str | None = None
+    links: list[str] = Field(
+        default_factory=list,
+        description="Linki wychodzące (inna domena niż strona), bez duplikatów, max 100.",
+    )
 
 
 class YoutubeCollectRequest(BaseModel):
@@ -216,6 +220,7 @@ def scrape_url(request: ScrapeRequest) -> ScrapeResult:
         user_agent=page.user_agent,
         fetched_at=page.fetched_at,
         html=page.html if request.include_html else None,
+        links=list(page.links),
     )
 
 

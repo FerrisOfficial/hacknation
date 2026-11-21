@@ -280,6 +280,11 @@ export interface components {
             fetched_at: string;
             /** Html */
             html?: string | null;
+            /**
+             * Links
+             * @description Linki wychodzące (inna domena niż strona), bez duplikatów, max 100.
+             */
+            links?: string[];
         };
         /** ValidationError */
         ValidationError: {

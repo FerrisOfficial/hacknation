@@ -5,8 +5,10 @@ import {
   type KnfEntity,
   type KnfWarning,
   materialDomain,
+  outboundLinks,
   resolveEntity,
 } from "@/lib/analysis/entity";
+import type { FirmLookup } from "@/lib/analysis/finfluencer";
 import type { IncidentEntity } from "@/lib/incidents/contract";
 import { ml } from "@/lib/ml";
 
@@ -70,4 +72,21 @@ export async function lookupEntity(material: EntityMaterial): Promise<IncidentEn
       ? null
       : searches.flatMap((result) => result ?? []);
   return resolveEntity(material, { entities, warnings });
+}
+
+// Moduł 1: ile domen z linków materiału sprawdzamy w KNF (opisy filmów mają ich kilkanaście).
+const MAX_FIRM_DOMAINS = 5;
+
+// Dane KNF dla domen z linków wychodzących — kandydatów na reklamowaną firmę.
+export async function lookupPromotedFirm(
+  material: Pick<EntityMaterial, "url" | "metadata">,
+): Promise<FirmLookup> {
+  const domains = outboundLinks(material)
+    .slice(0, MAX_FIRM_DOMAINS)
+    .map((link) => link.domain);
+  const [warnings, searches] = await Promise.all([
+    knfWarnings(),
+    Promise.all(domains.map(async (domain) => ({ domain, entities: await knfSearch(domain) }))),
+  ]);
+  return { searches, warnings };
 }

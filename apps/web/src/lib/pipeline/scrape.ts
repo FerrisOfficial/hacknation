@@ -1,6 +1,7 @@
 import "server-only";
 import type { MlClient } from "@app/api-ml";
 import { type Db, eq, type NewMaterial, type Source, scrapeJobs, sources } from "@app/db";
+import { normalizeDomain } from "@/lib/analysis/entity";
 import { collectYoutube, errorDetail } from "@/lib/collect/youtube";
 import { putContent } from "@/lib/content-store";
 import { publishEventSafe } from "@/lib/realtime/publish";
@@ -69,6 +70,8 @@ async function scrapeWebPage(
       status_code: data.status_code,
       description: data.description,
       user_agent: data.user_agent,
+      // Linki wychodzące, ten sam kształt co `links` filmu (moduł 1 szuka w nich firmy).
+      links: (data.links ?? []).map((url) => ({ url, domain: normalizeDomain(url) })),
     },
   };
   return { rows: [row], failed: [], stats: { pages: 1 } };

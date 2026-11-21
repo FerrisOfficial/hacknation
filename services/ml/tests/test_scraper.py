@@ -14,6 +14,7 @@ from ml.scraper import (
     ScrapeError,
     content_hash,
     extract,
+    extract_links,
     normalize_text,
     proxy_from_env,
     scrape,
@@ -54,6 +55,17 @@ def test_extract_falls_back_to_body_and_title() -> None:
     assert page.title == "Tytuł"
     assert page.text == "a\nb"
     assert page.language is None
+
+
+def test_extract_links_keeps_outbound_http_links_once() -> None:
+    html = (
+        '<a href="/regulamin">r</a><a href="https://www.fx-zysk.example/kontakt">k</a>'
+        '<a href="https://broker.example/?ref=KOD#top">b</a>'
+        '<a href="https://broker.example/?ref=KOD">b</a>'
+        '<a href="mailto:a@b.example">m</a><a href="//cdn.example/x">c</a>'
+        '<a href="javascript:void(0)">j</a>'
+    )
+    assert extract_links(html, URL) == ("https://broker.example/?ref=KOD", "https://cdn.example/x")
 
 
 def test_normalize_text() -> None:
