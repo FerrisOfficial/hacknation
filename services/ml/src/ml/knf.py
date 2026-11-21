@@ -186,12 +186,32 @@ def _html_text(fragment: str) -> str:
     return normalize_text(html_lib.unescape(_TAG_RE.sub("", _BR_RE.sub("\n", fragment))))
 
 
+def _inside_word(fragment: str, match: re.Match[str]) -> bool:
+    """Przekreślona litera sklejona z literą obok, np. `S.A.)<strike> <br />B</strike>iuro`."""
+    struck = _TAG_RE.sub("", match.group(1))
+    before = fragment[match.start() - 1 : match.start()]
+    after = fragment[match.end() : match.end() + 1]
+    return bool(struck) and (
+        (struck[-1].isalpha() and after.isalpha()) or (struck[0].isalpha() and before.isalpha())
+    )
+
+
 def _current_and_former(fragment: str) -> tuple[str, list[str]]:
-    """Wartość bez przekreśleń i lista przekreślonych (dawne nazwy, adresy, domeny)."""
-    former = [
-        line for struck in _STRIKE_RE.findall(fragment) for line in _html_text(struck).split("\n")
-    ]
-    return _html_text(_STRIKE_RE.sub("", fragment)), [line for line in former if line]
+    """Wartość bez przekreśleń i lista przekreślonych (dawne nazwy, adresy, domeny).
+
+    Przekreślenie w środku słowa to ślad poprawki tekstu w KNF, nie dawna wartość: bez niego
+    zostaje urwane słowo („BANK PEKAO S.A. (…)iuro Maklerskie PEKAO”). Jego tekst zostaje
+    w wartości i nie trafia do dawnych.
+    """
+    former: list[str] = []
+
+    def strike(match: re.Match[str]) -> str:
+        if _inside_word(fragment, match):
+            return match.group(1)
+        former.extend(line for line in _html_text(match.group(1)).split("\n") if line)
+        return ""
+
+    return _html_text(_STRIKE_RE.sub(strike, fragment)), former
 
 
 def entity_search_url(phrase: str, *, page: int, per_page: int, include_deleted: bool) -> str:

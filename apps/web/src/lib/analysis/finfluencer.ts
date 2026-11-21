@@ -113,6 +113,41 @@ const EN_WORDS = new Set([
   "what",
   "be",
 ]);
+// Czeski i słowacki mają większość słów z `PL_WORDS` (na, to, jak, co, ale, za, po, do), a kanały
+// czeskie i słowackie też linkują do XTB — rozróżniają je litery i słowa, których polski nie ma.
+const CS_SK_WORDS = new Set([
+  "v",
+  "ve",
+  "je",
+  "se",
+  "si",
+  "pro",
+  "jsem",
+  "jsme",
+  "jste",
+  "jsou",
+  "není",
+  "také",
+  "když",
+  "jako",
+  "který",
+  "která",
+  "které",
+  "nebo",
+  "protože",
+  "jen",
+  "už",
+  "být",
+  "sa",
+  "som",
+  "ako",
+  "alebo",
+  "pre",
+  "ktorý",
+  "aj",
+]);
+const PL_LETTERS = /[ąćęłńśźż]/gu;
+const CS_SK_LETTERS = /[ěřůťďňľĺŕô]/gu;
 
 export function isPolish(material: Pick<FinfluencerMaterial, "language" | "text">): boolean {
   const language = material.language?.toLowerCase();
@@ -124,7 +159,11 @@ export function isPolish(material: Pick<FinfluencerMaterial, "language" | "text"
       ?.slice(0, 600) ?? [];
   const pl = words.filter((w) => PL_WORDS.has(w)).length;
   const en = words.filter((w) => EN_WORDS.has(w)).length;
-  return pl >= 3 && pl >= en;
+  const csSk = words.filter((w) => CS_SK_WORDS.has(w)).length;
+  const sample = words.join(" ");
+  const plLetters = sample.match(PL_LETTERS)?.length ?? 0;
+  const csSkLetters = sample.match(CS_SK_LETTERS)?.length ?? 0;
+  return pl >= 3 && pl >= en && pl > csSk && csSkLetters <= plLetters;
 }
 
 // Frazy, którymi twórcy zapowiadają współpracę i zachęcają do założenia konta.
