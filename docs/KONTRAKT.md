@@ -227,8 +227,8 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - [ ] `pnpm api:generate` w tym samym PR.
 
 **Backend (`apps/web`)**
-- [ ] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory`).
-- [ ] `analysis_results.details` w kształcie z punktu 3: wyszukanie cytatu w `materials.text` (`start`, `end`; `evidence = null`, gdy nie znaleziono), `timestamp_s` dla filmów, `link`, `entity` z rejestru KNF i listy ostrzeżeń, `score` liczony z wyjścia AI.
+- [x] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory`).
+- [x] `analysis_results.details` w kształcie z punktu 3: wyszukanie cytatu w `materials.text` (`start`, `end`; `evidence = null`, gdy nie znaleziono), `timestamp_s` dla filmów, `link`, `entity` z rejestru KNF i listy ostrzeżeń, `score` liczony z wyjścia AI.
 - [x] `GET /api/incidents`: jeden rekord na (materiał, moduł) w kształcie z punktu 4, zamiast grupowania per materiał. Parametry `min_score`, `from`, `to` jak w kontrakcie.
 - [x] `GET /api/incidents/:id` (punkt 5) i `GET /api/incidents/:id/snapshot` (`raw_html` jako `text/html`).
 - [x] `PATCH /api/incidents/:id` ze statusem (punkt 6) zamiast `PATCH /results/:id`.
@@ -250,4 +250,4 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - **Kopia strony:** serwowana z nagłówkiem CSP `sandbox` (bez skryptów, formularzy i połączeń). Style i obrazki ładują się ze strony źródłowej. W UI osadzaj w `<iframe>`.
 - **`incident.high_risk`** leci raz, gdy wynik przekroczy `alert` (nowy albo wcześniej poniżej). Ponowna analiza już wysokiego wyniku nie wysyła go drugi raz. Socket.io wysyła tylko pola z punktu 10, bez `type`.
 - **Typy TS** odpowiedzi i zdarzeń dla UI: `apps/web/src/lib/incidents/contract.ts` (`IncidentList`, `IncidentDetail`, `Trend`, `Calibration`, `HighRiskIncidentEvent`), progi: `ThresholdSettings` w `apps/web/src/lib/analysis/modules.ts`.
-- **Zgodność wstecz:** `details` w starym kształcie (`explanation`, `entity.name`, `entity.registered`, `advertiser`) jest czytany jako `summary`, `firm_name`, `in_register`, `advertiser`. Flagi pojawią się, gdy pipeline zacznie zapisywać kształt z punktu 3.
+- **Zgodność wstecz:** `details` w starym kształcie (`explanation`, `entity.name`, `entity.registered`, `advertiser`) jest czytany jako `summary`, `firm_name`, `in_register`, `advertiser`. Pipeline zapisuje już kształt z punktu 3 — szczegóły (skąd backend bierze każde pole, wzór na `score`) w [BACKEND.md](BACKEND.md#kontrakt-z-serwisem-ml-post-analyze).
