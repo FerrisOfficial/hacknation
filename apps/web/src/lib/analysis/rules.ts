@@ -92,6 +92,7 @@ const RISK_DISCLOSURE_RULES: Rule[] = [
 ].map((r) => ({ ...r, module: "risk_disclosure" as const }));
 
 export const RULES: readonly Rule[] = [
+  // M1 nie idzie do modelu — flagę wystawia `@/lib/analysis/finfluencer` z sygnałów reklamy.
   {
     id: "M1.ad",
     module: "finfluencer",

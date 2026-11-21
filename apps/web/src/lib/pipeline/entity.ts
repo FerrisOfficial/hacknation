@@ -1,12 +1,18 @@
 import "server-only";
+import { mentionedBrands } from "@/lib/analysis/brands";
 import {
+  brandOf,
   type EntityMaterial,
   extractNip,
   type KnfEntity,
   type KnfWarning,
+  matchEntity,
   materialDomain,
+  outboundLinks,
+  registrableDomain,
   resolveEntity,
 } from "@/lib/analysis/entity";
+import type { FirmLookup } from "@/lib/analysis/finfluencer";
 import type { IncidentEntity } from "@/lib/incidents/contract";
 import { ml } from "@/lib/ml";
 
@@ -58,7 +64,8 @@ async function knfSearch(phrase: string): Promise<KnfEntity[] | null> {
 // Szukamy po NIP-ie z treści i po domenie. Wyszukiwarka KNF zwraca podmioty ze wszystkich
 // rejestrów — który pasuje, rozstrzyga `resolveEntity`.
 export async function lookupEntity(material: EntityMaterial): Promise<IncidentEntity> {
-  const phrases = [extractNip(material.text), materialDomain(material)].filter(
+  const domain = materialDomain(material);
+  const phrases = [extractNip(material.text), domain && registrableDomain(domain)].filter(
     (phrase): phrase is string => phrase !== null,
   );
   const [warnings, searches] = await Promise.all([
@@ -70,4 +77,40 @@ export async function lookupEntity(material: EntityMaterial): Promise<IncidentEn
       ? null
       : searches.flatMap((result) => result ?? []);
   return resolveEntity(material, { entities, warnings });
+}
+
+// Moduł 1: ile domen z linków materiału sprawdzamy w KNF (opisy filmów mają ich kilkanaście).
+const MAX_FIRM_DOMAINS = 5;
+
+// Moduł 1: ile marek wymienionych w tekście sprawdzamy w KNF.
+const MAX_BRANDS = 3;
+
+// Dane KNF dla domen z linków wychodzących i marek z tekstu — kandydatów na reklamowaną firmę.
+export async function lookupPromotedFirm(
+  material: Pick<EntityMaterial, "url" | "metadata" | "text">,
+): Promise<FirmLookup> {
+  const brands = mentionedBrands(material.text).slice(0, MAX_BRANDS);
+  const domains = [
+    ...new Set(outboundLinks(material).map((link) => registrableDomain(link.domain))),
+  ].slice(0, MAX_FIRM_DOMAINS);
+  const [warnings, brandSearches, searches] = await Promise.all([
+    knfWarnings(),
+    Promise.all(
+      brands.map(async ({ brand }) => ({
+        id: brand.id,
+        entities: await knfSearch(brand.knfQuery),
+      })),
+    ),
+    Promise.all(
+      domains.map(async (domain) => {
+        // Po domenie, a gdy żaden wynik nie ma tej domeny — po marce z domeny (`brandOf`).
+        const byDomain = await knfSearch(domain);
+        const matched = byDomain ? matchEntity(byDomain, { domain, nip: null }) : null;
+        const brand = byDomain && !matched ? brandOf(domain) : null;
+        const byBrand = brand ? await knfSearch(brand) : [];
+        return { domain, entities: byDomain && byBrand ? [...byDomain, ...byBrand] : null };
+      }),
+    ),
+  ]);
+  return { searches, warnings, brands: brandSearches };
 }

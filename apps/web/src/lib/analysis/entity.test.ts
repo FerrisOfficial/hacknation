@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  brandOf,
   type EntityMaterial,
   extractNip,
   type KnfEntity,
   type KnfWarning,
   materialDomain,
+  registrableDomain,
   resolveEntity,
 } from "./entity";
 
@@ -69,6 +71,22 @@ describe("materialDomain", () => {
       "broker.example",
     );
     expect(materialDomain(material({ url: "https://www.youtube.com/watch?v=x" }))).toBeNull();
+  });
+});
+
+describe("brandOf", () => {
+  it("marka z domeny, z odstępem między literami a cyframi", () => {
+    expect(brandOf("trading212.com")).toBe("trading 212");
+    expect(brandOf("lp.freedom24.com")).toBe("freedom 24");
+    expect(brandOf("xtb.com")).toBeNull();
+  });
+});
+
+describe("registrableDomain", () => {
+  it("domena główna, z dwuczłonowymi końcówkami", () => {
+    expect(registrableDomain("akcje.xtb.com")).toBe("xtb.com");
+    expect(registrableDomain("oferta.bank.com.pl")).toBe("bank.com.pl");
+    expect(registrableDomain("xtb.com")).toBe("xtb.com");
   });
 });
 

@@ -60,7 +60,7 @@ Dla maszyn (`Authorization: Bearer $COLLECTOR_TOKEN`):
 
 ## Kontrakt z serwisem ML: `POST /analyze`
 
-Kształty wejścia i wyjścia: [KONTRAKT.md](KONTRAKT.md) §1–§3. Worker woła `POST {ML_API_URL}/analyze` raz na moduł (`apps/web/src/lib/ml.ts`, schematy Zod w `lib/analysis/contract.ts`). Dopóki endpointu nie ma, analiza kończy się jednym wpisem w logu, bez ponawiania. Gdy endpoint trafi do OpenAPI serwisu ML (`pnpm api:generate`), przepnij `analyzeMaterial` na typowany `ml.POST("/analyze")`.
+Kształty wejścia i wyjścia: [KONTRAKT.md](KONTRAKT.md) §1–§3. Worker woła `POST {ML_API_URL}/analyze` raz na moduł 2 i 3 (moduł 1 liczą reguły, niżej). Gdy AI zawiedzie, wynik modułu 1 i tak jest zapisywany, a materiał zostaje do ponownej analizy (`apps/web/src/lib/ml.ts`, schematy Zod w `lib/analysis/contract.ts`). Dopóki endpointu nie ma, analiza kończy się jednym wpisem w logu, bez ponawiania. Gdy endpoint trafi do OpenAPI serwisu ML (`pnpm api:generate`), przepnij `analyzeMaterial` na typowany `ml.POST("/analyze")`.
 
 Co backend dokłada do wyjścia modelu (`lib/pipeline/analyze.ts` → `lib/analysis/details.ts`):
 
@@ -75,6 +75,25 @@ Co backend dokłada do wyjścia modelu (`lib/pipeline/analyze.ts` → `lib/analy
 | `score` | M1/M3: `probability` etykiety pozytywnej (`reklama`, `potencjalne_doradztwo`), dla negatywnej `1 − probability`. M2 (i M1/M3 bez `probability`): noisy-OR pewności naruszeń `1 − Π(1 − w·confidence)`, `w = 1` dla `hard`, `0,5` dla `suggestion`. Błąd modelu: 0 | `lib/analysis/details.ts` |
 | `label` | M1/M3: etykieta modelu; M2: `naruszenie` / `brak_naruszen`; błąd modelu: `blad_analizy` | `lib/analysis/details.ts` |
 | `model` | opcjonalne pole `model` w odpowiedzi (poza kontraktem), domyślnie `services/ml` | `lib/analysis/details.ts` |
+
+### Moduł 1 bez AI
+
+Moduł ma znaleźć reklamę firmy inwestycyjnej publikowaną przez kogoś innego (docs/ZADANIE.md), a nie oceniać jej treść, więc liczą go reguły w `lib/analysis/finfluencer.ts` (`model = rules/m1`). Wynik ma ten sam kształt §3 co moduły AI, z jedną flagą `M1.ad`.
+
+1. **Firma:** domeny z linków materiału (opis filmu po przekierowaniach, linki wychodzące strony WWW z `POST /scrape`), bez platform i własnej domeny, najwyżej 5 → wyszukiwarka KNF. Pierwsza domena firmy z aktualnym wpisem w rejestrze usług inwestycyjnych, a jeśli żadnej — pierwsza z listy ostrzeżeń KNF. Bez firmy: `brak_firmy`, score 0 (KNF nie odpowiedział: `blad_analizy`).
+2. **Podmiot trzeci:** kanał o nazwie firmy (bez form prawnych, np. „XTB” = „XTB S.A.”) albo strona z domen firmy w KNF to jej własny materiał (przypadek dla M2): `material_firmy`, score 0.
+3. **Score:** noisy-OR sygnałów `1 − Π(1 − w)`, każdy rodzaj raz: etykieta płatnej promocji YouTube 0,6, kod polecający 0,5 (z kolektora YouTube albo z tekstu: po „promocyjny/polecający/partnerski…”, po dwukropku albo z cyfrą; bez skrótów typu ISIN, ETF, IKE), link afiliacyjny (przekierowanie albo `?ref=`/`?aff=`…) 0,5 albo zwykły link 0,3, fraza reklamowa („z moim kodem”, „link partnerski”, „załóż konto”, „#reklama”…) 0,3. Od 0,5 `reklama` (flaga `violation`), poniżej `wzmianka` (`ok`).
+4. **Dowód:** zdanie z frazą, kodem albo linkiem (do 300 znaków, cięte na granicy zdania albo słowa) — jak w modułach AI, z `timestamp_s`, gdy pada w napisach filmu.
+
+5. **Język:** przed wszystkim innym — tylko materiały po polsku (`materials.language`, a bez niego proporcja polskich i angielskich słów). Inne: `inny_jezyk`, score 0.
+6. **Wzmianka bez linku:** gdy linki nie prowadzą do firmy, marka wymieniona w tekście (słownik `lib/analysis/brands.ts`, do 3 najczęstszych) i potwierdzona w KNF jako firma z rejestru usług inwestycyjnych. Zamiast sygnału linku: `brand_mention` 0,2 — sama wzmianka z frazą to 0,44 (`wzmianka`), z kodem i frazą 0,72 (`reklama`).
+
+**Skąd biorą się materiały M1** (`lib/m1-sources.ts`, `lib/pipeline/m1-sources.ts`):
+
+- **Frazy z marek:** `POST /api/sources/m1` (token `COLLECTOR_TOKEN`, idempotentne) zakłada źródła „{marka} kod / polecam / jak założyć konto / recenzja” dla marek ze słownika — wszystkie filmy, nie tylko z etykietą płatnej promocji, 10 na frazę, harmonogram co 12 h (pierwsze uruchomienie przy najbliższym ticku).
+- **Kula śnieżna:** kanał YouTube, w którym M1 znalazł `reklama`, staje się źródłem `youtube_channel` (15 najnowszych filmów co 24 h, `POST /collect/youtube/channel` w serwisie ML). Istniejącego źródła kanału nie zmienia — analityk może je wyłączyć.
+- **Tempo:** harmonogram puszcza `SCHEDULER_BATCH` źródeł na minutę (domyślnie 1, od najdawniej scrapowanych), a kolektor pyta YouTube po kolei, z przerwą `YOUTUBE_DELAY_S` (domyślnie 3 s ± 50%) przed każdym zapytaniem i bez dalszych zapytań po pierwszym HTTP 429. Przy szybszym tempie YouTube odpowiada HTTP 429 — takie zadanie kończy się błędem „YouTube ogranicza zapytania”, a nie pustym wynikiem.
+- **Limit:** po `MATERIALS_LIMIT` materiałów w bazie (domyślnie 2000, 0 = bez limitu) harmonogram przestaje kolejkować źródła. Ręczne uruchomienie i API działają dalej.
 
 ## Zdarzenia Socket.io
 

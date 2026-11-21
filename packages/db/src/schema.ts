@@ -62,9 +62,11 @@ export const scrapeTrigger = pgEnum("scrape_trigger", ["schedule", "manual", "ap
 
 // Konfiguracja źródła zależna od rodzaju. `youtube_search`: fraza w wyszukiwarce YouTube.
 // `web_page`: pojedyncza strona (social media bez API też — publiczny profil jako strona WWW).
+// `youtube_channel`: najnowsze filmy kanału (moduł 1 obserwuje kanały, w których znalazł reklamę).
 export type SourceConfig =
   | { kind: "web_page" }
-  | { kind: "youtube_search"; query: string; limit: number; paidOnly: boolean };
+  | { kind: "youtube_search"; query: string; limit: number; paidOnly: boolean }
+  | { kind: "youtube_channel"; channelUrl: string; limit: number };
 
 // Monitorowana strona albo profil w social mediach.
 export const sources = pgTable(

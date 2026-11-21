@@ -11,8 +11,10 @@ Bezstanowy jak scraper WWW — zapis do bazy robi wołający.
 """
 
 import json
+import os
 import random
 import re
+import time
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -72,7 +74,8 @@ _NOT_FOLLOWED_DOMAINS = (
 
 MAX_LINKED_TEXT = 20_000
 TRANSCRIPT_LANGUAGES = ("pl", "en")
-MAX_WORKERS = 4
+MAX_WORKERS = 4  # strony z linków w opisie (inne domeny niż YouTube)
+DEFAULT_YOUTUBE_DELAY_S = 3.0
 
 _VIDEO_ID_RE = re.compile(r"^[\w-]{11}$")
 _PLAYER_RESPONSE_RE = re.compile(r"ytInitialPlayerResponse\s*=\s*")
@@ -225,6 +228,11 @@ def search_videos(query: str, limit: int, paid_only: bool) -> list[SearchHit]:
     except DownloadError as exc:
         raise YoutubeError(f"Wyszukiwanie w YouTube nie powiodło się: {exc}") from exc
 
+    return _hits(info, limit)
+
+
+def _hits(info: object, limit: int) -> list[SearchHit]:
+    """Filmy z płaskiej listy yt-dlp (wyniki wyszukiwania, zakładka kanału)."""
     entries = info.get("entries") if isinstance(info, dict) else None
     hits: list[SearchHit] = []
     for entry in entries if isinstance(entries, list) else []:
@@ -242,6 +250,41 @@ def search_videos(query: str, limit: int, paid_only: bool) -> list[SearchHit]:
                 )
             )
     return hits[:limit]
+
+
+_CHANNEL_URL_RE = re.compile(
+    r"^https://(?:www\.|m\.)?youtube\.com/(?:@[\w.\-]+|channel/UC[\w-]{22}|c/[\w.\-]+|user/[\w.\-]+)"
+)
+
+
+def channel_videos_url(channel_url: str) -> str:
+    """Zakładka „Filmy” kanału (bez Shorts i transmisji). ValueError dla adresu spoza YouTube."""
+    match = _CHANNEL_URL_RE.match(channel_url.strip())
+    if match is None:
+        raise ValueError(f"To nie jest adres kanału YouTube: {channel_url}")
+    return f"{match.group(0).replace('://m.', '://www.')}/videos"
+
+
+def channel_videos(channel_url: str, limit: int) -> list[SearchHit]:
+    """Najnowsze `limit` filmów kanału — moduł 1 obserwuje kanały, w których znalazł reklamę."""
+    try:
+        with YoutubeDL(
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": "in_playlist",
+                "playlistend": limit,
+                "http_headers": {
+                    "User-Agent": random.choice(DESKTOP_USER_AGENTS),
+                    "Accept-Language": "pl-PL,pl;q=0.9",
+                },
+                "proxy": proxy_from_env(),
+            }
+        ) as ydl:
+            info: object = ydl.extract_info(channel_videos_url(channel_url), download=False)
+    except DownloadError as exc:
+        raise YoutubeError(f"Nie udało się pobrać listy filmów kanału: {exc}") from exc
+    return _hits(info, limit)
 
 
 # ─── Strona filmu ───────────────────────────────────────────────────────────────────────────────
@@ -436,22 +479,62 @@ def _analysis_text(title: str, description: str, transcript: Transcript | None) 
     return normalize_text("\n\n".join(part for part in parts if part))
 
 
+def youtube_delay_s() -> float:
+    """Przerwa przed każdym zapytaniem do YouTube (`YOUTUBE_DELAY_S`, domyślnie 3 s, 0 = bez).
+
+    Kilkadziesiąt zapytań na minutę z jednego IP kończy się HTTP 429 na kilkadziesiąt minut.
+    """
+    try:
+        return max(0.0, float(os.environ.get("YOUTUBE_DELAY_S", DEFAULT_YOUTUBE_DELAY_S)))
+    except ValueError:
+        return DEFAULT_YOUTUBE_DELAY_S
+
+
+def _pause(delay_s: float) -> None:
+    # Losowy rozrzut ±50% — równe odstępy wyglądają jak bot.
+    if delay_s > 0:
+        time.sleep(delay_s * random.uniform(0.5, 1.5))
+
+
 def _video_and_transcript(
     hit: SearchHit,
     *,
     client: httpx.Client,
     transcript_fetcher: TranscriptFetcher | None,
+    delay_s: float,
 ) -> tuple[VideoPage, Transcript | None, str | None] | FailedVideo:
+    _pause(delay_s)
     try:
         page = fetch_video_page(hit.video_id, client=client)
     except YoutubeError as exc:
         return FailedVideo(video_id=hit.video_id, error=str(exc))
     if transcript_fetcher is None:
         return page, None, None
+    _pause(delay_s)
     try:
         return page, transcript_fetcher(hit.video_id), None
     except TranscriptUnavailable as exc:
         return page, None, str(exc)
+
+
+def _videos_one_by_one(
+    hits: Sequence[SearchHit],
+    *,
+    client: httpx.Client,
+    transcript_fetcher: TranscriptFetcher | None,
+    delay_s: float,
+) -> list[tuple[VideoPage, Transcript | None, str | None] | FailedVideo]:
+    """Filmy po kolei, z przerwami. Po pierwszym HTTP 429 dalsze zapytania tylko przedłużają
+    blokadę — reszta filmów czeka na następne uruchomienie źródła."""
+    fetched: list[tuple[VideoPage, Transcript | None, str | None] | FailedVideo] = []
+    for hit in hits:
+        item = _video_and_transcript(
+            hit, client=client, transcript_fetcher=transcript_fetcher, delay_s=delay_s
+        )
+        fetched.append(item)
+        if isinstance(item, FailedVideo) and "HTTP 429" in item.error:
+            break
+    return fetched
 
 
 def _map[T, R](fn: Callable[[T], R], items: Iterable[T]) -> list[R]:
@@ -470,10 +553,13 @@ def collect(
     client: httpx.Client | None = None,
     searcher: Searcher | None = None,
     transcript_fetcher: TranscriptFetcher | None = None,
+    delay_s: float | None = None,
 ) -> Collection:
     """Wyszukuje filmy i zbiera dla każdego metadane, etykietę, transkrypcję i strony z opisu.
 
-    `client`, `searcher` i `transcript_fetcher` podmieniamy w testach (bez sieci).
+    Do YouTube po kolei, z przerwą `delay_s` (domyślnie `YOUTUBE_DELAY_S`); strony z linków
+    w opisie (inne domeny) równolegle. `client`, `searcher` i `transcript_fetcher` podmieniamy
+    w testach (bez sieci).
     """
     hits = (searcher or search_videos)(query, limit, paid_only)
     fetch_text = (transcript_fetcher or fetch_transcript) if transcripts else None
@@ -483,12 +569,20 @@ def collect(
         proxy=proxy_from_env(), timeout=DEFAULT_TIMEOUT, follow_redirects=True
     )
     try:
-        fetched = _map(
-            lambda hit: _video_and_transcript(hit, client=http, transcript_fetcher=fetch_text),
+        fetched = _videos_one_by_one(
             hits,
+            client=http,
+            transcript_fetcher=fetch_text,
+            delay_s=youtube_delay_s() if delay_s is None else delay_s,
         )
         pages = [item for item in fetched if not isinstance(item, FailedVideo)]
         failed = tuple(item for item in fetched if isinstance(item, FailedVideo))
+        if not pages and failed and all("HTTP 429" in item.error for item in failed):
+            # Blokada YouTube, a nie brak filmów: zadanie kończy się błędem, nie pustym wynikiem.
+            raise YoutubeError(
+                "YouTube ogranicza zapytania (HTTP 429). "
+                "Spróbuj później albo ustaw SCRAPER_PROXY_URL."
+            )
 
         # Ten sam link (np. afiliacyjny) w wielu filmach pobieramy raz.
         links_per_video = [description_links(page.description) for page, _, _ in pages]

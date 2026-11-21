@@ -11,6 +11,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from selectolax.lexbor import LexborHTMLParser, LexborNode
@@ -42,6 +43,7 @@ _BLOCK_TAGS = (
 
 DEFAULT_TIMEOUT = 15.0
 MAX_BYTES = 5_000_000
+MAX_LINKS = 100
 
 
 class ScrapeError(Exception):
@@ -71,6 +73,7 @@ class ScrapedPage:
     user_agent: str
     fetched_at: datetime
     html: str
+    links: tuple[str, ...] = ()
 
 
 def pick_user_agent(rng: random.Random | None = None) -> str:
@@ -153,6 +156,26 @@ def extract(html: str) -> Extracted:
     )
 
 
+def _host(url: str) -> str:
+    return (urlsplit(url).hostname or "").lower().removeprefix("www.")
+
+
+def extract_links(html: str, base_url: str) -> tuple[str, ...]:
+    """Linki wychodzące (http/https, inna domena niż strona) — moduł 1 szuka w nich firmy
+    inwestycyjnej reklamowanej przez stronę trzecią (link afiliacyjny, polecający)."""
+    own = _host(base_url)
+    found: dict[str, None] = {}
+    for node in LexborHTMLParser(html).css("a[href]"):
+        href = (node.attributes.get("href") or "").strip()
+        url = urljoin(base_url, href).split("#", 1)[0]
+        host = _host(url)
+        if urlsplit(url).scheme in ("http", "https") and "." in host and host != own:
+            found[url] = None
+            if len(found) >= MAX_LINKS:
+                break
+    return tuple(found)
+
+
 def scrape(
     url: str,
     *,
@@ -205,4 +228,5 @@ def scrape(
         user_agent=user_agent,
         fetched_at=datetime.now(UTC),
         html=html,
+        links=extract_links(html, str(response.url)),
     )

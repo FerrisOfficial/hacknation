@@ -352,3 +352,90 @@ def test_collect_youtube_endpoint_validates_input() -> None:
     assert client.post("/collect/youtube", json={"query": ""}).status_code == 422
     assert client.post("/collect/youtube", json={"query": "x", "limit": 0}).status_code == 422
     assert client.post("/collect/youtube", json={"query": "x", "limit": 51}).status_code == 422
+
+
+def test_channel_videos_url_accepts_channel_forms_only() -> None:
+    assert (
+        youtube.channel_videos_url("https://www.youtube.com/@KanalTestowy")
+        == "https://www.youtube.com/@KanalTestowy/videos"
+    )
+    assert (
+        youtube.channel_videos_url("https://m.youtube.com/channel/UC1234567890123456789012/shorts")
+        == "https://www.youtube.com/channel/UC1234567890123456789012/videos"
+    )
+    with pytest.raises(ValueError):
+        youtube.channel_videos_url("https://evil.example/@kanal")
+    with pytest.raises(ValueError):
+        youtube.channel_videos_url("https://www.youtube.com/watch?v=AAAAAAAAAA1")
+
+
+@respx.mock
+def test_collect_youtube_channel_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[str, int]] = []
+
+    def fake_channel(url: str, limit: int) -> list[SearchHit]:
+        seen.append((url, limit))
+        return fake_searcher(url, limit, False)
+
+    monkeypatch.setattr(youtube, "channel_videos", fake_channel)
+    monkeypatch.setattr(youtube, "fetch_transcript", fake_transcript)
+    respx.route(host="www.youtube.com").mock(side_effect=web_handler([]).handle_request)
+    respx.route(host__regex=r".*\.example$").mock(side_effect=web_handler([]).handle_request)
+
+    url = "https://www.youtube.com/@KanalTestowy"
+    response = client.post("/collect/youtube/channel", json={"channel_url": url, "limit": 2})
+    assert response.status_code == 200
+    body = response.json()
+    assert seen == [(url, 2)]
+    assert body["query"] == url
+    assert body["paid_only"] is False
+    assert [v["video_id"] for v in body["videos"]] == [PAID_ID, PLAIN_ID]
+
+
+def test_collect_youtube_channel_endpoint_rejects_non_channel_url() -> None:
+    response = client.post(
+        "/collect/youtube/channel", json={"channel_url": "https://evil.example/@kanal/x"}
+    )
+    assert response.status_code == 422
+
+
+def test_collect_raises_when_youtube_rate_limits_every_video() -> None:
+    blocked = httpx.Client(transport=httpx.MockTransport(lambda _request: httpx.Response(429)))
+    with pytest.raises(YoutubeError, match="HTTP 429"):
+        youtube.collect(
+            "XTB kod",
+            limit=2,
+            client=blocked,
+            searcher=fake_searcher,
+            transcript_fetcher=fake_transcript,
+        )
+
+
+def test_collect_stops_asking_youtube_after_first_429() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(429)
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as blocked,
+        pytest.raises(YoutubeError, match="HTTP 429"),
+    ):
+        youtube.collect(
+            "XTB kod",
+            limit=3,
+            client=blocked,
+            searcher=fake_searcher,
+            transcript_fetcher=fake_transcript,
+        )
+    assert len(calls) == 1
+
+
+def test_youtube_delay_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("YOUTUBE_DELAY_S", "1.5")
+    assert youtube.youtube_delay_s() == 1.5
+    monkeypatch.setenv("YOUTUBE_DELAY_S", "abc")
+    assert youtube.youtube_delay_s() == youtube.DEFAULT_YOUTUBE_DELAY_S
+    monkeypatch.delenv("YOUTUBE_DELAY_S")
+    assert youtube.youtube_delay_s() == youtube.DEFAULT_YOUTUBE_DELAY_S

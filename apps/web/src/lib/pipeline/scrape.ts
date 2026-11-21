@@ -1,7 +1,8 @@
 import "server-only";
 import type { MlClient } from "@app/api-ml";
 import { type Db, eq, type NewMaterial, type Source, scrapeJobs, sources } from "@app/db";
-import { collectYoutube, errorDetail } from "@/lib/collect/youtube";
+import { normalizeDomain } from "@/lib/analysis/entity";
+import { collectYoutube, collectYoutubeChannel, errorDetail } from "@/lib/collect/youtube";
 import { putContent } from "@/lib/content-store";
 import { publishEventSafe } from "@/lib/realtime/publish";
 import { sourceConfig } from "@/lib/sources";
@@ -69,6 +70,8 @@ async function scrapeWebPage(
       status_code: data.status_code,
       description: data.description,
       user_agent: data.user_agent,
+      // Linki wychodzące, ten sam kształt co `links` filmu (moduł 1 szuka w nich firmy).
+      links: (data.links ?? []).map((url) => ({ url, domain: normalizeDomain(url) })),
     },
   };
   return { rows: [row], failed: [], stats: { pages: 1 } };
@@ -82,6 +85,14 @@ async function collect(
   const config = sourceConfig(source);
   if (config.kind === "youtube_search") {
     const result = await collectYoutube(ml, config, ids);
+    return {
+      rows: result.rows,
+      failed: result.failed,
+      stats: { videos: result.videos, paidPromotion: result.paidPromotion, pages: result.pages },
+    };
+  }
+  if (config.kind === "youtube_channel") {
+    const result = await collectYoutubeChannel(ml, config, ids);
     return {
       rows: result.rows,
       failed: result.failed,

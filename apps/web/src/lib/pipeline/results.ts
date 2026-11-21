@@ -23,6 +23,8 @@ export async function saveAnalysisResults(
   db: Db,
   material: AnalyzedMaterial,
   results: AnalysisResultInput[],
+  // false = zapisz wyniki, ale zostaw materiał do ponownej analizy (część modułów zawiodła).
+  options: { markAnalyzed?: boolean } = {},
 ): Promise<AnalysisResult[]> {
   const settings = await getThresholdSettings(db);
   const now = new Date();
@@ -54,10 +56,12 @@ export async function saveAnalysisResults(
             })
             .returning();
 
-    await tx
-      .update(materials)
-      .set({ analyzedHash: material.contentHash, analyzedAt: now })
-      .where(eq(materials.id, material.id));
+    if (options.markAnalyzed ?? true) {
+      await tx
+        .update(materials)
+        .set({ analyzedHash: material.contentHash, analyzedAt: now })
+        .where(eq(materials.id, material.id));
+    }
 
     for (const result of saved) {
       const alert = settings[result.module].alert;

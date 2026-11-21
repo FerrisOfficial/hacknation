@@ -6,7 +6,7 @@ Przy sprzeczności z [BACKEND.md](BACKEND.md) wygrywa ten plik. Endpointy, któr
 
 ## Kto co dostarcza
 
-- **AI** (`services/ml`): `result`, `confidence`, `quote`, `reason` dla każdej reguły oraz `label`, `probability` i `summary` dla materiału.
+- **AI** (`services/ml`): `result`, `confidence`, `quote`, `reason` dla każdej reguły oraz `label`, `probability` i `summary` dla materiału — w modułach 2 i 3. **Moduł 1 nie używa AI**: backend liczy go regułami (firma z rejestru KNF w linkach materiału + sygnały reklamy), szczegóły w [BACKEND.md](BACKEND.md#modu%C5%82-1-bez-ai).
 - **Backend** (`apps/web/src/app/api`): wszystko pozostałe — pozycje cytatu (`start`, `end`), `timestamp_s`, `link`, dane z katalogu reguł (`rule_name`, `legal_basis`, `kind`), dane z rejestru KNF, `score`, endpointy, progi i alert.
 - **UI**: korzysta tylko z punktów 4–10.
 
@@ -31,7 +31,7 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
 }
 ```
 
-`module`: `finfluencer` | `risk_disclosure` | `unauthorized_advisory`. W M1 `rules` = `["M1.ad"]`, w M3 `["M3.advisory"]`.
+`module`: `risk_disclosure` | `unauthorized_advisory` (M1 liczy backend bez modelu). W M3 `rules` = `["M3.advisory"]`.
 
 ## 2. Model AI: wyjście
 
@@ -55,7 +55,7 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
 ```
 
 - `result`: `violation` | `ok` | `n/a`
-- `label`: `reklama` | `wzmianka` (M1), `potencjalne_doradztwo` | `usluga_dozwolona` (M3); w M2 `label` i `probability` = `null`
+- `label`: `potencjalne_doradztwo` | `usluga_dozwolona` (M3); w M2 `label` i `probability` = `null`. Etykiety M1 nadaje backend: `reklama` | `wzmianka` | `material_firmy` | `brak_firmy` | `inny_jezyk` | `blad_analizy`
 - `quote`: dosłowny fragment `text`, jeden akapit, do 300 znaków, bez parafrazy; obowiązkowy przy `violation`
 - `confidence`, `probability`: od 0 do 1, wartości ciągłe
 - model nie zwraca URL-i, pozycji znaków ani sekund filmu
