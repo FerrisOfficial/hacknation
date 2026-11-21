@@ -38,6 +38,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze
+         * @description Ocena materiału przez jeden moduł AI: wynik każdej reguły z cytatem (KONTRAKT.md §2).
+         */
+        post: operations["analyze"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scrape": {
         parameters: {
             query?: never;
@@ -139,6 +159,83 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalysisFinding */
+        AnalysisFinding: {
+            /** Rule Id */
+            rule_id: string;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "violation" | "ok" | "n/a";
+            /** Confidence */
+            confidence: number;
+            /**
+             * Quote
+             * @description Dosłowny fragment `text`, do 300 znaków.
+             */
+            quote: string | null;
+            /** Reason */
+            reason: string;
+        };
+        /** AnalyzeRequest */
+        AnalyzeRequest: {
+            /** Material Id */
+            material_id: string;
+            /**
+             * Module
+             * @enum {string}
+             */
+            module: "finfluencer" | "risk_disclosure" | "unauthorized_advisory";
+            /**
+             * Text
+             * @description materials.text
+             */
+            text: string;
+            /**
+             * Rules
+             * @description Reguły do oceny; pusta lista = wszystkie reguły modułu.
+             */
+            rules?: string[];
+        };
+        /** AnalyzeResponse */
+        AnalyzeResponse: {
+            /** Material Id */
+            material_id: string;
+            /**
+             * Label
+             * @description M1/M3; w M2 null.
+             */
+            label: string | null;
+            /**
+             * Probability
+             * @description M1/M3; w M2 null.
+             */
+            probability: number | null;
+            /** Summary */
+            summary: string;
+            /** Findings */
+            findings: components["schemas"]["AnalysisFinding"][];
+            /**
+             * Risk Score
+             * @description Do sortowania listy zadań: score materiału z wszystkich reguł (noisy-OR z zanikiem po rule_scores). Nie porównuj go z progiem.
+             */
+            risk_score?: number | null;
+            /**
+             * Max Rule Score
+             * @description Do progu: najwyższy rule_scores[*].score. Materiał jest incydentem przy progu t, gdy max_rule_score >= t (czyli gdy któraś reguła ma score >= t).
+             */
+            max_rule_score?: number | null;
+            /**
+             * Rule Scores
+             * @description Score każdej reguły, klucz = id reguły.
+             */
+            rule_scores?: {
+                [key: string]: components["schemas"]["RuleScoreOut"];
+            };
+            /** Error */
+            error?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -246,6 +343,24 @@ export interface components {
              */
             label: "positive" | "negative" | "neutral";
             /** Score */
+            score: number;
+        };
+        /** RuleScoreOut */
+        RuleScoreOut: {
+            /**
+             * P Violation
+             * @description P(naruszenie) reguły.
+             */
+            p_violation: number;
+            /**
+             * Weight
+             * @description Powaga reguły.
+             */
+            weight: number;
+            /**
+             * Score
+             * @description weight * p_violation — wkład do risk_score.
+             */
             score: number;
         };
         /** ScrapeRequest */
@@ -556,6 +671,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Prediction"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalyzeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyzeResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1,3 +1,5 @@
+import logging
+import os
 from datetime import datetime
 from typing import Literal
 
@@ -5,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.routing import APIRoute
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
-from ml import knf, youtube
+from ml import knf, risk, risk_llm, youtube
 from ml.model import Label, predict_sentiment
 from ml.scraper import ScrapeError, scrape
 
@@ -198,6 +200,65 @@ class KnfEntitySearch(_FromAttributes):
     entities: list[KnfEntity]
 
 
+# --- Analiza materiału (docs/KONTRAKT.md §1-2)
+AnalysisModuleName = Literal["finfluencer", "risk_disclosure", "unauthorized_advisory"]
+FindingResult = Literal["violation", "ok", "n/a"]
+
+
+class AnalyzeRequest(BaseModel):
+    material_id: str = Field(min_length=1, max_length=100)
+    module: AnalysisModuleName
+    text: str = Field(max_length=500_000, description="materials.text")
+    rules: list[str] = Field(
+        default_factory=list,
+        description="Reguły do oceny; pusta lista = wszystkie reguły modułu.",
+    )
+
+
+class AnalysisFinding(BaseModel):
+    rule_id: str
+    result: FindingResult
+    confidence: float = Field(ge=0, le=1)
+    quote: str | None = Field(description="Dosłowny fragment `text`, do 300 znaków.")
+    reason: str
+
+
+class RuleScoreOut(BaseModel):
+    p_violation: float = Field(ge=0, le=1, description="P(naruszenie) reguły.")
+    weight: float = Field(ge=0, le=1, description="Powaga reguły.")
+    score: float = Field(ge=0, le=1, description="weight * p_violation — wkład do risk_score.")
+
+
+class AnalyzeResponse(BaseModel):
+    material_id: str
+    label: str | None = Field(description="M1/M3; w M2 null.")
+    probability: float | None = Field(ge=0, le=1, description="M1/M3; w M2 null.")
+    summary: str
+    findings: list[AnalysisFinding]
+    risk_score: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description=(
+            "Do sortowania listy zadań: score materiału z wszystkich reguł "
+            "(noisy-OR z zanikiem po rule_scores). Nie porównuj go z progiem."
+        ),
+    )
+    max_rule_score: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description=(
+            "Do progu: najwyższy rule_scores[*].score. Materiał jest incydentem przy progu t, "
+            "gdy max_rule_score >= t (czyli gdy któraś reguła ma score >= t)."
+        ),
+    )
+    rule_scores: dict[str, RuleScoreOut] = Field(
+        default_factory=dict, description="Score każdej reguły, klucz = id reguły."
+    )
+    error: str | None = None
+
+
 class Health(BaseModel):
     status: Literal["ok"]
 
@@ -211,6 +272,63 @@ def health() -> Health:
 def predict(request: PredictRequest) -> Prediction:
     label, score = predict_sentiment(request.text)
     return Prediction(label=label, score=score)
+
+
+log = logging.getLogger(__name__)
+
+
+def _risk_disclosure(text: str, rules: list[str] | None) -> risk.RiskAnalysis:
+    """M2 wg M2_ENGINE: rules (regex), llm (Bielik, 13 reguł) albo hybrid.
+
+    hybrid: regex decyduje, czy reguła dotyczy, a LLM ocenia naruszenie.
+    """
+    rule_based = risk.analyze_risk_disclosure(text, rules)
+    engine = os.environ.get("M2_ENGINE", "rules")
+    if engine not in ("llm", "hybrid"):
+        return rule_based
+    try:
+        if engine == "hybrid":
+            return risk_llm.analyze_risk_disclosure_hybrid(text, rules)
+        llm = risk_llm.analyze_risk_disclosure_llm(text, rules)
+    except risk_llm.LlmError:
+        log.warning("Ocena M2 przez LLM nie powiodła się — wynik z reguł regex", exc_info=True)
+        return rule_based
+    by_rule = {f.rule_id: f for f in llm.findings}
+    findings = [by_rule.get(f.rule_id, f) for f in rule_based.findings]
+    return risk.RiskAnalysis(findings=findings, summary=risk.summarize(findings))
+
+
+@app.post("/analyze")
+def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
+    """Ocena materiału przez jeden moduł AI: wynik każdej reguły z cytatem (KONTRAKT.md §2)."""
+    if request.module != "risk_disclosure":
+        return AnalyzeResponse(
+            material_id=request.material_id, label=None, probability=None, summary="",
+            findings=[], error=f"Moduł {request.module} nie jest jeszcze obsługiwany.",
+        )  # fmt: skip
+    unknown = sorted(set(request.rules) - set(risk.RULE_IDS))
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Nieznane reguły M2: {', '.join(unknown)}")
+    analysis = _risk_disclosure(request.text, request.rules or None)
+    return AnalyzeResponse(
+        material_id=request.material_id,
+        label=None,
+        probability=None,
+        summary=analysis.summary,
+        risk_score=risk.risk_score(analysis.findings),
+        max_rule_score=risk.max_rule_score(analysis.findings),
+        rule_scores={
+            rule_id: RuleScoreOut(p_violation=s.p_violation, weight=s.weight, score=s.score)
+            for rule_id, s in risk.rule_scores(analysis.findings).items()
+        },
+        findings=[
+            AnalysisFinding(
+                rule_id=f.rule_id, result=f.result, confidence=f.confidence,
+                quote=f.quote, reason=f.reason,
+            )
+            for f in analysis.findings
+        ],
+    )  # fmt: skip
 
 
 @app.post("/scrape", responses={502: {"description": "Strony nie udało się pobrać"}})
