@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -186,6 +186,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+]
+
+[[package]]
+name = "defusedxml"
+version = "0.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
 ]
 
 [[package]]
@@ -700,6 +709,8 @@ dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
     { name = "selectolax" },
+    { name = "youtube-transcript-api" },
+    { name = "yt-dlp" },
 ]
 
 [package.dev-dependencies]
@@ -716,6 +727,8 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.14.3" },
     { name = "selectolax", specifier = ">=1.0.2" },
+    { name = "youtube-transcript-api", specifier = ">=1.2.5" },
+    { name = "yt-dlp", specifier = ">=2026.10.26" },
 ]
 
 [package.metadata.requires-dev]
@@ -1626,4 +1639,26 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/53/8f37a3943517bba77fc86f7c4162c455018c5b6d760c5e9c9a11de9e37f7/websockets-17.4-cp315-cp315t-win_amd64.whl", hash = "sha256:6e6558efbb256b532c9f06a21ba42bcac729718e365c505819f181f25e5c0eca", size = 219195, upload-time = "2026-10-30T15:10:12.336Z" },
     { url = "https://files.pythonhosted.org/packages/69/35/cf33cba7248fcd80cfe5911ffe67aa2637f50c2bfaada123b1e9d2aeca90/websockets-17.4-cp315-cp315t-win_arm64.whl", hash = "sha256:fcac44d917672ad6257ad64b80b5168306f168a78cab5c0612e4c699caed18cf", size = 219117, upload-time = "2026-10-30T15:10:13.771Z" },
     { url = "https://files.pythonhosted.org/packages/eb/27/9db924cb0dbf22eade78d98fbae77790f9bf6bc729e6ab29aef9d68e4156/websockets-17.4-py3-none-any.whl", hash = "sha256:c6bd2c9781915592b209160d0f017d4c7c82ad53075e6b0c24d2a89299e7f9e9", size = 212900, upload-time = "2026-10-30T15:10:34.482Z" },
+]
+
+[[package]]
+name = "youtube-transcript-api"
+version = "1.2.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "defusedxml" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/01/4d/e5ab63c432a4a818ec5ca9eb18584472653bbdd845cc46bf9d227bad6c4d/youtube_transcript_api-1.2.5.tar.gz", hash = "sha256:5e750bd1bac188c1b4afeaf20464ba4dd7a5fb05617f48463f9faa5bace683cc", size = 470631, upload-time = "2026-11-05T11:23:21.571Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/ee/6463d3dafe3bf671af6b8c149cd746d4a48f43eb23de4b906f8e010b796f/youtube_transcript_api-1.2.5-py3-none-any.whl", hash = "sha256:e79323bcb2daebed25773fef51a8dd10fee2ff39fb5993dccbe060470d6721ea", size = 485658, upload-time = "2026-11-05T11:23:20.365Z" },
+]
+
+[[package]]
+name = "yt-dlp"
+version = "2026.10.26"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/31/4be3987022a6244550ab6a3afe45ad10ac10b5e5ab8874bd8eecc7f8b937/yt_dlp-2026.10.26.tar.gz", hash = "sha256:abe5c6b94c3b2f0560500add1c42e0a97641752743a5b65588ac2007a6e23eb6", size = 3048880, upload-time = "2026-10-26T22:25:26.931Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/3d/16ea7d5638cf585991f2c5705e8083688dde633d32d0871f2404e0f4d827/yt_dlp-2026.10.26-py3-none-any.whl", hash = "sha256:a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae", size = 3186201, upload-time = "2026-10-26T22:25:24.877Z" },
 ]
