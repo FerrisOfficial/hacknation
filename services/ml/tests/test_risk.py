@@ -20,6 +20,7 @@ from ml.risk_llm import (
     analyze_risk_disclosure_hybrid,
     analyze_risk_disclosure_llm,
     answer_probabilities,
+    calibrate,
     verify_quote,
 )
 
@@ -200,5 +201,13 @@ def test_hybrid_asks_llm_only_about_applicable_rules() -> None:
         assert by_rule[rule].result == "n/a"
     assert by_rule["3"].result == "violation"
     assert by_rule["3"].probabilities is not None
-    assert by_rule["3"].probabilities["violation"] == pytest.approx(0.8 / (0.8 + 0.1))
+    assert by_rule["3"].probabilities["violation"] == pytest.approx(calibrate(0.8 / (0.8 + 0.1)))
     assert by_rule["3"].quote == "Zarabiaj do 50% rocznie!"
+
+
+def test_calibration_spreads_scores_but_keeps_order_and_midpoint() -> None:
+    assert calibrate(0.5) == pytest.approx(0.5)
+    assert calibrate(0.99) < 0.99
+    assert calibrate(0.01) > 0.01
+    assert calibrate(0.9999) > calibrate(0.99) > calibrate(0.7) > calibrate(0.3)
+    assert calibrate(0.99) == pytest.approx(1 / (1 + (0.01 / 0.99) ** 0.5))

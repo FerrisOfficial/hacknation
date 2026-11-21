@@ -278,6 +278,21 @@ def _binary_question(rule_id: str) -> str:
     )
 
 
+# Kalibracja P(TAK) w wariancie łączonym: P' = sigmoid(logit(P) / TEMPERATURE).
+# Surowe P z logprobs Bielika jest prawie zero-jedynkowe (na 50 stronach 77 z 149 odpowiedzi
+# poniżej 0,1 albo powyżej 0,9), więc suwak progu niewiele zmieniał. Temperatura rozciąga
+# skalę, nie zmieniając kolejności ani decyzji TAK/NIE przy 0,5.
+# Dopasowanie Platta na etykietach (scripts/eval_m2.py) dało nachylenie ~0,49 (T ~ 2).
+TEMPERATURE = 2.0
+_LOGIT_CLIP = 1e-6
+
+
+def calibrate(p: float, temperature: float = TEMPERATURE) -> float:
+    p = min(max(p, _LOGIT_CLIP), 1 - _LOGIT_CLIP)
+    logit = math.log(p / (1 - p))
+    return 1 / (1 + math.exp(-logit / temperature))
+
+
 def binary_probability(top_logprobs: list[dict[str, Any]]) -> float:
     """P(TAK) / (P(TAK) + P(NIE)) z top logprobs pierwszego tokenu."""
     p = answer_probabilities(top_logprobs)
@@ -334,7 +349,7 @@ def analyze_risk_disclosure_hybrid(
                 top = body["logprobs"][0]["top_logprobs"]
             except (KeyError, IndexError, TypeError) as exc:
                 raise LlmError("Ollama nie zwróciła logprobs") from exc
-            p = binary_probability(top)
+            p = calibrate(binary_probability(top))
             result: Result = "violation" if p >= 0.5 else "ok"
             probabilities: dict[Result, float] = {"violation": p, "ok": 1 - p, "n/a": 0.0}
             reason = (
