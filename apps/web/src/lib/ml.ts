@@ -1,6 +1,10 @@
 import "server-only";
 import { createMlClient } from "@app/api-ml";
-import { type AnalyzeRequest, analyzeResponseSchema } from "@/lib/analysis/contract";
+import {
+  type AnalyzeOutput,
+  type AnalyzeRequest,
+  analyzeOutputSchema,
+} from "@/lib/analysis/contract";
 
 // Klient serwisu ML — tylko po stronie serwera. Przeglądarka nigdy nie gada z FastAPI bezpośrednio:
 // idzie przez route handlery w src/app/api, gdzie robimy walidację i (później) autoryzację.
@@ -20,10 +24,13 @@ export class MlError extends Error {
   }
 }
 
-// Analiza materiału przez moduły AI 1–3: `POST /analyze` (kontrakt w @/lib/analysis/contract).
+// Ocena materiału przez jeden moduł AI: `POST /analyze` (docs/KONTRAKT.md §1 → §2).
 // Endpointu nie ma jeszcze w OpenAPI serwisu ML, więc zamiast typowanego `ml.POST` jest fetch
 // z walidacją Zod. Gdy endpoint trafi do `pnpm api:generate` — przepnij na `ml.POST("/analyze")`.
-export async function analyzeMaterial(request: AnalyzeRequest, signal?: AbortSignal) {
+export async function analyzeMaterial(
+  request: AnalyzeRequest,
+  signal?: AbortSignal,
+): Promise<AnalyzeOutput> {
   let response: Response;
   try {
     response = await fetch(`${ML_API_URL}/analyze`, {
@@ -41,9 +48,12 @@ export async function analyzeMaterial(request: AnalyzeRequest, signal?: AbortSig
   if (!response.ok) {
     throw new MlError(`POST /analyze zwrócił HTTP ${response.status}`, response.status >= 500);
   }
-  const parsed = analyzeResponseSchema.safeParse(await response.json().catch(() => null));
+  const parsed = analyzeOutputSchema.safeParse(await response.json().catch(() => null));
   if (!parsed.success) {
     throw new MlError("POST /analyze zwrócił odpowiedź niezgodną z kontraktem", false);
   }
-  return parsed.data.results;
+  if (parsed.data.material_id !== request.material_id) {
+    throw new MlError("POST /analyze zwrócił wynik dla innego materiału", false);
+  }
+  return parsed.data;
 }

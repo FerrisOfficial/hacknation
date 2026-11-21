@@ -1,0 +1,159 @@
+import type { components } from "@app/api-ml";
+import type { Material } from "@app/db";
+import { z } from "zod";
+import type { IncidentEntity } from "@/lib/incidents/contract";
+
+// `entity` z docs/KONTRAKT.md §3: kogo dotyczy materiał i co o nim wie KNF. Czyste funkcje —
+// dane z rejestru i listy ostrzeżeń pobiera `@/lib/pipeline/entity` (przez serwis ML).
+
+export type KnfEntity = components["schemas"]["KnfEntity"];
+export type KnfWarning = components["schemas"]["KnfWarning"];
+
+export type EntityMaterial = Pick<Material, "url" | "platform" | "author" | "text" | "metadata">;
+
+// Domeny, które nie identyfikują reklamodawcy (platformy, skracacze linków).
+const PLATFORM_DOMAINS = new Set([
+  "youtube.com",
+  "youtu.be",
+  "facebook.com",
+  "fb.com",
+  "instagram.com",
+  "tiktok.com",
+  "x.com",
+  "twitter.com",
+  "linkedin.com",
+  "t.me",
+  "telegram.me",
+  "bit.ly",
+  "tinyurl.com",
+  "linktr.ee",
+]);
+
+export function normalizeDomain(value: string): string | null {
+  const host = (() => {
+    try {
+      return new URL(value.includes("://") ? value : `https://${value}`).hostname;
+    } catch {
+      return null;
+    }
+  })();
+  if (!host?.includes(".")) return null;
+  return host.toLowerCase().replace(/^www\./, "");
+}
+
+function isPlatformDomain(domain: string): boolean {
+  return [...PLATFORM_DOMAINS].some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
+const linksSchema = z.object({
+  links: z.array(
+    z.object({
+      domain: z.string().nullable().optional(),
+      final_domain: z.string().nullable().optional(),
+      followed: z.boolean().optional(),
+      error: z.string().nullable().optional(),
+    }),
+  ),
+});
+
+// Domena podmiotu: dla strony WWW — jej adres, dla filmu — pierwszy link z opisu poza
+// platformami (np. strona brokera z linku afiliacyjnego, po przekierowaniach).
+export function materialDomain(material: Pick<EntityMaterial, "url" | "metadata">): string | null {
+  const own = normalizeDomain(material.url);
+  if (own && !isPlatformDomain(own)) return own;
+  const links = linksSchema.safeParse(material.metadata);
+  if (!links.success) return null;
+  for (const link of links.data.links) {
+    const candidate = link.final_domain ?? link.domain;
+    const domain = candidate ? normalizeDomain(candidate) : null;
+    if (domain && !isPlatformDomain(domain)) return domain;
+  }
+  return null;
+}
+
+// NIP z treści („NIP: 123-456-78-90”). Tylko z poprawną sumą kontrolną.
+export function extractNip(text: string): string | null {
+  for (const match of text.matchAll(/NIP[:\s.]*((?:\d[\s-]?){9}\d)/gi)) {
+    const digits = (match[1] ?? "").replace(/\D/g, "");
+    if (isValidNip(digits)) return digits;
+  }
+  return null;
+}
+
+function isValidNip(digits: string): boolean {
+  if (!/^\d{10}$/.test(digits)) return false;
+  const weights = [6, 5, 7, 2, 3, 4, 5, 6, 7];
+  const sum = weights.reduce((acc, w, i) => acc + w * Number(digits[i]), 0);
+  return sum % 11 === Number(digits[9]);
+}
+
+function domainMatches(candidate: string, domain: string): boolean {
+  const c = normalizeDomain(candidate);
+  // Subdomena materiału (pl.broker.example) też należy do podmiotu z broker.example.
+  return c !== null && (c === domain || domain.endsWith(`.${c}`));
+}
+
+function entityNip(entity: KnfEntity): string | null {
+  const attribute = entity.attributes.find((a) => /^nip$/i.test(a.name.trim()));
+  const digits = attribute?.value.replace(/\D/g, "") ?? "";
+  return digits.length === 10 ? digits : null;
+}
+
+// Podmiot z wyników wyszukiwarki KNF, który pasuje do materiału (NIP albo domena).
+// Pierwszeństwo ma aktualny wpis w rejestrze usług inwestycyjnych.
+export function matchEntity(
+  entities: readonly KnfEntity[],
+  { domain, nip }: { domain: string | null; nip: string | null },
+): KnfEntity | null {
+  const matching = entities.filter(
+    (entity) =>
+      (nip !== null && entityNip(entity) === nip) ||
+      (domain !== null && entity.domains.some((d) => domainMatches(d, domain))),
+  );
+  return matching.find((entity) => entity.investment_register) ?? matching[0] ?? null;
+}
+
+export function matchWarning(
+  warnings: readonly KnfWarning[],
+  { domain, nip }: { domain: string | null; nip: string | null },
+): KnfWarning | null {
+  return (
+    warnings.find(
+      (warning) =>
+        (nip !== null && warning.identifiers.some((i) => i.kind === "NIP" && i.value === nip)) ||
+        (domain !== null && warning.domains.some((d) => domainMatches(d, domain))),
+    ) ?? null
+  );
+}
+
+export type KnfLookup = {
+  // null = wyszukiwarki KNF nie udało się zapytać (nie wiadomo, czy podmiot jest w rejestrze).
+  entities: readonly KnfEntity[] | null;
+  warnings: readonly KnfWarning[] | null;
+};
+
+// Skleja `entity` z danych materiału i odpowiedzi KNF. `in_register`:
+// true/false — znaleziony podmiot ma / nie ma aktualnego wpisu w rejestrze usług inwestycyjnych,
+// false — wyszukiwarka KNF nie zna podmiotu o tej domenie ani NIP-ie,
+// null — nie było czego szukać (brak domeny i NIP-u) albo KNF nie odpowiedział.
+export function resolveEntity(material: EntityMaterial, lookup: KnfLookup): IncidentEntity {
+  const domain = materialDomain(material);
+  const nip = extractNip(material.text);
+  const key = { domain, nip };
+  const entity = lookup.entities ? matchEntity(lookup.entities, key) : null;
+  const warning =
+    lookup.warnings && (domain !== null || nip !== null)
+      ? matchWarning(lookup.warnings, key)
+      : null;
+  const hasKey = domain !== null || nip !== null;
+  const searched = lookup.entities !== null && hasKey;
+  return {
+    firm_name: entity?.name ?? (warning ? warning.entities.slice(0, 300) : null),
+    knf_id: entity?.id ?? null,
+    in_register: entity ? entity.investment_register : searched ? false : null,
+    advertiser: material.platform === "web" ? null : (material.author ?? null),
+    nip: nip ?? (entity ? entityNip(entity) : null),
+    domain,
+    on_warning_list: lookup.warnings === null || !hasKey ? null : warning !== null,
+  };
+}

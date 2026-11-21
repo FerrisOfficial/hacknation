@@ -1,6 +1,7 @@
 import type { AnalysisModule } from "@app/db";
 import { readDetails } from "@/lib/analysis/contract";
 import { type RiskLevel, riskLevel } from "@/lib/analysis/modules";
+import { readIncidentDetails } from "@/lib/incidents/contract";
 
 // Raporty modułów (rezultaty z zadania UKNF), czyste mapowanie bez bazy:
 // M1 — firma inwestycyjna, reklamujący, treść reklamy, URL;
@@ -63,14 +64,27 @@ function stringList(value: unknown): string[] {
 }
 
 export function reportRow(source: ReportSource, threshold: number): ReportRow {
-  const details = readDetails(source.details);
+  // Kształt z docs/KONTRAKT.md §3; `legacy` — stare klucze sprzed kontraktu.
+  const details = readIncidentDetails(source.details);
+  const legacy = readDetails(source.details);
   const entity = details.entity;
-  const knf =
-    entity?.registered === undefined
+  const registerName = legacy.entity?.register_name;
+  const knf = [
+    entity.in_register === null
       ? ""
-      : `${entity.registered ? "w rejestrze KNF" : "brak w rejestrze KNF"}${
-          entity.knf_id !== undefined ? ` (id ${entity.knf_id})` : ""
-        }${entity.register_name ? `: ${entity.register_name}` : ""}`;
+      : `${entity.in_register ? "w rejestrze KNF" : "brak w rejestrze KNF"}${
+          entity.knf_id !== null ? ` (id ${entity.knf_id})` : ""
+        }${registerName ? `: ${registerName}` : ""}`,
+    entity.on_warning_list ? "na liście ostrzeżeń KNF" : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+  const violations = details.flags.filter((flag) => flag.result === "violation");
+  const quotes = violations.flatMap((flag) => (flag.evidence ? [flag.evidence.quote] : []));
+  const missing =
+    source.module === "risk_disclosure"
+      ? violations.map((flag) => `${flag.rule_id}. ${flag.rule_name}`)
+      : [];
   const paid = source.metadata.paid_promotion;
   return {
     wykryto: source.detectedAt.toISOString(),
@@ -81,21 +95,24 @@ export function reportRow(source: ReportSource, threshold: number): ReportRow {
     etykieta: source.label,
     status: source.status,
     // M3: podmiot doradczy to zwykle autor strony, jeśli model nie wskazał innego.
-    podmiot: entity?.name ?? (source.module === "finfluencer" ? "" : (source.author ?? "")),
+    podmiot: entity.firm_name ?? (source.module === "finfluencer" ? "" : (source.author ?? "")),
     podmiot_knf: knf,
     reklamujacy:
-      details.advertiser ?? (source.module === "finfluencer" ? (source.author ?? "") : ""),
+      entity.advertiser ?? (source.module === "finfluencer" ? (source.author ?? "") : ""),
     platforma: source.platform,
     zrodlo: source.sourceName ?? "",
     url: source.url,
     tytul: source.title ?? "",
     opublikowano: source.publishedAt?.toISOString() ?? "",
     tresc: source.text.length > MAX_TEXT ? `${source.text.slice(0, MAX_TEXT)}…` : source.text,
-    frazy: (details.phrases ?? []).join(" | "),
-    braki_informacji_o_ryzyku: (details.missing_requirements ?? []).join(" | "),
+    frazy: (quotes.length > 0 ? quotes : (legacy.phrases ?? [])).join(" | "),
+    braki_informacji_o_ryzyku: (missing.length > 0
+      ? missing
+      : (legacy.missing_requirements ?? [])
+    ).join(" | "),
     kody_promocyjne: stringList(source.metadata.promo_codes).join(" "),
     platna_promocja: typeof paid === "boolean" ? (paid ? "tak" : "nie") : "",
-    uzasadnienie: details.explanation ?? "",
+    uzasadnienie: details.summary,
     model: source.model,
     notatka: source.reviewNote ?? "",
   };

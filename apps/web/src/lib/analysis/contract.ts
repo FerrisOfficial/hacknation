@@ -1,19 +1,11 @@
 import { z } from "zod";
-import { ANALYSIS_MODULES, type PLATFORMS } from "./modules";
+import { ANALYSIS_MODULES } from "./modules";
 
-// Kontrakt backend ↔ moduły AI. Używany w dwóch miejscach:
-// 1. worker kolejki woła `POST /analyze` w serwisie ML (`analyzeMaterial` w `@/lib/ml`) i waliduje
-//    odpowiedź tym schematem,
-// 2. `PUT /api/materials/:id/analysis` przyjmuje wyniki wypchnięte z zewnątrz (skrypt, notebook).
-//
-// `details` jest otwarte — moduł zapisuje tam, co ma. Raporty i dashboard czytają z niego te klucze
-// (wszystkie opcjonalne):
-//   entity: { name, knf_id?, registered?, register_name?, domains? }  — firma inwestycyjna (M1, M2)
-//                                                                        albo podmiot doradczy (M3)
-//   advertiser: string             — reklamujący, jeśli inny niż `materials.author` (M1)
-//   phrases: string[]              — frazy, które zadecydowały o wyniku (M1, M3)
-//   missing_requirements: string[] — niespełnione wymogi informacji o ryzyku (M2)
-//   explanation: string            — uzasadnienie modelu w 1–3 zdaniach
+// Wynik modułu AI zapisywany w `analysis_results` (`saveAnalysisResults`). `details` w kształcie
+// z docs/KONTRAKT.md §3 buduje `buildAnalysisResult` (`@/lib/analysis/details`) z wyjścia modelu.
+// `PUT /api/materials/:id/analysis` przyjmuje też gotowe wyniki w tym kształcie (skrypt, notebook).
+// Stary kształt `details` (`entity.name`, `phrases`, `missing_requirements`, `explanation`)
+// nadal czytają `readDetails` niżej i `readIncidentDetails`.
 
 export const analysisResultInputSchema = z.object({
   module: z.enum(ANALYSIS_MODULES),
@@ -32,23 +24,61 @@ export const analysisResultsInputSchema = z
     message: "Każdy moduł może wystąpić najwyżej raz",
   });
 
-// Odpowiedź `POST /analyze` serwisu ML. Moduł, który nie dotyczy materiału, może nie zwrócić
-// wyniku (np. M2 dla posta finfluencera) — wtedy zostaje poprzedni wynik albo żaden.
-export const analyzeResponseSchema = z.object({ results: analysisResultsInputSchema });
+// ─── Model AI: `POST /analyze` w serwisie ML (docs/KONTRAKT.md §1, §2) ──────────────────────
+// Jedno wywołanie = jeden materiał i jeden moduł. Model ocenia reguły i zwraca cytat, a backend
+// (`@/lib/analysis/details`) dokłada katalog reguł, pozycje cytatu, link, dane KNF i score.
 
-// Żądanie `POST /analyze` (snake_case jak reszta API serwisu ML).
+// §1: wejście modelu. `rules` z katalogu (`requestedRuleIds` w `@/lib/analysis/rules`).
 export type AnalyzeRequest = {
   material_id: string;
-  url: string;
-  platform: (typeof PLATFORMS)[number];
-  title: string | null;
-  author: string | null;
+  module: (typeof ANALYSIS_MODULES)[number];
   text: string;
-  language: string | null;
-  published_at: string | null;
-  metadata: Record<string, unknown>;
-  modules: (typeof ANALYSIS_MODULES)[number][];
+  rules: string[];
 };
+
+export const FINDING_RESULTS = ["violation", "ok", "n/a"] as const;
+
+const probability = z.number().min(0).max(1);
+
+export const findingSchema = z.object({
+  rule_id: z.coerce.string().trim().min(1),
+  result: z.enum(FINDING_RESULTS),
+  confidence: probability,
+  quote: z.string().nullable().default(null),
+  reason: z.string().default(""),
+});
+
+export type Finding = z.infer<typeof findingSchema>;
+
+// §2: wyjście modelu. Pojedyncza zła pozycja w `findings` nie unieważnia całej odpowiedzi —
+// odrzucamy tylko ją. `model` (nazwa modelu) jest poza kontraktem i opcjonalne.
+export const analyzeOutputSchema = z.object({
+  material_id: z.string(),
+  label: z.string().trim().min(1).nullable().default(null),
+  probability: probability.nullable().default(null),
+  summary: z.string().default(""),
+  findings: z
+    .array(z.unknown())
+    .default([])
+    .transform((items) =>
+      items.flatMap((item) => {
+        const finding = findingSchema.safeParse(item);
+        return finding.success ? [finding.data] : [];
+      }),
+    ),
+  error: z.string().nullable().default(null),
+  model: z.string().trim().min(1).max(200).optional(),
+});
+
+export type AnalyzeOutput = z.infer<typeof analyzeOutputSchema>;
+
+// Wyjście modelu wypchnięte z zewnątrz (PUT /api/materials/:id/analysis): §2 + moduł.
+export const moduleOutputSchema = analyzeOutputSchema.extend({
+  module: z.enum(ANALYSIS_MODULES),
+  material_id: z.string().optional(),
+});
+
+export type ModuleOutput = z.infer<typeof moduleOutputSchema>;
 
 // Odczyt kluczy z `details` do raportów — bez zaufania do kształtu (pisze je model).
 const entitySchema = z

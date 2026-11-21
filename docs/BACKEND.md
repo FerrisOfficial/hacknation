@@ -55,32 +55,26 @@ Dla maszyn (`Authorization: Bearer $COLLECTOR_TOKEN`):
 | Metoda i ścieżka | Co robi |
 |---|---|
 | `POST /materials` | wgranie materiałów z zewnętrznego kolektora: `{ sourceId?, materials: [{ url, platform, text, title?, author?, html?, publishedAt?, metadata? }] }` |
-| `PUT /materials/:id/analysis` | wyniki modułów AI z zewnątrz, w tym samym kształcie co odpowiedź `/analyze` |
+| `PUT /materials/:id/analysis` | wyniki modułów AI z zewnątrz: `{ outputs: [{ module, ...wyjście modelu z KONTRAKT.md §2 }] }` (backend buduje `details` i score jak dla kolejki) albo gotowe `{ results: [{ module, score, label, model, details }] }` |
 | `POST /collect/youtube` | synchroniczny kolektor YouTube (dla skryptów) |
 
 ## Kontrakt z serwisem ML: `POST /analyze`
 
-Worker woła `POST {ML_API_URL}/analyze` (`apps/web/src/lib/ml.ts`, schemat w `lib/analysis/contract.ts`). Dopóki endpointu nie ma, analiza kończy się jednym wpisem w logu, bez ponawiania.
+Kształty wejścia i wyjścia: [KONTRAKT.md](KONTRAKT.md) §1–§3. Worker woła `POST {ML_API_URL}/analyze` raz na moduł (`apps/web/src/lib/ml.ts`, schematy Zod w `lib/analysis/contract.ts`). Dopóki endpointu nie ma, analiza kończy się jednym wpisem w logu, bez ponawiania. Gdy endpoint trafi do OpenAPI serwisu ML (`pnpm api:generate`), przepnij `analyzeMaterial` na typowany `ml.POST("/analyze")`.
 
-```jsonc
-// żądanie
-{ "material_id": "uuid", "url": "...", "platform": "youtube", "title": "...", "author": "...",
-  "text": "...", "language": "pl", "published_at": null, "metadata": { /* np. paid_promotion */ },
-  "modules": ["finfluencer", "risk_disclosure", "unauthorized_advisory"] }
-// odpowiedź: moduł, który nie dotyczy materiału, może nie zwrócić wyniku
-{ "results": [
-  { "module": "finfluencer", "score": 0.91, "label": "reklama_firmy_inwestycyjnej", "model": "gemma4:e2b",
-    "details": {
-      "entity": { "name": "XTB S.A.", "knf_id": 123, "registered": true, "register_name": "..." },
-      "advertiser": "...",              // gdy inny niż materials.author
-      "phrases": ["kod polecający"],    // M1, M3
-      "missing_requirements": ["..."],  // M2
-      "explanation": "..."
-    } }
-] }
-```
+Co backend dokłada do wyjścia modelu (`lib/pipeline/analyze.ts` → `lib/analysis/details.ts`):
 
-Gdy endpoint trafi do OpenAPI serwisu ML (`pnpm api:generate`), przepnij `analyzeMaterial` na typowany `ml.POST("/analyze")`.
+| Pole | Skąd | Plik |
+|---|---|---|
+| `rules` w wejściu | reguły modułu oceniane z tekstu (M2 bez reguł wizualnych 4–8 i 13) | `lib/analysis/rules.ts` |
+| `rule_name`, `legal_basis`, `kind` | katalog reguł; reguły spoza katalogu modułu i duplikaty są odrzucane | `lib/analysis/rules.ts` |
+| `evidence.quote`, `start`, `end` | cytat szukany w `materials.text` dosłownie, potem bez różnic w wielkości liter, białych znakach, cudzysłowach i myślnikach; `quote` = dokładny fragment tekstu; `evidence = null`, gdy nie znaleziono | `lib/analysis/evidence.ts` |
+| `evidence.timestamp_s` | segment napisów filmu (`metadata.transcript.segments`), w którym zaczyna się cytat; `null` dla cytatu z tytułu albo opisu | `lib/analysis/evidence.ts` |
+| `evidence.link` | WWW: Text Fragment `#:~:text=`, YouTube: `&t=<s>s` | `lib/analysis/evidence.ts` |
+| `entity` | domena (strona WWW albo pierwszy link z opisu filmu poza platformami) i NIP z treści (z sumą kontrolną) → wyszukiwarka KNF i lista ostrzeżeń przez serwis ML (`/knf/entities`, `/knf/warnings`), cache w pamięci (6 h / 24 h). `in_register = false`, gdy KNF nie zna podmiotu; `null`, gdy nie było czego szukać albo KNF nie odpowiedział. `advertiser` = autor materiału spoza WWW | `lib/analysis/entity.ts`, `lib/pipeline/entity.ts` |
+| `score` | M1/M3: `probability` etykiety pozytywnej (`reklama`, `potencjalne_doradztwo`), dla negatywnej `1 − probability`. M2 (i M1/M3 bez `probability`): noisy-OR pewności naruszeń `1 − Π(1 − w·confidence)`, `w = 1` dla `hard`, `0,5` dla `suggestion`. Błąd modelu: 0 | `lib/analysis/details.ts` |
+| `label` | M1/M3: etykieta modelu; M2: `naruszenie` / `brak_naruszen`; błąd modelu: `blad_analizy` | `lib/analysis/details.ts` |
+| `model` | opcjonalne pole `model` w odpowiedzi (poza kontraktem), domyślnie `services/ml` | `lib/analysis/details.ts` |
 
 ## Zdarzenia Socket.io
 

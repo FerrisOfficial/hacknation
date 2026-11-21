@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { analysisResultsInputSchema } from "@/lib/analysis/contract";
+import { analysisResultsInputSchema, moduleOutputSchema } from "@/lib/analysis/contract";
 import { ANALYSIS_MODULES, PLATFORMS, REVIEW_STATUSES, RISK_LEVELS } from "@/lib/analysis/modules";
 
 // Schematy Zod współdzielone przez formularze (klient) i route handlery (serwer).
@@ -119,7 +119,21 @@ export const materialsIngestSchema = z.object({
 
 export type MaterialsIngestInput = z.input<typeof materialsIngestSchema>;
 
-export const analysisIngestSchema = z.object({ results: analysisResultsInputSchema.min(1) });
+// Wyniki modułów AI wypchnięte z zewnątrz: albo surowe wyjście modelu (docs/KONTRAKT.md §2
+// + `module`) — backend dokłada katalog reguł, cytaty, KNF i score jak dla wyniku z kolejki —
+// albo gotowe wiersze `{ module, score, label, model, details }`.
+export const analysisIngestSchema = z.union([
+  z.object({
+    outputs: z
+      .array(moduleOutputSchema)
+      .min(1)
+      .max(ANALYSIS_MODULES.length)
+      .refine((outputs) => new Set(outputs.map((o) => o.module)).size === outputs.length, {
+        message: "Każdy moduł może wystąpić najwyżej raz",
+      }),
+  }),
+  z.object({ results: analysisResultsInputSchema.min(1) }),
+]);
 
 // ─── Parametry zapytań (query string) ───────────────────────────────────────────────────────
 // Listy po przecinku: ?module=finfluencer,unauthorized_advisory&risk=medium,high
