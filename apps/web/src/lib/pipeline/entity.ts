@@ -6,6 +6,7 @@ import {
   type KnfWarning,
   materialDomain,
   outboundLinks,
+  registrableDomain,
   resolveEntity,
 } from "@/lib/analysis/entity";
 import type { FirmLookup } from "@/lib/analysis/finfluencer";
@@ -60,7 +61,8 @@ async function knfSearch(phrase: string): Promise<KnfEntity[] | null> {
 // Szukamy po NIP-ie z treści i po domenie. Wyszukiwarka KNF zwraca podmioty ze wszystkich
 // rejestrów — który pasuje, rozstrzyga `resolveEntity`.
 export async function lookupEntity(material: EntityMaterial): Promise<IncidentEntity> {
-  const phrases = [extractNip(material.text), materialDomain(material)].filter(
+  const domain = materialDomain(material);
+  const phrases = [extractNip(material.text), domain && registrableDomain(domain)].filter(
     (phrase): phrase is string => phrase !== null,
   );
   const [warnings, searches] = await Promise.all([
@@ -81,9 +83,9 @@ const MAX_FIRM_DOMAINS = 5;
 export async function lookupPromotedFirm(
   material: Pick<EntityMaterial, "url" | "metadata">,
 ): Promise<FirmLookup> {
-  const domains = outboundLinks(material)
-    .slice(0, MAX_FIRM_DOMAINS)
-    .map((link) => link.domain);
+  const domains = [
+    ...new Set(outboundLinks(material).map((link) => registrableDomain(link.domain))),
+  ].slice(0, MAX_FIRM_DOMAINS);
   const [warnings, searches] = await Promise.all([
     knfWarnings(),
     Promise.all(domains.map(async (domain) => ({ domain, entities: await knfSearch(domain) }))),

@@ -5,6 +5,7 @@ import {
   type KnfEntity,
   type KnfWarning,
   materialDomain,
+  registrableDomain,
   resolveEntity,
 } from "./entity";
 
@@ -69,6 +70,14 @@ describe("materialDomain", () => {
       "broker.example",
     );
     expect(materialDomain(material({ url: "https://www.youtube.com/watch?v=x" }))).toBeNull();
+  });
+});
+
+describe("registrableDomain", () => {
+  it("domena główna, z dwuczłonowymi końcówkami", () => {
+    expect(registrableDomain("akcje.xtb.com")).toBe("xtb.com");
+    expect(registrableDomain("oferta.bank.com.pl")).toBe("bank.com.pl");
+    expect(registrableDomain("xtb.com")).toBe("xtb.com");
   });
 });
 
