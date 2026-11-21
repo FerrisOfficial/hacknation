@@ -54,15 +54,57 @@ export type FirmLookup = {
 // Frazy, którymi twórcy zapowiadają współpracę i zachęcają do założenia konta.
 // `(?<!\p{L})` zamiast `\b` — `\b` w JS nie zna polskich liter.
 const AD_PHRASES =
-  /(?<!\p{L})(link\p{L}* w opisie|z (?:mojego|tego) linku|z moim kodem|kod\p{L}* (?:promocyjn|polecając|rabatow|zniżkow)\p{L}*|bonus\p{L}* na start|otwórz (?:konto|rachunek)|załóż (?:konto|rachunek)|zarejestruj się|współprac\p{L}* (?:reklamow|płatn)\p{L}*|materiał\p{L}* sponsorowan\p{L}*|(?:partner|sponsor)\p{L}* (?:odcinka|filmu|materiału)|darmow\p{L}* akcj\p{L}*|#(?:ad|reklama|wspolpraca|współpraca|sponsored)(?!\p{L}))/iu;
+  /(?<!\p{L})(link\p{L}* w opisie|link\p{L}* (?:partnersk|afiliacyjn|polecając|referencyjn)\p{L}*|z (?:mojego|tego) linku|z moim kodem|kod\p{L}* (?:promocyjn|polecając|rabatow|zniżkow)\p{L}*|bonus\p{L}* na start|otwórz (?:konto|rachunek)|załóż (?:konto|rachunek)|zarejestruj się|współprac\p{L}* (?:reklamow|płatn)\p{L}*|materiał\p{L}* sponsorowan\p{L}*|(?:partner|sponsor)\p{L}* (?:odcinka|filmu|materiału)|darmow\p{L}* akcj\p{L}*|#(?:ad|reklama|wspolpraca|współpraca|sponsored)(?!\p{L}))/iu;
 
 const AD_PHRASES_ALL = new RegExp(AD_PHRASES.source, "giu");
 
-// Kod z tekstu („kod: KANAL50”, „kodem XTB2024”) — dla stron WWW, filmy mają `promo_codes`.
-const PROMO_CODE =
-  // Słowo między „kod” a kodem tylko małymi literami („kodem promocyjnym XTB24”), a przed kodem
-  // zawsze odstęp albo dwukropek — inaczej regex tnie kod („DETERMINACJA” → „ACJA”).
-  /(?<!\p{L})[Kk]od\p{L}*(?:\s+\p{Ll}+)?(?:\s*[:\-–]\s*|\s+)["„]?([A-Z0-9][A-Z0-9_-]{3,19})(?![\p{L}\d])/u;
+// Kandydat na kod z tekstu („kod: KANAL50”, „kodem promocyjnym XTB24”) — dla stron WWW, filmy
+// mają `promo_codes` z kolektora. Słowo między „kod” a kodem tylko małymi literami, a przed kodem
+// zawsze odstęp albo dwukropek — inaczej regex tnie kod („DETERMINACJA” → „ACJA”).
+const CODE_CANDIDATES =
+  /(?<!\p{L})[Kk]od\p{L}*(?:\s+(\p{Ll}+))?(\s*[:\-–]\s*|\s+)["„]?([A-Z0-9][A-Z0-9_-]{3,19})(?![\p{L}\d])/gu;
+
+// Słowo przy „kod”, które mówi, że to kod polecający, a nie np. „kod ISIN”.
+const REFERRAL_WORD = /^(promocyjn|polecając|rabatow|zniżkow|partnersk|afiliacyjn|referencyjn)/u;
+
+// Skróty, które stoją po „kod” w tekstach o inwestowaniu, a kodem polecającym nie są.
+const NOT_CODES = new Set([
+  "ISIN",
+  "ETF",
+  "ETFS",
+  "IKE",
+  "IKZE",
+  "OIPE",
+  "PIT",
+  "NIP",
+  "KRS",
+  "REGON",
+  "PESEL",
+  "IBAN",
+  "SWIFT",
+  "BLIK",
+  "SMS",
+  "PIN",
+  "CVV",
+  "OTP",
+  "VAT",
+  "HTML",
+  "LEI",
+  "CFI",
+  "TICKER",
+]);
+
+// Kod polecający z tekstu: po słowie typu „promocyjny”, po dwukropku albo z cyfrą w środku.
+export function extractTextCode(text: string): string | null {
+  for (const match of text.matchAll(CODE_CANDIDATES)) {
+    const [, word, separator = "", code = ""] = match;
+    if (NOT_CODES.has(code)) continue;
+    if ((word && REFERRAL_WORD.test(word)) || separator.includes(":") || /\d/.test(code)) {
+      return code;
+    }
+  }
+  return null;
+}
 
 const videoMetadataSchema = z.object({
   paid_promotion: z.boolean().optional().catch(undefined),
@@ -131,7 +173,7 @@ export function collectSignals(material: FinfluencerMaterial, firm: Firm): Signa
     });
   }
   const codes = new Set(meta.promo_codes ?? []);
-  const textCode = PROMO_CODE.exec(material.text)?.[1];
+  const textCode = extractTextCode(material.text);
   if (textCode && ![...codes].some((code) => code.includes(textCode))) codes.add(textCode);
   const firstCode = [...codes][0];
   if (firstCode) {
@@ -177,8 +219,11 @@ export function signalScore(signals: readonly Signal[]): number {
   return Math.round((1 - clean) * 10_000) / 10_000;
 }
 
-// Cytat do dowodu: linia tekstu z sygnałem (fraza ma pierwszeństwo — pada też w napisach, więc
-// daje link do sekundy filmu), najwyżej 300 znaków wokół miejsca trafienia.
+const SENTENCE_END = /[.!?…]+(?=\s)/gu;
+
+// Cytat do dowodu: zdanie z sygnałem (fraza ma pierwszeństwo — pada też w napisach, więc daje
+// link do sekundy filmu), w obrębie linii i najwyżej 300 znaków. Transkrypcja to jedna długa
+// linia, więc okno tniemy na granicy zdania, a gdy jej nie ma — na granicy słowa.
 export function signalQuote(text: string, signals: readonly Signal[]): string | null {
   const order: SignalKind[] = ["ad_phrase", "promo_code", "affiliate_link", "direct_link"];
   const at = order
@@ -188,8 +233,30 @@ export function signalQuote(text: string, signals: readonly Signal[]): string | 
   const lineStart = text.lastIndexOf("\n", at) + 1;
   const newline = text.indexOf("\n", at);
   const lineEnd = newline < 0 ? text.length : newline;
-  const start = Math.max(lineStart, at - 140);
-  const end = Math.min(lineEnd, Math.max(at + 160, start + 1), start + 300);
+
+  let start = Math.max(lineStart, at - 140);
+  if (start > lineStart) {
+    const head = text.slice(start, at);
+    const ends = [...head.matchAll(SENTENCE_END)];
+    const last = ends.at(-1);
+    if (last) start += last.index + last[0].length;
+    else {
+      const space = head.indexOf(" ");
+      if (space >= 0) start += space + 1;
+    }
+  }
+
+  let end = Math.min(lineEnd, start + 300);
+  if (end < lineEnd) {
+    const tail = text.slice(at, end);
+    const ends = [...tail.matchAll(SENTENCE_END)];
+    const last = ends.at(-1);
+    if (last) end = at + last.index + last[0].length;
+    else {
+      const space = tail.lastIndexOf(" ");
+      if (space > 0) end = at + space;
+    }
+  }
   const quote = text.slice(start, end).trim();
   return quote || null;
 }

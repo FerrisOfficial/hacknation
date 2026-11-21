@@ -82,8 +82,8 @@ Moduł ma znaleźć reklamę firmy inwestycyjnej publikowaną przez kogoś inneg
 
 1. **Firma:** domeny z linków materiału (opis filmu po przekierowaniach, linki wychodzące strony WWW z `POST /scrape`), bez platform i własnej domeny, najwyżej 5 → wyszukiwarka KNF. Pierwsza domena firmy z aktualnym wpisem w rejestrze usług inwestycyjnych, a jeśli żadnej — pierwsza z listy ostrzeżeń KNF. Bez firmy: `brak_firmy`, score 0 (KNF nie odpowiedział: `blad_analizy`).
 2. **Podmiot trzeci:** kanał o nazwie firmy (bez form prawnych, np. „XTB” = „XTB S.A.”) albo strona z domen firmy w KNF to jej własny materiał (przypadek dla M2): `material_firmy`, score 0.
-3. **Score:** noisy-OR sygnałów `1 − Π(1 − w)`, każdy rodzaj raz: etykieta płatnej promocji YouTube 0,6, kod polecający 0,5, link afiliacyjny (przekierowanie albo `?ref=`/`?aff=`…) 0,5 albo zwykły link 0,3, fraza reklamowa („z moim kodem”, „załóż konto”, „#reklama”…) 0,3. Od 0,5 `reklama` (flaga `violation`), poniżej `wzmianka` (`ok`).
-4. **Dowód:** linia tekstu z frazą, kodem albo linkiem (do 300 znaków) — jak w modułach AI, z `timestamp_s`, gdy pada w napisach filmu.
+3. **Score:** noisy-OR sygnałów `1 − Π(1 − w)`, każdy rodzaj raz: etykieta płatnej promocji YouTube 0,6, kod polecający 0,5 (z kolektora YouTube albo z tekstu: po „promocyjny/polecający/partnerski…”, po dwukropku albo z cyfrą; bez skrótów typu ISIN, ETF, IKE), link afiliacyjny (przekierowanie albo `?ref=`/`?aff=`…) 0,5 albo zwykły link 0,3, fraza reklamowa („z moim kodem”, „link partnerski”, „załóż konto”, „#reklama”…) 0,3. Od 0,5 `reklama` (flaga `violation`), poniżej `wzmianka` (`ok`).
+4. **Dowód:** zdanie z frazą, kodem albo linkiem (do 300 znaków, cięte na granicy zdania albo słowa) — jak w modułach AI, z `timestamp_s`, gdy pada w napisach filmu.
 
 Nie łapie samej wzmianki nazwy firmy bez linku. To miejsce, gdzie AI mogłoby dołożyć sygnał.
 
