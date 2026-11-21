@@ -70,6 +70,18 @@ class YoutubeCollectRequest(BaseModel):
     max_links_per_video: int = Field(default=5, ge=0, le=10)
 
 
+class YoutubeChannelCollectRequest(BaseModel):
+    channel_url: str = Field(
+        min_length=20,
+        max_length=300,
+        description="Adres kanału, np. https://www.youtube.com/@kanal albo /channel/UC….",
+    )
+    limit: int = Field(default=15, ge=1, le=50, description="Ile najnowszych filmów.")
+    transcripts: bool = True
+    follow_links: bool = True
+    max_links_per_video: int = Field(default=5, ge=0, le=10)
+
+
 class _FromAttributes(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -235,6 +247,31 @@ def collect_youtube(request: YoutubeCollectRequest) -> YoutubeCollection:
             transcripts=request.transcripts,
             follow_links=request.follow_links,
             max_links_per_video=request.max_links_per_video,
+        )
+    except youtube.YoutubeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return YoutubeCollection.model_validate(collection)
+
+
+@app.post(
+    "/collect/youtube/channel",
+    responses={502: {"description": "Listy filmów kanału nie udało się pobrać"}},
+)
+def collect_youtube_channel(request: YoutubeChannelCollectRequest) -> YoutubeCollection:
+    """Najnowsze filmy kanału (wszystkie, nie tylko płatne promocje) z transkrypcją i linkami."""
+    try:
+        youtube.channel_videos_url(request.channel_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        collection = youtube.collect(
+            request.channel_url,
+            limit=request.limit,
+            paid_only=False,
+            transcripts=request.transcripts,
+            follow_links=request.follow_links,
+            max_links_per_video=request.max_links_per_video,
+            searcher=lambda url, limit, _paid: youtube.channel_videos(url, limit),
         )
     except youtube.YoutubeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

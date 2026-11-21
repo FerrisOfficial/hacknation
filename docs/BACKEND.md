@@ -85,7 +85,13 @@ Moduł ma znaleźć reklamę firmy inwestycyjnej publikowaną przez kogoś inneg
 3. **Score:** noisy-OR sygnałów `1 − Π(1 − w)`, każdy rodzaj raz: etykieta płatnej promocji YouTube 0,6, kod polecający 0,5 (z kolektora YouTube albo z tekstu: po „promocyjny/polecający/partnerski…”, po dwukropku albo z cyfrą; bez skrótów typu ISIN, ETF, IKE), link afiliacyjny (przekierowanie albo `?ref=`/`?aff=`…) 0,5 albo zwykły link 0,3, fraza reklamowa („z moim kodem”, „link partnerski”, „załóż konto”, „#reklama”…) 0,3. Od 0,5 `reklama` (flaga `violation`), poniżej `wzmianka` (`ok`).
 4. **Dowód:** zdanie z frazą, kodem albo linkiem (do 300 znaków, cięte na granicy zdania albo słowa) — jak w modułach AI, z `timestamp_s`, gdy pada w napisach filmu.
 
-Nie łapie samej wzmianki nazwy firmy bez linku. To miejsce, gdzie AI mogłoby dołożyć sygnał.
+5. **Język:** przed wszystkim innym — tylko materiały po polsku (`materials.language`, a bez niego proporcja polskich i angielskich słów). Inne: `inny_jezyk`, score 0.
+6. **Wzmianka bez linku:** gdy linki nie prowadzą do firmy, marka wymieniona w tekście (słownik `lib/analysis/brands.ts`, do 3 najczęstszych) i potwierdzona w KNF jako firma z rejestru usług inwestycyjnych. Zamiast sygnału linku: `brand_mention` 0,2 — sama wzmianka z frazą to 0,44 (`wzmianka`), z kodem i frazą 0,72 (`reklama`).
+
+**Skąd biorą się materiały M1** (`lib/m1-sources.ts`, `lib/pipeline/m1-sources.ts`):
+
+- **Frazy z marek:** `POST /api/sources/m1` (token `COLLECTOR_TOKEN`, idempotentne) zakłada źródła „{marka} kod / polecam / jak założyć konto / recenzja” dla marek ze słownika — wszystkie filmy, nie tylko z etykietą płatnej promocji, 10 na frazę, harmonogram co 12 h (pierwsze uruchomienie przy najbliższym ticku).
+- **Kula śnieżna:** kanał YouTube, w którym M1 znalazł `reklama`, staje się źródłem `youtube_channel` (15 najnowszych filmów co 24 h, `POST /collect/youtube/channel` w serwisie ML). Istniejącego źródła kanału nie zmienia — analityk może je wyłączyć.
 
 ## Zdarzenia Socket.io
 

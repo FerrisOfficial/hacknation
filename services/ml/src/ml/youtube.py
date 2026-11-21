@@ -225,6 +225,11 @@ def search_videos(query: str, limit: int, paid_only: bool) -> list[SearchHit]:
     except DownloadError as exc:
         raise YoutubeError(f"Wyszukiwanie w YouTube nie powiodło się: {exc}") from exc
 
+    return _hits(info, limit)
+
+
+def _hits(info: object, limit: int) -> list[SearchHit]:
+    """Filmy z płaskiej listy yt-dlp (wyniki wyszukiwania, zakładka kanału)."""
     entries = info.get("entries") if isinstance(info, dict) else None
     hits: list[SearchHit] = []
     for entry in entries if isinstance(entries, list) else []:
@@ -242,6 +247,41 @@ def search_videos(query: str, limit: int, paid_only: bool) -> list[SearchHit]:
                 )
             )
     return hits[:limit]
+
+
+_CHANNEL_URL_RE = re.compile(
+    r"^https://(?:www\.|m\.)?youtube\.com/(?:@[\w.\-]+|channel/UC[\w-]{22}|c/[\w.\-]+|user/[\w.\-]+)"
+)
+
+
+def channel_videos_url(channel_url: str) -> str:
+    """Zakładka „Filmy” kanału (bez Shorts i transmisji). ValueError dla adresu spoza YouTube."""
+    match = _CHANNEL_URL_RE.match(channel_url.strip())
+    if match is None:
+        raise ValueError(f"To nie jest adres kanału YouTube: {channel_url}")
+    return f"{match.group(0).replace('://m.', '://www.')}/videos"
+
+
+def channel_videos(channel_url: str, limit: int) -> list[SearchHit]:
+    """Najnowsze `limit` filmów kanału — moduł 1 obserwuje kanały, w których znalazł reklamę."""
+    try:
+        with YoutubeDL(
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": "in_playlist",
+                "playlistend": limit,
+                "http_headers": {
+                    "User-Agent": random.choice(DESKTOP_USER_AGENTS),
+                    "Accept-Language": "pl-PL,pl;q=0.9",
+                },
+                "proxy": proxy_from_env(),
+            }
+        ) as ydl:
+            info: object = ydl.extract_info(channel_videos_url(channel_url), download=False)
+    except DownloadError as exc:
+        raise YoutubeError(f"Nie udało się pobrać listy filmów kanału: {exc}") from exc
+    return _hits(info, limit)
 
 
 # ─── Strona filmu ───────────────────────────────────────────────────────────────────────────────
