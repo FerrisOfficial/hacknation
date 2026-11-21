@@ -32,8 +32,9 @@ type Cached<T> = { value: T; expiresAt: number };
 let warningsCache: Cached<KnfWarning[] | null> | null = null;
 const searchCache = new Map<string, Cached<KnfEntity[] | null>>();
 
-async function knfWarnings(): Promise<KnfWarning[] | null> {
-  if (warningsCache && warningsCache.expiresAt > Date.now()) return warningsCache.value;
+let warningsInFlight: Promise<KnfWarning[] | null> | null = null;
+
+async function fetchKnfWarnings(): Promise<KnfWarning[] | null> {
   const { data } = await ml
     .GET("/knf/warnings", { signal: AbortSignal.timeout(KNF_TIMEOUT_MS) })
     .catch(() => ({ data: undefined }));
@@ -42,23 +43,57 @@ async function knfWarnings(): Promise<KnfWarning[] | null> {
   return value;
 }
 
+// Jedno pobranie listy ostrzeżeń naraz — po starcie workera pyta o nią każda analiza.
+async function knfWarnings(): Promise<KnfWarning[] | null> {
+  if (warningsCache && warningsCache.expiresAt > Date.now()) return warningsCache.value;
+  warningsInFlight ??= fetchKnfWarnings().finally(() => {
+    warningsInFlight = null;
+  });
+  return warningsInFlight;
+}
+
+// Zapytania w toku: wyszukiwarka KNF obsługuje zapytania po kolei i przy kilku naraz odpowiada
+// po kilkanaście sekund albo wcale, a te same frazy („XTB”, „Biuro Maklerskie”) sprawdza
+// jednocześnie wiele materiałów — jedno zapytanie na frazę.
+const searchesInFlight = new Map<string, Promise<KnfEntity[] | null>>();
+const KNF_RETRY_DELAY_MS = 3_000;
+
+async function fetchKnfSearch(phrase: string): Promise<KnfEntity[] | null> {
+  const attempt = () =>
+    ml
+      .GET("/knf/entities", {
+        params: { query: { q: phrase } },
+        signal: AbortSignal.timeout(KNF_TIMEOUT_MS),
+      })
+      .then(({ data }) => data?.entities ?? null)
+      .catch(() => null);
+  const first = await attempt();
+  if (first) return first;
+  // Jedna ponowna próba — KNF często nie odpowiada tylko chwilowo.
+  await new Promise((resolve) => setTimeout(resolve, KNF_RETRY_DELAY_MS));
+  return attempt();
+}
+
 async function knfSearch(phrase: string): Promise<KnfEntity[] | null> {
   const key = phrase.toLowerCase();
   const cached = searchCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
-  const { data } = await ml
-    .GET("/knf/entities", {
-      params: { query: { q: phrase } },
-      signal: AbortSignal.timeout(KNF_TIMEOUT_MS),
-    })
-    .catch(() => ({ data: undefined }));
-  const value = data?.entities ?? null;
-  if (searchCache.size >= MAX_CACHED_SEARCHES) searchCache.clear();
-  searchCache.set(key, {
-    value,
-    expiresAt: Date.now() + (value ? ENTITIES_TTL_MS : FAILURE_TTL_MS),
+  const pending = searchesInFlight.get(key);
+  if (pending) return pending;
+  const request = fetchKnfSearch(phrase).then((value) => {
+    if (searchCache.size >= MAX_CACHED_SEARCHES) searchCache.clear();
+    searchCache.set(key, {
+      value,
+      expiresAt: Date.now() + (value ? ENTITIES_TTL_MS : FAILURE_TTL_MS),
+    });
+    return value;
   });
-  return value;
+  searchesInFlight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    searchesInFlight.delete(key);
+  }
 }
 
 // Szukamy po NIP-ie z treści i po domenie. Wyszukiwarka KNF zwraca podmioty ze wszystkich

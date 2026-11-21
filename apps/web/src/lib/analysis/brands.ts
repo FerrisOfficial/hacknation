@@ -160,6 +160,40 @@ export const BRANDS: readonly Brand[] = [
     { needsInvestmentContext: true, queries: ["{brand} akcje", "{brand} inwestowanie"] },
   ),
   brand("lynx", "LYNX", ["LYNX"], "LYNX", ["lynx"], ["lynxbroker.pl"]),
+  brand("saxo", "Saxo", ["Saxo", "Saxo Bank"], "Saxo", ["saxobank"], ["home.saxo"], {
+    foreignCreditInstitution: true,
+  }),
+  // W Polsce z oddziałem; w KNF jako zagraniczna instytucja kredytowa.
+  brand(
+    "traderepublic",
+    "Trade Republic",
+    ["Trade Republic"],
+    "Trade Republic",
+    ["traderepublic"],
+    ["traderepublic.com"],
+    { foreignCreditInstitution: true },
+  ),
+  brand("finax", "Finax", ["Finax"], "Finax", ["finax"], ["finax.eu"]),
+  // Bez fraz wyszukiwania — tylko rozpoznanie linku i wzmianki. Conotoxia ma w KNF domenę
+  // kantoru cinkciarz.pl, więc liczy się tylko w tekście o inwestowaniu (forex, CFD).
+  brand(
+    "conotoxia",
+    "Conotoxia",
+    ["Conotoxia", "Cinkciarz"],
+    "Conotoxia",
+    ["conotoxia"],
+    ["conotoxia.com", "cinkciarz.pl"],
+    { needsInvestmentContext: true, queries: [] },
+  ),
+  brand(
+    "noble",
+    "Noble Securities",
+    ["Noble Securities"],
+    "Noble Securities",
+    ["noblesecurities"],
+    ["noblesecurities.pl"],
+    { queries: [] },
+  ),
   brand("oanda", "OANDA", ["OANDA"], "OANDA", ["oanda"], ["oanda.com"]),
   brand(
     "bossa",
@@ -224,6 +258,12 @@ const ALIAS_PATTERNS = BRANDS.map((b) => ({
 }));
 
 export type BrandMention = { brand: Brand; at: number; count: number };
+
+// Pozycje wszystkich wzmianek marki w tekście (całe słowa, bez wielkości liter).
+export function brandPositions(text: string, b: Brand): number[] {
+  const pattern = ALIAS_PATTERNS.find((p) => p.brand.id === b.id)?.pattern;
+  return pattern ? [...text.matchAll(pattern)].map((match) => match.index) : [];
+}
 
 // Marki wymienione w tekście, od najczęściej wymienianej (przy remisie — od pierwszej wzmianki).
 export function mentionedBrands(text: string): BrandMention[] {
