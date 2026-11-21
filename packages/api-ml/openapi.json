@@ -61,6 +61,45 @@
         }
       }
     },
+    "/analyze": {
+      "post": {
+        "summary": "Analyze",
+        "description": "Ocena materiału przez jeden moduł AI: wynik każdej reguły z cytatem (KONTRAKT.md §2).",
+        "operationId": "analyze",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/scrape": {
       "post": {
         "summary": "Scrape Url",
@@ -295,6 +334,195 @@
   },
   "components": {
     "schemas": {
+      "AnalysisFinding": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "violation",
+              "ok",
+              "n/a"
+            ],
+            "title": "Result"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote",
+            "description": "Dosłowny fragment `text`, do 300 znaków."
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "result",
+          "confidence",
+          "quote",
+          "reason"
+        ],
+        "title": "AnalysisFinding"
+      },
+      "AnalyzeRequest": {
+        "properties": {
+          "material_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Material Id"
+          },
+          "module": {
+            "type": "string",
+            "enum": [
+              "finfluencer",
+              "risk_disclosure",
+              "unauthorized_advisory"
+            ],
+            "title": "Module"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 500000,
+            "title": "Text",
+            "description": "materials.text"
+          },
+          "rules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rules",
+            "description": "Reguły do oceny; pusta lista = wszystkie reguły modułu."
+          }
+        },
+        "type": "object",
+        "required": [
+          "material_id",
+          "module",
+          "text"
+        ],
+        "title": "AnalyzeRequest"
+      },
+      "AnalyzeResponse": {
+        "properties": {
+          "material_id": {
+            "type": "string",
+            "title": "Material Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "M1/M3; w M2 null."
+          },
+          "probability": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probability",
+            "description": "M1/M3; w M2 null."
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisFinding"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Score",
+            "description": "Do sortowania listy zadań: score materiału z wszystkich reguł (noisy-OR z zanikiem po rule_scores). Nie porównuj go z progiem."
+          },
+          "max_rule_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Rule Score",
+            "description": "Do progu: najwyższy rule_scores[*].score. Materiał jest incydentem przy progu t, gdy max_rule_score >= t (czyli gdy któraś reguła ma score >= t)."
+          },
+          "rule_scores": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RuleScoreOut"
+            },
+            "type": "object",
+            "title": "Rule Scores",
+            "description": "Score każdej reguły, klucz = id reguły."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "material_id",
+          "label",
+          "probability",
+          "summary",
+          "findings"
+        ],
+        "title": "AnalyzeResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -590,6 +818,38 @@
           "score"
         ],
         "title": "Prediction"
+      },
+      "RuleScoreOut": {
+        "properties": {
+          "p_violation": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "P Violation",
+            "description": "P(naruszenie) reguły."
+          },
+          "weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight",
+            "description": "Powaga reguły."
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "weight * p_violation — wkład do risk_score."
+          }
+        },
+        "type": "object",
+        "required": [
+          "p_violation",
+          "weight",
+          "score"
+        ],
+        "title": "RuleScoreOut"
       },
       "ScrapeRequest": {
         "properties": {
