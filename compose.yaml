@@ -19,13 +19,20 @@ services:
       POSTGRES_USER: hacknation
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Brak .env - skopiuj .env.example do .env}
       POSTGRES_DB: hacknation
+      # Pierwszy start zakłada bazę i restartuje Postgresa. Przy zapchanym dysku (równoległe
+      # rozpakowywanie obrazów i pobieranie modelu) zamknięcie trwa ponad domyślne 60 s pg_ctl.
+      PGCTLTIMEOUT: "300"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hacknation -d hacknation"]
+      # Po TCP, nie przez gniazdo: tymczasowy serwer z inicjalizacji słucha tylko na gnieździe,
+      # więc healthcheck nie zgłosi gotowości, zanim baza naprawdę wstanie.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U hacknation -d hacknation"]
       interval: 2s
       timeout: 5s
-      retries: 30
+      retries: 15
+      # Pierwsza inicjalizacja może trwać kilka minut — w tym czasie porażki się nie liczą.
+      start_period: 5m
     restart: unless-stopped
 
   migrate:
