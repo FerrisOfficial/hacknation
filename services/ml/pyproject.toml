@@ -9,6 +9,8 @@ dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.14.3",
     "selectolax>=1.0.2",
+    "youtube-transcript-api>=1.2.5",
+    "yt-dlp>=2026.10.26",
 ]
 
 [build-system]
