@@ -32,7 +32,7 @@ Budowa: **jeden uniwersalny silnik scrapingu + trzy moduły analityczne**.
 - **Szuka:** materiałów marketingowych publikowanych *bezpośrednio przez* firmy inwestycyjne zarejestrowane w Polsce (w tym polskie oddziały firm zagranicznych).
 - **Analiza (AI / statystyka):** czy informacja o ryzyku jest wystarczająca, wyraźna i proporcjonalna do informacji o zyskach — według listy wymogów z załącznika.
 - **Daje:** automatyczne flagowanie materiałów, które tych kryteriów nie spełniają.
-- ⚠️ Listy wymogów („załącznik”) nie ma w folderze na Dysku — trzeba ją wziąć od mentorów UKNF.
+- Lista wymogów (18 reguł z podstawą prawną): [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md).
 
 ### Moduł 3 — usługi nieautoryzowane (shadow advisory)
 
@@ -116,6 +116,7 @@ Wiedza ekonomiczna i prawnicza zespołu **nie** jest oceniana. Jury może wzią�
 
 ## Materiały i kontakt
 
+- Załączniki do tematów od UKNF (definicje firmy inwestycyjnej i doradztwa inwestycyjnego, linki do rejestrów KNF, kryteria oceny informacji o ryzyku): [docs/materialy-uknf/](materialy-uknf/README.md).
 - Próbki danych UKNF daje na miejscu, w trakcie hackathonu (do pobrania na pendrive przy stoisku UKNF).
 - Mentorzy UKNF są przy stoisku przez cały konkurs.
 - Discord: kanał `#InvestWatch`.
