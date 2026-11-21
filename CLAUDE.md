@@ -3,6 +3,14 @@
 Monorepo: Next.js (frontend + backend) + FastAPI (ML) + Supabase (Postgres, Auth).
 Zespół 3 osób, każdy z własnym agentem. Piszemy tak, żeby PR-y się nie gryzły.
 
+## Projekt
+
+Robimy zadanie UKNF **#InvestWatch — na straży inwestorów!** (HackNation 2026): silnik scrapingu internetu i social mediów + 3 moduły AI (finfluencerzy reklamujący firmy inwestycyjne, brak informacji o ryzyku w reklamach, nieautoryzowane doradztwo) + dashboard z alertami i panelem kalibracji progu.
+Oddanie: **22.11.2026, 11:00**.
+
+Pełne wymagania, test jury i punktacja: [docs/ZADANIE.md](docs/ZADANIE.md). Przeczytaj przed decyzją produktową lub architektoniczną.
+Wymagania techniczne UKNF (Docker Compose on-premise, tylko open source, bez płatnych API) częściowo kłócą się z obecnym stackiem — lista rozbieżności jest na końcu `docs/ZADANIE.md`.
+
 ## Struktura
 
 ```
