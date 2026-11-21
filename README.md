@@ -12,7 +12,31 @@ Next.js 16 + FastAPI + Supabase w jednym monorepo (pnpm + Turborepo).
 | Kontrakt TS ↔ Python | OpenAPI → `openapi-typescript` + `openapi-fetch` |
 | Jakość | Biome, Ruff, Pyright, Vitest, pytest, Playwright, GitHub Actions |
 
-## Pierwsze uruchomienie
+## Quick Start (Docker, cały stos on-premise)
+
+**Wymagania:** [Docker](https://docs.docker.com/get-started/get-docker/) z Compose v2 (Windows: `winget install Docker.DockerDesktop`, backend WSL 2), ok. 15 GB wolnego dysku (obrazy + model), 16 GB RAM. GPU opcjonalne: NVIDIA z min. 6 GB VRAM.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Pierwszy start pobiera model `gemma4:e2b` do Ollamy (kilka GB). Kolejne starty używają wolumenu.
+
+| Usługa | Adres | Co robi |
+|---|---|---|
+| `web` | http://localhost:3000/hacknation | Next.js — dashboard i API |
+| `ml` | http://127.0.0.1:8000/docs | FastAPI — modele |
+| `ollama` | http://127.0.0.1:11434 | lokalny LLM (model z `OLLAMA_MODEL` w `.env`) |
+| `db` | tylko w sieci Dockera | Postgres 17, osobna lokalna baza (nie Supabase) |
+| `migrate`, `ollama-pull` | — | jednorazowo: migracje Drizzle, pobranie modelu |
+
+- Z kartą NVIDIA: `docker compose -f compose.yaml -f compose.gpu.yaml up --build`.
+- Bez Ollamy (szybciej, gdy nie potrzebujesz LLM): `docker compose up --build web`.
+- Od zera, z pustą bazą i bez modelu: `docker compose down -v`.
+- W Dockerze nie ma Supabase Auth, więc aplikacja działa bez logowania.
+
+## Pierwsze uruchomienie (development)
 
 **Wymagania:** Node 24, pnpm (`corepack enable`), [uv](https://docs.astral.sh/uv/getting-started/installation/), git, [GitHub CLI](https://cli.github.com) (`winget install GitHub.cli` / `brew install gh`).
 
