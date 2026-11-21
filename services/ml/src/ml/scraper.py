@@ -201,6 +201,10 @@ def scrape(
         response = http.get(url, headers=headers)
     except httpx.HTTPError as exc:
         raise ScrapeError(f"Nie udało się pobrać {url}: {exc}") from exc
+    except (httpx.InvalidURL, UnicodeError) as exc:
+        # Adres, którego nie da się otworzyć (np. niewidoczny znak w domenie z opisu filmu) —
+        # błąd tego jednego linku, nie całego zbierania.
+        raise ScrapeError(f"Nieprawidłowy adres {url!r}: {exc}") from exc
     finally:
         if own_client:
             http.close()

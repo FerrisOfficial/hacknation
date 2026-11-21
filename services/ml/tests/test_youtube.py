@@ -184,6 +184,11 @@ def test_extract_links_trims_punctuation_and_dedupes() -> None:
     assert extract_links(text) == ["https://a.example/x?y=1", "https://www.b.example"]
 
 
+def test_extract_links_stops_at_invisible_characters() -> None:
+    text = "Konto: https://bank.example.pl​kod ABC i www.broker.example﻿/x oraz ​"
+    assert extract_links(text) == ["https://bank.example.pl", "https://www.broker.example"]
+
+
 def test_description_links_skip_youtube_but_keep_social_profiles() -> None:
     links = description_links(PAID_DESCRIPTION)
     assert links == [

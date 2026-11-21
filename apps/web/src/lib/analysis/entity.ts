@@ -172,21 +172,33 @@ export function brandOf(domain: string): string | null {
     .replace(/-/g, " ");
 }
 
+// Kolejność wpisów jednej marki: polski rejestr firm inwestycyjnych (dom maklerski, biuro
+// maklerskie banku) przed notyfikacją (np. XTB Ltd z grupy XTB), a ta przed agentem.
+export function registerRank(register: string): number {
+  // Także „Firmy inwestycyjne - Notyfikacje zagranicznych firm inwestycyjnych…”.
+  if (/notyfikacj/i.test(register)) return 1;
+  if (/^firmy inwestycyjne/i.test(register.trim())) return 0;
+  return 2;
+}
+
+export function byRegisterRank(a: KnfEntity, b: KnfEntity): number {
+  return registerRank(a.register_name) - registerRank(b.register_name);
+}
+
 // Podmiot z rejestru usług inwestycyjnych, którego nazwa zaczyna się od marki z domeny
 // („Trading 212 Markets Ltd” dla trading212.com).
 export function matchBrand(entities: readonly KnfEntity[], domain: string): KnfEntity | null {
   const brand = brandOf(domain)?.replace(/[^a-z0-9]/g, "");
   if (!brand) return null;
-  return (
-    entities.find(
-      (entity) =>
-        entity.investment_register &&
-        entity.name
-          .toLowerCase()
-          .replace(/[^\p{L}\d]/gu, "")
-          .startsWith(brand),
-    ) ?? null
+  const candidates = entities.filter(
+    (entity) =>
+      entity.investment_register &&
+      entity.name
+        .toLowerCase()
+        .replace(/[^\p{L}\d]/gu, "")
+        .startsWith(brand),
   );
+  return [...candidates].sort(byRegisterRank)[0] ?? null;
 }
 
 // Podmiot z wyników wyszukiwarki KNF, który pasuje do materiału (NIP albo domena).

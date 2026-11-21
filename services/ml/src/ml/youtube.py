@@ -79,7 +79,12 @@ DEFAULT_YOUTUBE_DELAY_S = 3.0
 
 _VIDEO_ID_RE = re.compile(r"^[\w-]{11}$")
 _PLAYER_RESPONSE_RE = re.compile(r"ytInitialPlayerResponse\s*=\s*")
-_URL_RE = re.compile(r"(?:https?://|www\.)[^\s<>\"'()\[\]{}]+", re.IGNORECASE)
+# Niewidoczne znaki (zero-width space, znaki kierunku tekstu, BOM) kończą adres jak spacja —
+# twórcy wklejają je za linkiem, a `\s` ich nie łapie („…xtb.pl​/kod”).
+_URL_RE = re.compile(
+    r"(?:https?://|www\.)[^\s<>\"'()\[\]{}​-‏‪-‮⁠-⁤﻿]+",
+    re.IGNORECASE,
+)
 _URL_TRAILING = ".,;:!?…»”'\""
 # „kod promocyjny: "ABC123"”, „z kodem ABC123” — sam kod wielkimi literami (z cyframi).
 _PROMO_CODE_RE = re.compile(
