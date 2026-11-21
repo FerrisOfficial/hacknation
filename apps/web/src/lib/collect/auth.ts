@@ -1,6 +1,6 @@
 // Kolektory uruchamia maszyna (cron, skrypt), nie użytkownik w przeglądarce — więc zamiast sesji
-// Supabase wspólny token z env: `Authorization: Bearer $COLLECTOR_TOKEN`. Bez tokenu w env
-// endpoint jest wyłączony (bezpieczny domyślny stan, np. na produkcji Cloudflare).
+// wspólny token z env: `Authorization: Bearer $COLLECTOR_TOKEN`. Bez tokenu w env endpoint jest
+// wyłączony (bezpieczny stan domyślny).
 
 export type CollectorAccess = "ok" | "disabled" | "unauthorized";
 

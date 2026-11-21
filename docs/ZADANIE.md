@@ -134,8 +134,8 @@ Repo powstało przed wyborem zadania. Wymagania UKNF kłócą się z nim tutaj:
 | Wymaganie UKNF | Stan repo |
 |---|---|
 | Cały stos przez Docker Compose, on-premise, jedną komendą | ✅ `compose.yaml`: Postgres, migracje, ML, web, Ollama (Gemma 4) — Quick Start w README |
-| Bez zewnętrznych usług, tylko otwarte bazy | W Dockerze lokalny Postgres, ale bez logowania (Auth jest tylko w Supabase w chmurze); demo online nadal na Supabase + Cloudflare Workers |
+| Bez zewnętrznych usług, tylko otwarte bazy | ✅ Wszystko lokalnie: Postgres z `compose.yaml` (także do `pnpm dev`), bez Supabase i Cloudflare. Logowania na razie nie ma |
 | Lekkie, rozdzielone serwisy zamiast ciężkiego monorepo | pnpm + Turborepo w jednym repo |
-| WebSockety do alertów w czasie rzeczywistym | Brak; Cloudflare Workers obsługują WebSockety tylko przez Durable Objects |
+| WebSockety do alertów w czasie rzeczywistym | Brak (bez Cloudflare nic już nie blokuje zwykłego serwera WebSocket) |
 | Kolejka zadań + cron dla scraperów | Brak |
 | Skanowanie zależności (npm, pip) | Brak w CI |

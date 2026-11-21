@@ -1,6 +1,6 @@
 # hacknation — instrukcje dla agentów
 
-Monorepo: Next.js (frontend + backend) + FastAPI (ML) + Supabase (Postgres, Auth).
+Monorepo: Next.js (frontend + backend) + FastAPI (ML) + PostgreSQL. Wszystko działa lokalnie (Docker Compose), bez usług w chmurze.
 Zespół 3 osób, każdy z własnym agentem. Piszemy tak, żeby PR-y się nie gryzły.
 
 ## Projekt
@@ -9,13 +9,13 @@ Robimy zadanie UKNF **#InvestWatch — na straży inwestorów!** (HackNation 202
 Oddanie: **22.11.2026, 11:00**.
 
 Pełne wymagania, test jury i punktacja: [docs/ZADANIE.md](docs/ZADANIE.md). Przeczytaj przed decyzją produktową lub architektoniczną.
-Wymagania techniczne UKNF (Docker Compose on-premise, tylko open source, bez płatnych API) częściowo kłócą się z obecnym stackiem — lista rozbieżności jest na końcu `docs/ZADANIE.md`.
+Wymagania techniczne UKNF: Docker Compose on-premise, tylko open source, bez płatnych i zewnętrznych API. Nie dodawaj usług w chmurze (hosting, baza, auth, LLM).
 
 ## Struktura
 
 ```
-apps/web/          Next.js 16 — UI, route handlery (src/app/api), Server Actions; produkcja: Cloudflare Workers, https://maciejstempniak.com/hacknation
-packages/db/       Drizzle — schemat bazy (src/schema.ts) i migracje (drizzle/)
+apps/web/          Next.js 16 — UI, route handlery (src/app/api), Server Actions; http://localhost:3000/hacknation
+packages/db/       Drizzle — schemat bazy (src/schema.ts) i migracje (drizzle/), Postgres z compose.yaml
 packages/api-ml/   Typowany klient serwisu ML — GENEROWANY z OpenAPI, nie edytuj src/schema.d.ts
 services/ml/       FastAPI + uv — modele ML, endpointy
 compose.yaml       Cały stos on-premise w Dockerze: db (Postgres), migrate, ml, web, ollama (+ compose.gpu.yaml)
@@ -27,16 +27,17 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 
 | Komenda | Co robi |
 |---|---|
+| `pnpm db:up` | lokalna baza (Postgres z `compose.yaml`, port 5432) + migracje. Przed pierwszym `pnpm dev` |
 | `pnpm dev` | web (:3000) + ml (:8000) naraz |
 | `pnpm check` | lint + typecheck + testy, TS i Python. **Uruchom przed każdym PR.** |
 | `pnpm format` | auto-fix formatowania (Biome + Ruff) |
 | `pnpm test:e2e` | build + Playwright |
-| `pnpm env:pull` | pliki `.env` ze zmiennych repo `WEB_ENV` / `DB_ENV` (`--force` nadpisuje) |
+| `pnpm env:init` | tworzy brakujące `.env` z `.env.example` (robi to też `pnpm install`) |
 | `pnpm db:generate` | migracja SQL ze zmian w `packages/db/src/schema.ts` |
-| `pnpm db:migrate` | tylko w CI — lokalnie odmawia; migracje trafiają na bazę same po merge'u do `main` |
+| `pnpm db:migrate` | nakłada migracje na lokalną bazę |
 | `pnpm db:check` | test połączenia z bazą z `packages/db/.env` — pokazuje kod błędu i podpowiedź |
 | `pnpm api:generate` | OpenAPI z FastAPI → typy TS w `packages/api-ml` |
-| `docker compose up --build` | cały stos w kontenerach (najpierw `cp .env.example .env`); CI sprawdza go w jobie „Docker Compose” |
+| `docker compose up --build` | cały stos w kontenerach; CI sprawdza go w jobie „Docker Compose” |
 
 ## Zasady
 
@@ -48,13 +49,11 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 - Przeglądarka nie woła FastAPI bezpośrednio. Ścieżka zawsze: komponent → route handler / Server Action → `@/lib/ml` → FastAPI.
 - Zmiana API w `services/ml` = w tym samym PR `pnpm api:generate` i commit wygenerowanych plików (CI to sprawdza).
 - Zmiana schematu bazy = w tym samym PR `pnpm db:generate` i commit migracji. Nie edytuj starych migracji.
-- Każda nowa tabela w `packages/db/src/schema.ts` musi mieć `.enableRLS()`. Bez tego Supabase wystawia ją publicznie przez REST API.
-- Jest **jedna wspólna baza** (Supabase `hacknation`) i lokalny `.env` wskazuje na nią — to te same dane, które widzi demo. Nie czyść tabel, nie usuwaj danych hurtowo i nie uruchamiaj destrukcyjnego SQL. Wyjątek: kontener `db` z `compose.yaml` to prywatna baza na Twoim komputerze — migracje stosuje na niej sama usługa `migrate`, a `docker compose down -v` ją czyści.
+- Baza to lokalny Postgres z `compose.yaml` — każdy ma własną, prywatną kopię (`docker compose down -v` ją czyści). Dane do demo trzeba zebrać na komputerze, z którego robimy demo.
 - Nowa usługa lub zmienna środowiskowa potrzebna w działającym stosie = dopisz ją też do `compose.yaml` (sekrety przez `${...}` z `.env`, wzór w `.env.example` w roocie). Obrazy przypinamy do konkretnej wersji, bez `latest`.
-- Schemat zmieniasz tylko migracją (`pnpm db:generate` + PR). Na bazę trafia sama po merge'u do `main` (workflow „Deploy (baza + aplikacja)”). Nie omijaj tego przez `drizzle-kit migrate` ani `drizzle-kit push`.
+- Schemat zmieniasz tylko migracją (`pnpm db:generate` + commit w PR), a nakładasz `pnpm db:migrate`. Nie używaj `drizzle-kit push` — inni muszą dostać tę samą zmianę jako migrację.
 - Sekrety tylko w `.env*` (ignorowane przez git). Nowa zmienna = dopisz ją do odpowiedniego `.env.example`.
-- Zmienne repo `WEB_ENV` / `DB_ENV` zawierają hasło do bazy i nie są maskowane w logach. Nie używaj `vars.*` w workflowach.
-- Auth zawsze przez Supabase (`@/lib/supabase/*`). Nie pisz własnej obsługi haseł ani sesji.
+- Logowania na razie nie ma. Jeśli będzie potrzebne, uzgodnij z zespołem bibliotekę open source działającą lokalnie (np. Auth.js) — nie pisz własnej obsługi haseł ani sesji.
 - Nie zmieniaj plików poza obszarem zadania (formatowanie "przy okazji" = konflikty u innych).
 
 ## Git

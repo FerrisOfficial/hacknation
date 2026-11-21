@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "hacknation",
-  description: "Next.js + FastAPI + Supabase",
+  description: "Next.js + FastAPI + PostgreSQL",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
