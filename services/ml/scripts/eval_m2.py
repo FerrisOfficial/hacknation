@@ -18,7 +18,7 @@ from pathlib import Path
 
 from ml.risk import RULE_WEIGHTS
 
-THRESHOLDS = (0.3, 0.5, 0.7)
+THRESHOLDS = (0.1, 0.3, 0.5, 0.7, 0.9)
 
 
 def p_violation(finding: dict | None) -> float:
