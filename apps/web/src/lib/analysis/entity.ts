@@ -161,6 +161,34 @@ export function entityNip(entity: KnfEntity): string | null {
   return digits.length === 10 ? digits : null;
 }
 
+// Marka z domeny do wyszukiwania po nazwie, gdy KNF nie ma domeny w danych podmiotu
+// (np. notyfikacje zagranicznych firm): „trading212.com” → „trading 212”. null dla krótkich.
+export function brandOf(domain: string): string | null {
+  const label = registrableDomain(domain).split(".")[0] ?? "";
+  if (label.replace(/[^a-z0-9]/g, "").length < 4) return null;
+  return label
+    .replace(/([a-z])(\d)/g, "$1 $2")
+    .replace(/(\d)([a-z])/g, "$1 $2")
+    .replace(/-/g, " ");
+}
+
+// Podmiot z rejestru usług inwestycyjnych, którego nazwa zaczyna się od marki z domeny
+// („Trading 212 Markets Ltd” dla trading212.com).
+export function matchBrand(entities: readonly KnfEntity[], domain: string): KnfEntity | null {
+  const brand = brandOf(domain)?.replace(/[^a-z0-9]/g, "");
+  if (!brand) return null;
+  return (
+    entities.find(
+      (entity) =>
+        entity.investment_register &&
+        entity.name
+          .toLowerCase()
+          .replace(/[^\p{L}\d]/gu, "")
+          .startsWith(brand),
+    ) ?? null
+  );
+}
+
 // Podmiot z wyników wyszukiwarki KNF, który pasuje do materiału (NIP albo domena).
 // Pierwszeństwo ma aktualny wpis w rejestrze usług inwestycyjnych.
 export function matchEntity(

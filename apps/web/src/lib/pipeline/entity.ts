@@ -1,9 +1,11 @@
 import "server-only";
 import {
+  brandOf,
   type EntityMaterial,
   extractNip,
   type KnfEntity,
   type KnfWarning,
+  matchEntity,
   materialDomain,
   outboundLinks,
   registrableDomain,
@@ -88,7 +90,16 @@ export async function lookupPromotedFirm(
   ].slice(0, MAX_FIRM_DOMAINS);
   const [warnings, searches] = await Promise.all([
     knfWarnings(),
-    Promise.all(domains.map(async (domain) => ({ domain, entities: await knfSearch(domain) }))),
+    Promise.all(
+      domains.map(async (domain) => {
+        // Po domenie, a gdy żaden wynik nie ma tej domeny — po marce z domeny (`brandOf`).
+        const byDomain = await knfSearch(domain);
+        const matched = byDomain ? matchEntity(byDomain, { domain, nip: null }) : null;
+        const brand = byDomain && !matched ? brandOf(domain) : null;
+        const byBrand = brand ? await knfSearch(brand) : [];
+        return { domain, entities: byDomain && byBrand ? [...byDomain, ...byBrand] : null };
+      }),
+    ),
   ]);
   return { searches, warnings };
 }
