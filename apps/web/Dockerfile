@@ -32,6 +32,9 @@ WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build --chown=node:node /repo/apps/web/public ./apps/web/public
+# Baza treści (CONTENT_STORE_DIR) — wolumen dziedziczy właściciela z obrazu przy pierwszym montowaniu.
+RUN mkdir -p /data/content && chown node:node /data/content
 USER node
-EXPOSE 3000
+# 3000: aplikacja i REST, 3001: Socket.io.
+EXPOSE 3000 3001
 CMD ["node", "apps/web/server.js"]

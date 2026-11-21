@@ -4,7 +4,23 @@ import postgres from "postgres";
 import * as schema from "./schema";
 
 // Operatory zapytań dla aplikacji — jedna wersja drizzle-orm w całym repo.
-export { eq, sql } from "drizzle-orm";
+export {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 export * from "./schema";
 
 function createDb(url: string) {
