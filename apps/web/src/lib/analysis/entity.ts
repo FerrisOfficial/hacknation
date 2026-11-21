@@ -41,6 +41,30 @@ export function normalizeDomain(value: string): string | null {
   return host.toLowerCase().replace(/^www\./, "");
 }
 
+// Końcówki z dwóch członów, pod którymi rejestruje się domeny (firma.com.pl, broker.co.uk).
+const SECOND_LEVEL_SUFFIXES = new Set([
+  "com.pl",
+  "net.pl",
+  "org.pl",
+  "biz.pl",
+  "info.pl",
+  "waw.pl",
+  "co.uk",
+  "org.uk",
+  "com.cy",
+  "com.mt",
+  "com.au",
+  "co.za",
+]);
+
+// Domena główna do wyszukiwarki KNF: KNF zna „xtb.com”, a link afiliacyjny prowadzi na
+// „akcje.xtb.com”. Dopasowanie (`domainMatches`) i tak porównuje pełną domenę.
+export function registrableDomain(domain: string): string {
+  const labels = domain.split(".");
+  const size = SECOND_LEVEL_SUFFIXES.has(labels.slice(-2).join(".")) ? 3 : 2;
+  return labels.slice(-size).join(".");
+}
+
 export function isPlatformDomain(domain: string): boolean {
   return [...PLATFORM_DOMAINS].some((d) => domain === d || domain.endsWith(`.${d}`));
 }

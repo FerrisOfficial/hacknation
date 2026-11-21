@@ -12,6 +12,7 @@ import {
   normalizeDomain,
   type OutboundLink,
   outboundLinks,
+  registrableDomain,
 } from "./entity";
 import { buildEvidence } from "./evidence";
 import { findRule } from "./rules";
@@ -43,7 +44,7 @@ export type FinfluencerMaterial = Pick<
   "url" | "platform" | "author" | "title" | "text" | "metadata"
 >;
 
-// Wyniki KNF per domena z linków: null = wyszukiwarka nie odpowiedziała.
+// Wyniki KNF per domena główna z linków (`registrableDomain`): null = wyszukiwarka nie odpowiedziała.
 export type FirmLookup = {
   searches: { domain: string; entities: readonly KnfEntity[] | null }[];
   warnings: readonly KnfWarning[] | null;
@@ -53,6 +54,8 @@ export type FirmLookup = {
 // `(?<!\p{L})` zamiast `\b` — `\b` w JS nie zna polskich liter.
 const AD_PHRASES =
   /(?<!\p{L})(link\p{L}* w opisie|z (?:mojego|tego) linku|z moim kodem|kod\p{L}* (?:promocyjn|polecając|rabatow|zniżkow)\p{L}*|bonus\p{L}* na start|otwórz (?:konto|rachunek)|załóż (?:konto|rachunek)|zarejestruj się|współprac\p{L}* (?:reklamow|płatn)\p{L}*|materiał\p{L}* sponsorowan\p{L}*|(?:partner|sponsor)\p{L}* (?:odcinka|filmu|materiału)|darmow\p{L}* akcj\p{L}*|#(?:ad|reklama|wspolpraca|współpraca|sponsored)(?!\p{L}))/iu;
+
+const AD_PHRASES_ALL = new RegExp(AD_PHRASES.source, "giu");
 
 // Kod z tekstu („kod: KANAL50”, „kodem XTB2024”) — dla stron WWW, filmy mają `promo_codes`.
 const PROMO_CODE =
@@ -96,7 +99,8 @@ export function findPromotedFirm(
 ): Firm | null {
   const links = outboundLinks(material);
   for (const link of links) {
-    const search = lookup.searches.find((s) => s.domain === link.domain);
+    const base = registrableDomain(link.domain);
+    const search = lookup.searches.find((s) => s.domain === base);
     const entity = search?.entities
       ? matchEntity(search.entities, { domain: link.domain, nip: null })
       : null;
@@ -141,7 +145,22 @@ export function collectSignals(material: FinfluencerMaterial, firm: Firm): Signa
     detail: `${firm.link.affiliate ? "link afiliacyjny" : "link"} do ${firm.link.domain}`,
     at: linkAt >= 0 ? linkAt : domainAt >= 0 ? domainAt : null,
   });
-  const phrase = AD_PHRASES.exec(material.text);
+  // Film bywa sponsorowany przez kilka marek — pierwszeństwo ma fraza z linii, w której pada
+  // nazwa reklamowanej firmy albo jej domena („Partnerem odcinka jest XTB”).
+  const keys = [
+    registrableDomain(firm.link.domain).split(".")[0] ?? "",
+    nameCore(firm.entity?.name ?? firm.warning?.entities ?? ""),
+  ].filter((key) => key.length >= 3);
+  const phrases = [...material.text.matchAll(AD_PHRASES_ALL)];
+  const lineOf = (at: number) => {
+    const end = material.text.indexOf("\n", at);
+    return material.text.slice(material.text.lastIndexOf("\n", at) + 1, end < 0 ? undefined : end);
+  };
+  const phrase =
+    phrases.find((match) => {
+      const line = nameCore(lineOf(match.index));
+      return keys.some((key) => line.includes(key));
+    }) ?? phrases[0];
   if (phrase) {
     signals.push({ kind: "ad_phrase", detail: `„${phrase[0]}”`, at: phrase.index });
   }

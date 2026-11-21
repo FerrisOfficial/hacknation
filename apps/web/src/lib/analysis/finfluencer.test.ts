@@ -138,6 +138,30 @@ describe("buildFinfluencerResult", () => {
     });
   });
 
+  it("link na subdomenę firmy (akcje.xtb.com) trafia do XTB szukanego jako xtb.com", () => {
+    const result = buildFinfluencerResult(
+      {
+        ...VIDEO,
+        metadata: { links: [{ url: "https://akcje.xtb.com/kanal", domain: "akcje.xtb.com" }] },
+      },
+      LOOKUP,
+    );
+    expect(result.details).toMatchObject({
+      entity: { firm_name: "XTB S.A.", domain: "akcje.xtb.com", in_register: true },
+    });
+  });
+
+  it("cytat z frazy przy reklamowanej firmie, gdy sponsorów jest kilku", () => {
+    const text =
+      "Partnerem odcinka jest Catering Dieta.\nPartnerem materiału jest XTB, link w opisie.";
+    const result = buildFinfluencerResult(
+      { ...VIDEO, text, metadata: { links: VIDEO.metadata.links } },
+      LOOKUP,
+    );
+    const [flag] = (result.details as { flags: { evidence: { quote: string } | null }[] }).flags;
+    expect(flag?.evidence?.quote).toContain("XTB");
+  });
+
   it("własny kanał firmy to nie podmiot trzeci", () => {
     const result = buildFinfluencerResult({ ...VIDEO, author: "XTB" }, LOOKUP);
     expect(result).toMatchObject({ label: "material_firmy", score: 0 });
