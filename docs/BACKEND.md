@@ -1,5 +1,7 @@
 # Backend #InvestWatch
 
+> **Uwaga:** kształty endpointów dashboardu, zdarzeń Socket.io i `POST /analyze` wyznacza [KONTRAKT.md](KONTRAKT.md). Tam, gdzie ten plik się z nim nie zgadza, obowiązuje kontrakt — lista zmian do zrobienia jest na jego końcu.
+
 Backend to route handlery Next.js (`apps/web/src/app/api`) plus procesy w tle startowane z `apps/web/src/instrumentation.ts`. Wszystko pod `http://localhost:3000/hacknation/api`.
 
 ```
