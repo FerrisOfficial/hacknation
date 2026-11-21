@@ -7,7 +7,7 @@ export default defineConfig({
   dialect: "postgresql",
   schema: "./src/schema.ts",
   out: "./drizzle",
-  // Nie dotykamy schematów Supabase (auth, storage…), tylko naszego `public`.
+  // Tylko nasz schemat `public`.
   schemaFilter: ["public"],
   dbCredentials: {
     url: process.env.DATABASE_URL ?? "",

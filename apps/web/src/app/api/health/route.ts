@@ -2,7 +2,7 @@ import { pingDb } from "@app/db";
 import { type NextRequest, NextResponse } from "next/server";
 
 // GET /api/health — czy aplikacja żyje.
-// GET /api/health?db=1 — dodatkowo czy łączy się z bazą (np. po wdrożeniu na Cloudflare).
+// GET /api/health?db=1 — dodatkowo czy łączy się z bazą (healthcheck w compose.yaml i CI).
 export async function GET(request: NextRequest) {
   if (!request.nextUrl.searchParams.has("db")) {
     return NextResponse.json({ status: "ok" });

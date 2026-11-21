@@ -6,8 +6,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "postinstall": "node scripts/env-pull.mjs --auto",
-    "dev": "node scripts/env-pull.mjs --auto && turbo run dev",
+    "postinstall": "node scripts/env-init.mjs",
+    "dev": "node scripts/env-init.mjs && turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "format": "biome check --write . && pnpm --filter @app/ml format",
@@ -15,7 +15,8 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "check": "turbo run lint typecheck test",
-    "env:pull": "node scripts/env-pull.mjs",
+    "env:init": "node scripts/env-init.mjs",
+    "db:up": "node scripts/env-init.mjs && docker compose up --detach --wait db && pnpm --filter @app/db migrate",
     "db:generate": "pnpm --filter @app/db generate",
     "db:migrate": "pnpm --filter @app/db migrate",
     "db:check": "pnpm --filter @app/db check-connection",

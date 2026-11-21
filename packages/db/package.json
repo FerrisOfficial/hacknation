@@ -9,7 +9,7 @@
   "scripts": {
     "generate": "drizzle-kit generate",
     "check-connection": "node scripts/check-connection.ts",
-    "migrate": "node scripts/check-connection.ts --before-migrate && drizzle-kit migrate",
+    "migrate": "node scripts/check-connection.ts && drizzle-kit migrate",
     "studio": "drizzle-kit studio",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit"

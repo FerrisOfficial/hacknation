@@ -12,11 +12,10 @@ import {
 } from "drizzle-orm/pg-core";
 
 // Przykładowa tabela — zmień albo usuń. Po każdej zmianie schematu: `pnpm db:generate`.
-// Użytkownicy żyją w Supabase Auth (schemat `auth`), tutaj trzymamy tylko ich id.
 //
-// KAŻDA tabela musi mieć .enableRLS(). Supabase wystawia schemat `public` przez swoje REST API,
-// a klucz publishable jest jawny (siedzi w przeglądarce). RLS bez polityk = REST API nie widzi
-// tabeli, a nasz serwer (Drizzle, bezpośrednie połączenie) dalej ma pełny dostęp.
+// `.enableRLS()` zostało z czasów Supabase (chroniło tabele przed jego publicznym REST API).
+// Na lokalnym Postgresie nie przeszkadza: aplikacja łączy się jako właściciel tabel, a właściciela
+// RLS bez polityk nie ogranicza. Nowe tabele go nie potrzebują.
 export const notes = pgTable(
   "notes",
   {

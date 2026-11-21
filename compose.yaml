@@ -6,7 +6,9 @@
 # Aplikacja: http://localhost:3000/hacknation, API ML: http://127.0.0.1:8000/docs
 # Z kartą NVIDIA dla Ollamy: docker compose -f compose.yaml -f compose.gpu.yaml up --build
 #
-# Baza `db` to osobna, lokalna baza w kontenerze — nie Supabase. Migracje stosuje na niej `migrate`.
+# Baza `db` to jedyna baza projektu (lokalny Postgres, bez chmury). Migracje stosuje na niej
+# `migrate`. Ta sama baza służy do developmentu: `pnpm db:up` uruchamia ją samą (port 5432 na
+# 127.0.0.1) i nakłada migracje, a `pnpm dev` łączy się z nią z hosta.
 
 name: hacknation
 
@@ -24,6 +26,9 @@ services:
       PGCTLTIMEOUT: "300"
     volumes:
       - db-data:/var/lib/postgresql/data
+    # Tylko z tego komputera — dla `pnpm dev` i `pnpm db:*` (DATABASE_URL w .env.example).
+    ports:
+      - "127.0.0.1:5432:5432"
     healthcheck:
       # Po TCP, nie przez gniazdo: tymczasowy serwer z inicjalizacji słucha tylko na gnieździe,
       # więc healthcheck nie zgłosi gotowości, zanim baza naprawdę wstanie.
