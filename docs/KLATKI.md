@@ -61,9 +61,10 @@ jeden wynik M2 → buildAnalysisResult (bez łączenia wyników po stronie backe
 Wejście: `{ material_id, url }`. Wyjście: manifest (niżej). 502, gdy filmu nie udało się pobrać. 422, gdy film jest dłuższy niż `MEDIA_MAX_DURATION_S`.
 
 1. **Pobranie:** yt-dlp (jest już w zależnościach) z formatem `bv*[height<=720]`, czyli sam obraz bez dźwięku i nie więcej niż 720p. Używa tego samego proxy i opóźnienia co `youtube.py` (`SCRAPER_PROXY_URL`, `YOUTUBE_DELAY_S`).
-2. **Czarne pasy:** `ffmpeg cropdetect` na próbce, potem `crop` przy wycinaniu. Bez tego „dół ekranu” z reguły 6 wskazywałby pas, a nie obraz.
+2. **Czarne pasy:** `ffmpeg cropdetect` na całym filmie (`fps=2,cropdetect=limit=24:round=2:reset=0`), potem `crop` przy wycinaniu. Bez tego „dół ekranu” z reguły 6 wskazywałby pas, a nie obraz. Przy `reset=0` pas, w którym choć raz pojawia się tekst (np. ostrzeżenie pod obrazem w reklamie XTB), zostaje w kadrze, więc ostrzeżenie nie jest wycinane.
 3. **Klatki:** `fps=1` na całym filmie, w ostatnich 15 s `fps=2`, bo ostrzeżenia często migają na końcu. Zapis do PNG, nie JPEG: kompresja rozmywa mały tekst i zmienia kolory, a to psuje reguły 4 i 5.
-4. **Duplikaty:** dHash w OpenCV (bez nowej biblioteki). Klatka podobna do poprzedniej (odległość ≤ 4) nie jest zapisywana, tylko przedłuża `until` poprzedniej. Dzięki temu znamy czas wyświetlania, potrzebny w regule 6. Najwyżej 200 unikalnych klatek.
+4. **Duplikaty:** klatka jest duplikatem poprzedniej tylko wtedy, gdy spełnia **oba** warunki: dHash 9×8 w odległości ≤ 4 **i** żaden blok 16×16 px (w połowie rozdzielczości) nie zmienił średniej jasności o więcej niż 3 poziomy (OpenCV, bez nowej biblioteki). Duplikat nie jest zapisywany, tylko przedłuża `until` poprzedniej klatki. Dzięki temu znamy czas wyświetlania, potrzebny w regule 6. Najwyżej 200 unikalnych klatek.
+   - **Sam dHash nie wystarcza** (sprawdzone w teście na 60 s): nie widzi, kiedy małe, blade ostrzeżenie się pojawia i znika. Gubił klatki z ostrzeżeniem, a czas wyświetlania wychodził 2,5 s zamiast 2,0 s. Warunek bloków to naprawia kosztem większej liczby klatek: 58–72 zamiast ok. 20 na minutę filmu.
 5. **Sprzątanie:** po wyciągnięciu klatek plik filmu jest usuwany.
 
 Pliki: `${MEDIA_DIR}/<material_id>/<ts_ms>.png`. Manifest w `materials.metadata.frames` (`jsonb`, bez migracji):
@@ -92,19 +93,24 @@ Pliki: `${MEDIA_DIR}/<material_id>/<ts_ms>.png`. Manifest w `materials.metadata.
 
 1. **OCR:** RapidOCR z modelem PP-OCRv5 Latin (polski jest w zestawie), na **kopii roboczej**: szarość, CLAHE, powiększenie ×2. Ramki przeliczamy na ułamki 0–1 oryginału. Wynik zapisujemy w `${MEDIA_DIR}/<material_id>/ocr.json`, więc powtórna analiza nie powtarza OCR.
 2. **Poprawka polskich liter:** model Latin myli je, więc zamieniamy `ž→ż`, `š→ś`, `č→ć` (tych liter nie ma w polszczyźnie).
-3. **Klasyfikacja linii** przez te same frazy co w `risk.py` (`_FEATURES`: ostrzeżenie o ryzyku, wyniki historyczne, obietnica zysku). Tekst i obraz oceniamy więc tymi samymi kryteriami. Linie niejednoznaczne rozstrzyga LLM.
+3. **Klasyfikacja linii** przez te same frazy co w `risk.py` (`_FEATURES`: ostrzeżenie o ryzyku, wyniki historyczne, obietnica zysku). Tekst i obraz oceniamy więc tymi samymi kryteriami. Linie niejednoznaczne rozstrzyga LLM. Wnioski z testu:
+   - **frazy polskie i angielskie.** Reklamy brokerów bywają po angielsku: prawdziwy film XTB ma ostrzeżenie „Trading CFDs is a high risk activity… Your losses can exceed your deposits”. `risk_warning` w `risk.py` ma część angielskich fraz („lose money”, „risk of loss”, „past performance is not a reliable indicator”), ale nie łapie „high risk activity” ani „losses can exceed your deposits”. Trzeba je dopisać (przydadzą się też w analizie tekstu),
+   - **samo „CFD” to nie ostrzeżenie.** Podtytuł „Akcje, ETF-y i CFD w jednej aplikacji” był brany za ostrzeżenie. Potrzebne są frazy o ryzyku lub stracie, a nie nazwy produktów,
+   - **blok ostrzeżenia:** linię bez słów kluczowych dołączamy do ostrzeżenia, gdy leży tuż obok (odstęp < 1,5 wysokości), ma podobną wysokość (±30%) **i ma co najmniej 4 słowa**. Bez warunku słów do ostrzeżenia dołączał adres „xtb.com” nad nim i psuł regułę 6,
+   - **polskie litery:** OCR je gubi („pieniadze”, „wiaża”), a wzorce w `_FEATURES` mają polskie znaki (np. „traci pieniądze”), więc na tekście z OCR by nie zadziałały. Przed dopasowaniem trzeba usunąć znaki diakrytyczne **i z tekstu, i ze wzorców**, np. dopasowywać do wersji bez diakrytyków, tworzonej z `_FEATURES` jednorazowo przy imporcie. W prototypie robiliśmy to dla własnych słów kluczowych.
 4. **Pomiary** (tabela niżej).
 5. **Gemma (obraz):** tylko reguła 13 i linie niejednoznaczne. Przez `_Ollama` z `risk_llm.py` z dodanym polem `images` w `/api/chat`. Model wizyjny ustawia osobna zmienna `OLLAMA_VISION_MODEL` (domyślnie `gemma4:e2b`), bo tekstowy model M2 (`OLLAMA_RISK_MODEL`, Bielik) nie przyjmuje obrazów.
 
 | Reguła | Pomiar | Naruszenie (domyślny próg) |
 |---|---|---|
-| 4 | stosunek wysokości linii ostrzeżenia do mediany wysokości pozostałych linii, w klatce z **najlepiej** pokazanym ostrzeżeniem | stosunek < 0,6 |
+| 4 | stosunek wysokości linii ostrzeżenia do **przeważającej wielkości tekstu w całym filmie** (mediana wysokości linii spoza ostrzeżenia, ważona liczbą znaków i czasem na ekranie), w klatce z **najlepiej** pokazanym ostrzeżeniem. Nie porównujemy z innymi liniami tej samej klatki: obok dużego hasła („Kod: START50”) nawet czytelne ostrzeżenie wychodziło za małe | stosunek < 0,6 |
 | 5 | kontrast WCAG między tekstem a tłem w ramce ostrzeżenia (k-means na 2 kolory na oryginale), w najlepszej klatce | < 4,5:1 (< 3:1 dla dużego tekstu) |
-| 6 | położenie (dolne lub górne 10% klatki, róg), udział w powierzchni klatki, łączny czas na ekranie wobec czasu czytania (słowa / 3 na sekundę) | czas < czas czytania albo ostrzeżenie tylko w pasie przy krawędzi |
+| 6 | łączny czas na ekranie wobec czasu czytania (słowa / 3 na sekundę) i udział czasu, w którym ostrzeżenie leży w pasie 10% przy górnej lub dolnej krawędzi | **naruszenie:** czas < czas czytania albo (przy krawędzi przez ≥ 80% czasu **i** mała czcionka z reguły 4). **Wskazówka:** samo położenie przy krawędzi, przy dobrej czcionce i czasie |
 | 13 | czy linia z wynikiem historycznym jest największym tekstem klatki. Potwierdza Gemma pytaniem „co jest najbardziej wyeksponowane?” | wynik historyczny dominuje w ≥ 1 klatce |
 
 - Brak ostrzeżenia na żadnej klatce: reguły 4, 5 i 6 dostają `n/a` z uzasadnieniem „brak ostrzeżenia o ryzyku na ekranie”. Sam brak ostrzeżenia ocenia reguła 3 (tekst).
 - `confidence` rośnie z odległością od progu, w przedziale 0,5–0,95. Progi to stałe w `risk_visual.py`, obok `VIOLATION_MIN` i podobnych z `risk.py`. Stroimy je w panelu kalibracji.
+- **Wskazówka w regule 6.** Ostrzeżenie w pasie pod obrazem jest częste i zwykle akceptowane, np. w prawdziwej reklamie XTB. Kontrakt nie pozwala oznaczyć pojedynczego wyniku jako wskazówki (`result`: `violation` | `ok` | `n/a`, a `kind` pochodzi z katalogu reguł, gdzie reguła 6 ma już `suggestion`). Dlatego zwracamy `violation` z pewnością **0,35** (`EDGE_ONLY_CONF`) i `reason` zaczynającym się od „Wskazówka:”. Sama daje score 0,5 · 0,35 = 0,175, poniżej domyślnego progu `flag` 0,5, więc nie tworzy incydentu. Przy incydencie z innymi naruszeniami analityk ją widzi.
 - `quote`: tekst linii z OCR, najwyżej 300 znaków (`QUOTE_MAX`). `reason` podaje liczby, np. „Ostrzeżenie ma 17% wysokości głównego tekstu (próg 60%), kontrast 1,3:1, 0:42–0:47”.
 - `Finding` dostaje pole `frame: Frame | None = None` (`ts`, `file`, `box`). `AnalysisFinding` w `main.py` wystawia je zgodnie z [KONTRAKT.md](KONTRAKT.md) §2. Potem `pnpm api:generate`.
 
@@ -117,10 +123,11 @@ Pliki: `${MEDIA_DIR}/<material_id>/<ts_ms>.png`. Manifest w `materials.metadata.
 
 ## Zależności i Docker
 
-- `uv add rapidocr onnxruntime`. OpenCV przychodzi z RapidOCR, więc dHash, k-means i CLAHE nie potrzebują nowych bibliotek. Sprawdzone: instaluje się i działa na Pythonie 3.14.
+- `uv add rapidocr onnxruntime yt-dlp-ejs`. OpenCV przychodzi z RapidOCR, więc dHash, bloki, k-means i CLAHE nie potrzebują nowych bibliotek. Sprawdzone: instaluje się i działa na Pythonie 3.14.
 - `services/ml/Dockerfile`:
   - `apt-get install -y ffmpeg`,
-  - **Deno** w przypiętej wersji. yt-dlp od 2025.11 potrzebuje zewnętrznego środowiska JS do YouTube,
+  - **środowisko JS dla yt-dlp:** Deno (domyślne w yt-dlp) albo Node (`--js-runtimes node`, tak było w teście), w przypiętej wersji. yt-dlp od 2025.11 potrzebuje go do YouTube,
+  - **`yt-dlp-ejs`** (skrypt rozwiązujący wyzwania JS YouTube). Bez niego yt-dlp ostrzega: „n challenge solving failed: Some formats may be missing”. W teście film i tak się pobrał (format 136, 720p), ale nie można na tym polegać. Opcja `--remote-components ejs:github` pobiera skrypt z GitHuba przy każdym uruchomieniu, więc nie pasuje do stosu bez internetu,
   - **modele RapidOCR pobrane w czasie budowania obrazu.** Domyślnie RapidOCR pobiera je przy pierwszym uruchomieniu, a stos ma działać on-premise bez internetu.
 - `compose.yaml` w serwisie `ml`:
   - wolumen `media:/data/media`,
@@ -142,14 +149,38 @@ Wnioski:
 - Model wizyjny **nie mierzy**, więc wszystkie pomiary robi OCR z pikselami. Gemmy używamy do oceny znaczenia (reguła 13, niejednoznaczne linie), a nie do cytatów.
 - Model Latin myli polskie litery, stąd poprawka w kroku 2.
 
+### Test na filmach 60 s
+
+Prototyp całego przebiegu (cropdetect, klatki, duplikaty, OCR, reguły 4, 5, 6, 13, Gemma) na 4 filmach syntetycznych 60 s (1280×720, 25 fps, H.264, czarne pasy 90 px) i 1 prawdziwej reklamie z YouTube.
+
+| Film | Co zawiera | 4 | 5 | 6 | 13 |
+|---|---|---|---|---|---|
+| `violating` | „+142% w 2023!” 110 px, ostrzeżenie 15 px w kolorze bliskim tła, na dole, 56–58 s | naruszenie (36%) | naruszenie (1,4:1) | naruszenie (2,0 s zamiast 7,7 s, krawędź i mała czcionka) | naruszenie (Gemma potwierdza) |
+| `compliant` | ostrzeżenie 34 px, białe na czarnym, na środku, 48–58 s | ok (73%) | ok (18:1) | ok (10 s) | n/a |
+| `edge_small` | ostrzeżenie 15 px, białe, na dole, 40–58 s | naruszenie (36%) | ok (9,9:1) | naruszenie (krawędź i mała czcionka) | n/a |
+| XTB „reklama 2016” (61 s, YouTube) | ostrzeżenie po angielsku w czarnym pasie pod obrazem, 22–34 s i 57–58 s | ok (104%) | ok (5,1:1) | **wskazówka** (0,35) | ok |
+
+Wszystkie 16 ocen na filmach syntetycznych jest zgodnych z założeniem. Na filmie XTB reguła 6 przed poprawką dawała naruszenie (fałszywy alarm), a po poprawce daje wskazówkę.
+
+Czas na film 60 s (Mac, CPU): pobranie z YouTube 4 s (9,4 MB), wycięcie klatek 1,5–2,5 s, OCR 12–18 s (58–72 klatki), Gemma ok. 1 s, a 7–9 s przy pierwszym wywołaniu. Raz OCR trwał 112 s bez widocznej przyczyny (prawdopodobnie obciążony komputer), do obserwacji w kontenerze.
+
+Błędy planu wykryte testem (poprawione wyżej):
+1. Sam dHash gubi drobne ostrzeżenie, więc dodaliśmy warunek bloków (krok 4 warstwy pobierania).
+2. Samo słowo „CFD” jako słowo kluczowe dawało fałszywe ostrzeżenie (klasyfikacja linii).
+3. Reguła 4 porównywała z innymi liniami tej samej klatki zamiast z przeważającą wielkością tekstu (tabela reguł).
+4. Brak angielskich fraz: ostrzeżenie XTB nie było rozpoznawane (klasyfikacja linii).
+5. Do bloku ostrzeżenia dołączał adres strony obok, więc dodaliśmy warunek ≥ 4 słów (klasyfikacja linii).
+6. Samo położenie przy krawędzi dawało naruszenie, a teraz daje wskazówkę (reguła 6).
+
 ## Testy
 
 - `services/ml/tests/test_risk_visual.py`: klatki rysowane w teście przez `cv2.putText` o znanym rozmiarze, kolorze i położeniu. Każda reguła ma przypadek z naruszeniem i bez. Testy nie wymagają sieci ani Ollamy (Gemma jest mockowana).
 - `services/ml/tests/test_media.py`: yt-dlp i ffmpeg mockowane, tak jak w `test_youtube.py`.
+- Filmy syntetyczne z testu 60 s (`violating`, `compliant`, `edge_small`) generujemy skryptem (Pillow + ffmpeg, ok. 3 s na film), a nie commitujemy plików wideo. Nadają się jako test end-to-end warstwy pobierania i M2 razem, ze znanym oczekiwanym wynikiem każdej reguły.
 
 ## Kolejność prac (do oddania 22.11, 11:00)
 
-1. **Ryzyko do sprawdzenia od razu:** czy yt-dlp z Deno pobiera film z kontenera `ml`. Jeśli YouTube blokuje, plan B na demo: 2–3 filmy pobrane wcześniej i wrzucone na wolumen ręcznie.
+1. **Ryzyko do sprawdzenia od razu:** czy yt-dlp pobiera film z **kontenera** `ml`. Lokalnie (Mac, Node) pobranie działa, ale bez `yt-dlp-ejs` jest ostrzeżenie o wyzwaniach JS. Jeśli YouTube blokuje, plan B na demo: 2–3 filmy pobrane wcześniej i wrzucone na wolumen ręcznie.
 2. Warstwa pobierania z manifestem i wolumenem, a równolegle w M2 reguły **4, 5 i 6**. To czyste pomiary, bez LLM.
 3. Reguła **13** z Gemmą i podgląd klatki w UI.
 
@@ -163,4 +194,4 @@ Styk A i B to katalog `${MEDIA_DIR}/<material_id>/` z `manifest.json` i PNG. B m
 ## Do uzgodnienia
 
 1. **Tekst z OCR w `materials.text`?** Zyskujemy regułę 3 i moduł M3 na tekście z ekranu. Tracimy stabilny `contentHash`: zmienia się po wyciągnięciu klatek, więc materiał wraca do kolejki, a hash z OCR różni się od hasha z czasu scrapowania. Propozycja: na razie nie dopisywać.
-2. **Progi domyślne** (0,6 dla rozmiaru, 4,5:1 dla kontrastu, 3 słowa na sekundę): przyjąć teraz, stroić na zebranych przykładach.
+2. **Progi domyślne** (0,6 dla rozmiaru, 4,5:1 dla kontrastu, 3 słowa na sekundę, pas krawędzi 10%, 80% czasu przy krawędzi, pewność wskazówki 0,35): przyjąć teraz, stroić na zebranych przykładach.
