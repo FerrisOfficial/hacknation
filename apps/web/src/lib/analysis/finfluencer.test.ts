@@ -655,6 +655,27 @@ describe("język i wzmianka marki", () => {
     ).toBe(true);
   });
 
+  it("czeski i słowacki to nie polski, choć mają te same krótkie słowa", () => {
+    const czech =
+      "Jak Buffett získal své peníze? V tomto videu se podíváme na to, jak to dělá. " +
+      "Účet u XTB si můžeš založit přes odkaz v popisu, je to zdarma a za pár minut.";
+    const slovak =
+      "Ako som začal investovať? Pozrieme sa na to, čo je ETF a ako si otvoriť účet v XTB, " +
+      "do ktorého ide aj odkaz v popise.";
+    expect(isPolish({ language: null, text: czech })).toBe(false);
+    expect(isPolish({ language: null, text: slovak })).toBe(false);
+    // Film czeskiego kanału z płatną promocją i linkiem afiliacyjnym do XTB.
+    expect(buildFinfluencerResult({ ...VIDEO, language: null, text: czech }, LOOKUP)).toMatchObject(
+      { label: "inny_jezyk", score: 0 },
+    );
+  });
+
+  it("polski bez polskich liter dalej jest po polsku", () => {
+    expect(
+      isPolish({ language: null, text: "Jak kupic zloto w XTB i na co uwazac, to jest proste" }),
+    ).toBe(true);
+  });
+
   it("firma po nazwie w tekście, bez linku: sygnał wzmianki marki", () => {
     const material: FinfluencerMaterial = {
       ...VIDEO,

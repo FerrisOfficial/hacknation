@@ -176,6 +176,24 @@ def test_parse_entity_search() -> None:
     assert issuer.attributes == ()
 
 
+def test_parse_entity_strike_inside_word_is_kept() -> None:
+    # Wpis Pekao w KNF: przekreślenie w środku słowa „Biuro” to ślad poprawki, nie dawna nazwa.
+    pekao = {
+        "id": 1005,
+        "deleted": 0,
+        "name": (
+            "BANK PEKAO S.A. (BANK POLSKA KASA OPIEKI S.A.)<strike> <br />B</strike>"
+            "iuro Maklerskie PEKAO"
+        ),
+        "subcategory": 8,
+        "subcategoryName": "Firmy inwestycyjne - Banki prowadzące działalność maklerską",
+        "attributes": [],
+    }
+    (entity,) = parse_entity_search(rsc_html([pekao], total=1), "PEKAO").entities
+    assert entity.name == "BANK PEKAO S.A. (BANK POLSKA KASA OPIEKI S.A.)\nBiuro Maklerskie PEKAO"
+    assert entity.former_names == ()
+
+
 def test_parse_entity_search_empty_and_broken() -> None:
     empty = parse_entity_search(rsc_html([], total=0), "nic")
     assert (empty.total, empty.entities) == (0, ())
