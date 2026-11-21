@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -56,6 +57,15 @@ export const analysisModule = pgEnum("analysis_module", [
 
 export const reviewStatus = pgEnum("review_status", ["new", "in_review", "confirmed", "dismissed"]);
 
+// Kto uruchomił zadanie scrapingu: harmonogram (cron), analityk z dashboardu albo API (skrypt).
+export const scrapeTrigger = pgEnum("scrape_trigger", ["schedule", "manual", "api"]);
+
+// Konfiguracja źródła zależna od rodzaju. `youtube_search`: fraza w wyszukiwarce YouTube.
+// `web_page`: pojedyncza strona (social media bez API też — publiczny profil jako strona WWW).
+export type SourceConfig =
+  | { kind: "web_page" }
+  | { kind: "youtube_search"; query: string; limit: number; paidOnly: boolean };
+
 // Monitorowana strona albo profil w social mediach.
 export const sources = pgTable(
   "sources",
@@ -65,6 +75,10 @@ export const sources = pgTable(
     url: text("url").notNull(),
     name: text("name").notNull(),
     active: boolean("active").notNull().default(true),
+    config: jsonb("config").$type<SourceConfig>().notNull().default({ kind: "web_page" }),
+    // Co ile minut harmonogram scrapuje źródło ponownie. null = tylko ręcznie.
+    intervalMinutes: integer("interval_minutes"),
+    lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -82,6 +96,12 @@ export const scrapeJobs = pgTable(
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
     status: scrapeJobStatus("status").notNull().default("queued"),
+    trigger: scrapeTrigger("trigger").notNull().default("api"),
+    // Id zadania w kolejce pg-boss (schemat `pgboss`) — korelacja kolejki z historią.
+    queueJobId: text("queue_job_id"),
+    // Ile materiałów zapisało zadanie i ile z nich trafiło do kolejki analizy AI.
+    materialsCount: integer("materials_count"),
+    analysisQueued: integer("analysis_queued"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     error: text("error"),
@@ -118,6 +138,10 @@ export const materials = pgTable(
     language: text("language"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull().defaultNow(),
+    // `contentHash` z chwili ostatniej analizy AI. Inny niż `contentHash` = treść się zmieniła
+    // (albo nie była analizowana) i materiał wraca do kolejki analizy.
+    analyzedHash: text("analyzed_hash"),
+    analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
     // Dane zależne od platformy, np. YouTube: etykieta płatnej promocji, kody promocyjne,
     // linki z opisu, napisy z czasem (do linku `&t=…s`). Kształt: `kind` + pola tego rodzaju.
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
@@ -149,15 +173,28 @@ export const analysisResults = pgTable(
     status: reviewStatus("status").notNull().default("new"),
     reviewedBy: uuid("reviewed_by"),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+    // Pierwsze wykrycie (trend incydentów w czasie) — ponowna analiza go nie zmienia.
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("analysis_results_material_id_idx").on(table.materialId),
+    // Jeden wynik na moduł: ponowna analiza nadpisuje score, status przeglądu zostaje.
+    uniqueIndex("analysis_results_material_module_idx").on(table.materialId, table.module),
     index("analysis_results_module_score_idx").on(table.module, table.score),
     index("analysis_results_status_idx").on(table.status),
     index("analysis_results_created_at_idx").on(table.createdAt),
   ],
 ).enableRLS();
+
+// Próg kalibracji per moduł (panel kalibracji). Brak wiersza = domyślny próg z aplikacji.
+// Wynik ze `score >= threshold` jest flagowany (alert), poniżej — traktowany jako negatywny.
+export const moduleSettings = pgTable("module_settings", {
+  module: analysisModule("module").primaryKey(),
+  threshold: real("threshold").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export type Source = typeof sources.$inferSelect;
 export type NewSource = typeof sources.$inferInsert;
@@ -167,3 +204,9 @@ export type Material = typeof materials.$inferSelect;
 export type NewMaterial = typeof materials.$inferInsert;
 export type AnalysisResult = typeof analysisResults.$inferSelect;
 export type NewAnalysisResult = typeof analysisResults.$inferInsert;
+export type ModuleSetting = typeof moduleSettings.$inferSelect;
+export type Platform = (typeof platform.enumValues)[number];
+export type AnalysisModule = (typeof analysisModule.enumValues)[number];
+export type ReviewStatus = (typeof reviewStatus.enumValues)[number];
+export type ScrapeJobStatus = (typeof scrapeJobStatus.enumValues)[number];
+export type ScrapeTrigger = (typeof scrapeTrigger.enumValues)[number];

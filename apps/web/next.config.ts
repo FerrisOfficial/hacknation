@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   // Root śledzenia plików = root monorepo, bo aplikacja importuje pakiety z packages/*.
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  // Worker kolejki i serwer WebSocket (src/instrumentation.ts) — zwykłe paczki Node, bez bundlowania.
+  serverExternalPackages: ["pg-boss", "socket.io"],
   // http://localhost:3000/ przenosi na /hacknation.
   async redirects() {
     return [{ source: "/", destination: basePath, basePath: false, permanent: false }];

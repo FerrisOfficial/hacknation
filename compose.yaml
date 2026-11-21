@@ -80,8 +80,19 @@ services:
       DATABASE_URL: *database-url
       ML_API_URL: http://ml:8000
       COLLECTOR_TOKEN: ${COLLECTOR_TOKEN:-}
+      # Socket.io (powiadomienia w czasie rzeczywistym) na osobnym porcie — patrz src/lib/realtime.
+      REALTIME_PORT: "3001"
+      REALTIME_HOST: 0.0.0.0
+      REALTIME_CORS_ORIGIN: ${REALTIME_CORS_ORIGIN:-http://localhost:3000,http://127.0.0.1:3000}
+      # Baza treści (surowy HTML materiałów, gzip, adresowany SHA-256) na wolumenie.
+      CONTENT_STORE_DIR: /data/content
+      SCRAPE_CONCURRENCY: ${SCRAPE_CONCURRENCY:-2}
+      ANALYZE_CONCURRENCY: ${ANALYZE_CONCURRENCY:-1}
+    volumes:
+      - content-store:/data/content
     ports:
       - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3001"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -126,3 +137,4 @@ services:
 volumes:
   db-data:
   ollama-models:
+  content-store:
