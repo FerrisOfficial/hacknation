@@ -59,7 +59,9 @@ const AD_PHRASES_ALL = new RegExp(AD_PHRASES.source, "giu");
 
 // Kod z tekstu („kod: KANAL50”, „kodem XTB2024”) — dla stron WWW, filmy mają `promo_codes`.
 const PROMO_CODE =
-  /(?<!\p{L})[Kk]od\p{L}*(?:\s+\p{L}+)?\s*[:\-–]?\s*["„]?([A-Z0-9][A-Z0-9_-]{3,19})(?![\p{L}\d])/u;
+  // Słowo między „kod” a kodem tylko małymi literami („kodem promocyjnym XTB24”), a przed kodem
+  // zawsze odstęp albo dwukropek — inaczej regex tnie kod („DETERMINACJA” → „ACJA”).
+  /(?<!\p{L})[Kk]od\p{L}*(?:\s+\p{Ll}+)?(?:\s*[:\-–]\s*|\s+)["„]?([A-Z0-9][A-Z0-9_-]{3,19})(?![\p{L}\d])/u;
 
 const videoMetadataSchema = z.object({
   paid_promotion: z.boolean().optional().catch(undefined),
@@ -128,7 +130,7 @@ export function collectSignals(material: FinfluencerMaterial, firm: Firm): Signa
   }
   const codes = new Set(meta.promo_codes ?? []);
   const textCode = PROMO_CODE.exec(material.text)?.[1];
-  if (textCode) codes.add(textCode);
+  if (textCode && ![...codes].some((code) => code.includes(textCode))) codes.add(textCode);
   const firstCode = [...codes][0];
   if (firstCode) {
     const at = material.text.indexOf(firstCode);
