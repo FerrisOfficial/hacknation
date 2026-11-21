@@ -18,6 +18,7 @@ apps/web/          Next.js 16 — UI, route handlery (src/app/api), Server Actio
 packages/db/       Drizzle — schemat bazy (src/schema.ts) i migracje (drizzle/)
 packages/api-ml/   Typowany klient serwisu ML — GENEROWANY z OpenAPI, nie edytuj src/schema.d.ts
 services/ml/       FastAPI + uv — modele ML, endpointy
+compose.yaml       Cały stos on-premise w Dockerze: db (Postgres), migrate, ml, web, ollama (+ compose.gpu.yaml)
 ```
 
 Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web/CLAUDE.md`).
@@ -35,6 +36,7 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 | `pnpm db:migrate` | tylko w CI — lokalnie odmawia; migracje trafiają na bazę same po merge'u do `main` |
 | `pnpm db:check` | test połączenia z bazą z `packages/db/.env` — pokazuje kod błędu i podpowiedź |
 | `pnpm api:generate` | OpenAPI z FastAPI → typy TS w `packages/api-ml` |
+| `docker compose up --build` | cały stos w kontenerach (najpierw `cp .env.example .env`); CI sprawdza go w jobie „Docker Compose” |
 
 ## Zasady
 
@@ -47,7 +49,8 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 - Zmiana API w `services/ml` = w tym samym PR `pnpm api:generate` i commit wygenerowanych plików (CI to sprawdza).
 - Zmiana schematu bazy = w tym samym PR `pnpm db:generate` i commit migracji. Nie edytuj starych migracji.
 - Każda nowa tabela w `packages/db/src/schema.ts` musi mieć `.enableRLS()`. Bez tego Supabase wystawia ją publicznie przez REST API.
-- Jest **jedna baza** (Supabase `hacknation`) i lokalny `.env` wskazuje na nią — to te same dane, które widzi demo. Nie czyść tabel, nie usuwaj danych hurtowo i nie uruchamiaj destrukcyjnego SQL.
+- Jest **jedna wspólna baza** (Supabase `hacknation`) i lokalny `.env` wskazuje na nią — to te same dane, które widzi demo. Nie czyść tabel, nie usuwaj danych hurtowo i nie uruchamiaj destrukcyjnego SQL. Wyjątek: kontener `db` z `compose.yaml` to prywatna baza na Twoim komputerze — migracje stosuje na niej sama usługa `migrate`, a `docker compose down -v` ją czyści.
+- Nowa usługa lub zmienna środowiskowa potrzebna w działającym stosie = dopisz ją też do `compose.yaml` (sekrety przez `${...}` z `.env`, wzór w `.env.example` w roocie). Obrazy przypinamy do konkretnej wersji, bez `latest`.
 - Schemat zmieniasz tylko migracją (`pnpm db:generate` + PR). Na bazę trafia sama po merge'u do `main` (workflow „Deploy (baza + aplikacja)”). Nie omijaj tego przez `drizzle-kit migrate` ani `drizzle-kit push`.
 - Sekrety tylko w `.env*` (ignorowane przez git). Nowa zmienna = dopisz ją do odpowiedniego `.env.example`.
 - Zmienne repo `WEB_ENV` / `DB_ENV` zawierają hasło do bazy i nie są maskowane w logach. Nie używaj `vars.*` w workflowach.

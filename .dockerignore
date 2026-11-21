@@ -1,0 +1,17 @@
+# Kontekst budowania apps/web/Dockerfile (root repo). Sekrety (.env*) nie mogą trafić do obrazu.
+.git
+**/node_modules
+**/.next
+**/.open-next
+**/.wrangler
+**/.turbo
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/playwright-report
+**/test-results
+**/.env*
+!**/.env.example
+**/.dev.vars*
+**/*.log

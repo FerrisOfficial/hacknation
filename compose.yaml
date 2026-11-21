@@ -1,0 +1,114 @@
+# Cały stos on-premise jedną komendą (wymaganie UKNF, docs/ZADANIE.md):
+#
+#   cp .env.example .env
+#   docker compose up --build
+#
+# Aplikacja: http://localhost:3000/hacknation, API ML: http://127.0.0.1:8000/docs
+# Z kartą NVIDIA dla Ollamy: docker compose -f compose.yaml -f compose.gpu.yaml up --build
+#
+# Baza `db` to osobna, lokalna baza w kontenerze — nie Supabase. Migracje stosuje na niej `migrate`.
+
+name: hacknation
+
+x-database-url: &database-url "postgres://hacknation:${POSTGRES_PASSWORD:?Brak .env - skopiuj .env.example do .env}@db:5432/hacknation"
+
+services:
+  db:
+    image: postgres:17.12-alpine
+    environment:
+      POSTGRES_USER: hacknation
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Brak .env - skopiuj .env.example do .env}
+      POSTGRES_DB: hacknation
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hacknation -d hacknation"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  ml:
+    build: services/ml
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner
+    environment:
+      DATABASE_URL: *database-url
+      ML_API_URL: http://ml:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      ml:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/hacknation/api/health?db=1').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Lokalny silnik LLM (open source, bez zewnętrznych API).
+  ollama:
+    image: ollama/ollama:0.40.17
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Jednorazowo pobiera model do wolumenu `ollama-models` (pierwszy start: kilka GB).
+  ollama-pull:
+    image: ollama/ollama:0.40.17
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: ["pull", "${OLLAMA_MODEL:-gemma4:e2b}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  db-data:
+  ollama-models:

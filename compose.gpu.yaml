@@ -1,0 +1,12 @@
+# Ollama na karcie NVIDIA. Dokładane do compose.yaml:
+#   docker compose -f compose.yaml -f compose.gpu.yaml up --build
+# Windows: Docker Desktop z backendem WSL 2 i aktualny sterownik NVIDIA. Linux: NVIDIA Container Toolkit.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
