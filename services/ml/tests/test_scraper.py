@@ -131,6 +131,15 @@ def test_scrape_wraps_network_errors() -> None:
         scrape(URL, client=http)
 
 
+def test_scrape_wraps_invalid_url() -> None:
+    # Niewidoczny znak w domenie (link z opisu filmu): błąd tego linku, nie wyjątek kolektora.
+    with (
+        _mock_client(httpx.MockTransport(lambda _: httpx.Response(200))) as http,
+        pytest.raises(ScrapeError, match="Nieprawidłowy adres"),
+    ):
+        scrape("https://bank.example.pl​/oferta", client=http)
+
+
 def test_proxy_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCRAPER_PROXY_URL", "")
     assert proxy_from_env() is None
