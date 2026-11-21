@@ -7,6 +7,7 @@ import {
   entityNip,
   type KnfEntity,
   type KnfWarning,
+  matchBrand,
   matchEntity,
   matchWarning,
   normalizeDomain,
@@ -104,7 +105,8 @@ export function findPromotedFirm(
     const base = registrableDomain(link.domain);
     const search = lookup.searches.find((s) => s.domain === base);
     const entity = search?.entities
-      ? matchEntity(search.entities, { domain: link.domain, nip: null })
+      ? (matchEntity(search.entities, { domain: link.domain, nip: null }) ??
+        matchBrand(search.entities, link.domain))
       : null;
     if (entity?.investment_register) return { link, entity, warning: null };
   }

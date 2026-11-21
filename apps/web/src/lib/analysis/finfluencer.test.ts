@@ -151,6 +151,29 @@ describe("buildFinfluencerResult", () => {
     });
   });
 
+  it("firma bez domeny w KNF, znaleziona po marce z domeny (trading212.com)", () => {
+    const t212: KnfEntity = {
+      ...XTB,
+      id: 2002,
+      name: "Trading 212 Markets Ltd",
+      register_name: "Notyfikacje zagranicznych firm inwestycyjnych",
+      domains: [],
+    };
+    const result = buildFinfluencerResult(
+      {
+        ...VIDEO,
+        metadata: {
+          paid_promotion: true,
+          links: [{ url: "https://trading212.com/invite/ABC", domain: "trading212.com" }],
+        },
+      },
+      { searches: [{ domain: "trading212.com", entities: [t212] }], warnings: [] },
+    );
+    expect(result.details).toMatchObject({
+      entity: { firm_name: "Trading 212 Markets Ltd", in_register: true },
+    });
+  });
+
   it("cytat z frazy przy reklamowanej firmie, gdy sponsorów jest kilku", () => {
     const text =
       "Partnerem odcinka jest Catering Dieta.\nPartnerem materiału jest XTB, link w opisie.";

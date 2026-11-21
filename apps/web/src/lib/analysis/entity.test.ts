@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  brandOf,
   type EntityMaterial,
   extractNip,
   type KnfEntity,
@@ -70,6 +71,14 @@ describe("materialDomain", () => {
       "broker.example",
     );
     expect(materialDomain(material({ url: "https://www.youtube.com/watch?v=x" }))).toBeNull();
+  });
+});
+
+describe("brandOf", () => {
+  it("marka z domeny, z odstępem między literami a cyframi", () => {
+    expect(brandOf("trading212.com")).toBe("trading 212");
+    expect(brandOf("lp.freedom24.com")).toBe("freedom 24");
+    expect(brandOf("xtb.com")).toBeNull();
   });
 });
 
