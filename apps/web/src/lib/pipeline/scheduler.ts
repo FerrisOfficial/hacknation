@@ -1,14 +1,13 @@
 import "server-only";
 import { and, type Db, eq, isNull, materials, or, scrapeJobs, sources, sql } from "@app/db";
-import { materialsLimit } from "@/lib/materials-limit";
+import { materialsLimit, schedulerBatch } from "@/lib/materials-limit";
 import { enqueueScrape } from "./enqueue";
 
 // Harmonogram (mechanizm okresowej aktualizacji): co minutę cron pg-boss odpala tick, a tick
 // kolejkuje źródła z `interval_minutes`, którym minął termin od ostatniego scrapowania i które nie
-// mają zadania w kolejce ani w trakcie. Najwyżej `SCHEDULER_BATCH` źródeł na tick (od najdawniej
-// scrapowanych): YouTube odpowiada HTTP 429, gdy kilkadziesiąt źródeł rusza naraz, a rozłożenie
-// startów rozkłada też kolejne terminy (każdy liczony od końca własnego zadania).
-export const SCHEDULER_BATCH = 4;
+// mają zadania w kolejce ani w trakcie. Najwyżej `SCHEDULER_BATCH` źródeł na tick (domyślnie 1,
+// od najdawniej scrapowanych): YouTube odpowiada HTTP 429, gdy kilka źródeł zbiera naraz, a
+// rozłożenie startów rozkłada też kolejne terminy (każdy liczony od końca własnego zadania).
 
 export async function enqueueDueSources(db: Db): Promise<number> {
   // Po osiągnięciu limitu materiałów harmonogram stoi (ręczne uruchomienie i API działają dalej).
@@ -36,7 +35,7 @@ export async function enqueueDueSources(db: Db): Promise<number> {
       ),
     )
     .orderBy(sql`${sources.lastScrapedAt} asc nulls first`)
-    .limit(SCHEDULER_BATCH);
+    .limit(schedulerBatch(process.env.SCHEDULER_BATCH));
 
   let queued = 0;
   for (const { id } of due) {

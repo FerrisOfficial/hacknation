@@ -58,6 +58,7 @@ services:
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
       SCRAPER_PROXY_URL: ${SCRAPER_PROXY_URL:-}
+      YOUTUBE_DELAY_S: ${YOUTUBE_DELAY_S:-3}
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -89,6 +90,7 @@ services:
       SCRAPE_CONCURRENCY: ${SCRAPE_CONCURRENCY:-2}
       ANALYZE_CONCURRENCY: ${ANALYZE_CONCURRENCY:-1}
       MATERIALS_LIMIT: ${MATERIALS_LIMIT:-2000}
+      SCHEDULER_BATCH: ${SCHEDULER_BATCH:-1}
     volumes:
       - content-store:/data/content
     ports:
