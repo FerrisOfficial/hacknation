@@ -93,6 +93,7 @@ Moduł ma znaleźć reklamę firmy inwestycyjnej publikowaną przez kogoś inneg
 - **Frazy z marek:** `POST /api/sources/m1` (token `COLLECTOR_TOKEN`, idempotentne) zakłada źródła „{marka} kod / polecam / jak założyć konto / recenzja” dla marek ze słownika — wszystkie filmy, nie tylko z etykietą płatnej promocji, 10 na frazę, harmonogram co 12 h (pierwsze uruchomienie przy najbliższym ticku).
 - **Kula śnieżna:** kanał YouTube, w którym M1 znalazł `reklama`, staje się źródłem `youtube_channel` (15 najnowszych filmów co 24 h, `POST /collect/youtube/channel` w serwisie ML). Istniejącego źródła kanału nie zmienia — analityk może je wyłączyć.
 - **Tempo:** harmonogram puszcza najwyżej 4 źródła na minutę (od najdawniej scrapowanych). Przy kilkudziesięciu źródłach naraz YouTube odpowiada HTTP 429 — takie zadanie kończy się błędem „YouTube ogranicza zapytania”, a nie pustym wynikiem.
+- **Limit:** po `MATERIALS_LIMIT` materiałów w bazie (domyślnie 2000, 0 = bez limitu) harmonogram przestaje kolejkować źródła. Ręczne uruchomienie i API działają dalej.
 
 ## Zdarzenia Socket.io
 

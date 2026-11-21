@@ -88,6 +88,7 @@ services:
       CONTENT_STORE_DIR: /data/content
       SCRAPE_CONCURRENCY: ${SCRAPE_CONCURRENCY:-2}
       ANALYZE_CONCURRENCY: ${ANALYZE_CONCURRENCY:-1}
+      MATERIALS_LIMIT: ${MATERIALS_LIMIT:-2000}
     volumes:
       - content-store:/data/content
     ports:
