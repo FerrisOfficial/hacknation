@@ -397,3 +397,15 @@ def test_collect_youtube_channel_endpoint_rejects_non_channel_url() -> None:
         "/collect/youtube/channel", json={"channel_url": "https://evil.example/@kanal/x"}
     )
     assert response.status_code == 422
+
+
+def test_collect_raises_when_youtube_rate_limits_every_video() -> None:
+    blocked = httpx.Client(transport=httpx.MockTransport(lambda _request: httpx.Response(429)))
+    with pytest.raises(YoutubeError, match="HTTP 429"):
+        youtube.collect(
+            "XTB kod",
+            limit=2,
+            client=blocked,
+            searcher=fake_searcher,
+            transcript_fetcher=fake_transcript,
+        )

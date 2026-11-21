@@ -529,6 +529,12 @@ def collect(
         )
         pages = [item for item in fetched if not isinstance(item, FailedVideo)]
         failed = tuple(item for item in fetched if isinstance(item, FailedVideo))
+        if not pages and failed and all("HTTP 429" in item.error for item in failed):
+            # Blokada YouTube, a nie brak filmów: zadanie kończy się błędem, nie pustym wynikiem.
+            raise YoutubeError(
+                "YouTube ogranicza zapytania (HTTP 429). "
+                "Spróbuj później albo ustaw SCRAPER_PROXY_URL."
+            )
 
         # Ten sam link (np. afiliacyjny) w wielu filmach pobieramy raz.
         links_per_video = [description_links(page.description) for page, _, _ in pages]
