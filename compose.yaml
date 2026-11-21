@@ -67,6 +67,7 @@ services:
     environment:
       DATABASE_URL: *database-url
       ML_API_URL: http://ml:8000
+      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN:-}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

@@ -102,6 +102,9 @@ export const materials = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
     jobId: uuid("job_id").references(() => scrapeJobs.id, { onDelete: "set null" }),
+    // Rodzaj treści (film z YouTube, strona WWW…). Źródło (`sources`) mówi, skąd materiał
+    // znaleźliśmy — np. strona z linku w opisie filmu ma platform = web, a źródło YouTube.
+    platform: platform("platform").notNull().default("web"),
     url: text("url").notNull(),
     title: text("title"),
     // Kto publikuje (finfluencer, firma, strona) — moduł 1 odróżnia reklamującego od firmy.
@@ -116,12 +119,16 @@ export const materials = pgTable(
     language: text("language"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull().defaultNow(),
+    // Dane zależne od platformy, np. YouTube: etykieta płatnej promocji, kody promocyjne,
+    // linki z opisu, napisy z czasem (do linku `&t=…s`). Kształt: `kind` + pola tego rodzaju.
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
   },
   (table) => [
     uniqueIndex("materials_url_idx").on(table.url),
     index("materials_content_hash_idx").on(table.contentHash),
     index("materials_source_id_idx").on(table.sourceId),
     index("materials_scraped_at_idx").on(table.scrapedAt),
+    index("materials_platform_idx").on(table.platform),
   ],
 ).enableRLS();
 
