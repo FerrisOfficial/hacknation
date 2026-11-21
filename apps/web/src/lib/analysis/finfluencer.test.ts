@@ -183,6 +183,23 @@ describe("buildFinfluencerResult", () => {
   });
 });
 
+describe("kody polecające z tekstu", () => {
+  const codeOf = (text: string) => {
+    const result = buildFinfluencerResult(
+      { ...VIDEO, text, metadata: { links: VIDEO.metadata.links } },
+      LOOKUP,
+    );
+    return (result.details as { flags: { reason: string }[] }).flags[0]?.reason ?? "";
+  };
+
+  it("kod po słowie albo dwukropku, bez ucinania końcówki", () => {
+    expect(codeOf("Wpisz kod DETERMINACJA przy rejestracji")).toContain("kod DETERMINACJA;");
+    expect(codeOf("Z kodem promocyjnym XTB2024 dostaniesz akcje")).toContain("kod XTB2024");
+    expect(codeOf("Kod: ZGRZYT")).toContain("kod ZGRZYT;");
+    expect(codeOf("Kod źródłowy aplikacji jest na GitHubie")).not.toContain("kod ");
+  });
+});
+
 describe("pomocnicze", () => {
   it("isOwnChannel porównuje nazwy bez form prawnych", () => {
     expect(isOwnChannel("XTB", "XTB S.A.")).toBe(true);
