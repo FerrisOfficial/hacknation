@@ -60,7 +60,7 @@ Dla maszyn (`Authorization: Bearer $COLLECTOR_TOKEN`):
 
 ## Kontrakt z serwisem ML: `POST /analyze`
 
-Kształty wejścia i wyjścia: [KONTRAKT.md](KONTRAKT.md) §1–§3. Worker woła `POST {ML_API_URL}/analyze` raz na moduł (`apps/web/src/lib/ml.ts`, schematy Zod w `lib/analysis/contract.ts`). Dopóki endpointu nie ma, analiza kończy się jednym wpisem w logu, bez ponawiania. Gdy endpoint trafi do OpenAPI serwisu ML (`pnpm api:generate`), przepnij `analyzeMaterial` na typowany `ml.POST("/analyze")`.
+Kształty wejścia i wyjścia: [KONTRAKT.md](KONTRAKT.md) §1–§3. Worker woła `POST {ML_API_URL}/analyze` raz na moduł 2 i 3 (moduł 1 liczą reguły, niżej). Gdy AI zawiedzie, wynik modułu 1 i tak jest zapisywany, a materiał zostaje do ponownej analizy (`apps/web/src/lib/ml.ts`, schematy Zod w `lib/analysis/contract.ts`). Dopóki endpointu nie ma, analiza kończy się jednym wpisem w logu, bez ponawiania. Gdy endpoint trafi do OpenAPI serwisu ML (`pnpm api:generate`), przepnij `analyzeMaterial` na typowany `ml.POST("/analyze")`.
 
 Co backend dokłada do wyjścia modelu (`lib/pipeline/analyze.ts` → `lib/analysis/details.ts`):
 
@@ -75,6 +75,17 @@ Co backend dokłada do wyjścia modelu (`lib/pipeline/analyze.ts` → `lib/analy
 | `score` | M1/M3: `probability` etykiety pozytywnej (`reklama`, `potencjalne_doradztwo`), dla negatywnej `1 − probability`. M2 (i M1/M3 bez `probability`): noisy-OR pewności naruszeń `1 − Π(1 − w·confidence)`, `w = 1` dla `hard`, `0,5` dla `suggestion`. Błąd modelu: 0 | `lib/analysis/details.ts` |
 | `label` | M1/M3: etykieta modelu; M2: `naruszenie` / `brak_naruszen`; błąd modelu: `blad_analizy` | `lib/analysis/details.ts` |
 | `model` | opcjonalne pole `model` w odpowiedzi (poza kontraktem), domyślnie `services/ml` | `lib/analysis/details.ts` |
+
+### Moduł 1 bez AI
+
+Moduł ma znaleźć reklamę firmy inwestycyjnej publikowaną przez kogoś innego (docs/ZADANIE.md), a nie oceniać jej treść, więc liczą go reguły w `lib/analysis/finfluencer.ts` (`model = rules/m1`). Wynik ma ten sam kształt §3 co moduły AI, z jedną flagą `M1.ad`.
+
+1. **Firma:** domeny z linków materiału (opis filmu po przekierowaniach, linki wychodzące strony WWW z `POST /scrape`), bez platform i własnej domeny, najwyżej 5 → wyszukiwarka KNF. Pierwsza domena firmy z aktualnym wpisem w rejestrze usług inwestycyjnych, a jeśli żadnej — pierwsza z listy ostrzeżeń KNF. Bez firmy: `brak_firmy`, score 0 (KNF nie odpowiedział: `blad_analizy`).
+2. **Podmiot trzeci:** kanał o nazwie firmy (bez form prawnych, np. „XTB” = „XTB S.A.”) albo strona z domen firmy w KNF to jej własny materiał (przypadek dla M2): `material_firmy`, score 0.
+3. **Score:** noisy-OR sygnałów `1 − Π(1 − w)`, każdy rodzaj raz: etykieta płatnej promocji YouTube 0,6, kod polecający 0,5, link afiliacyjny (przekierowanie albo `?ref=`/`?aff=`…) 0,5 albo zwykły link 0,3, fraza reklamowa („z moim kodem”, „załóż konto”, „#reklama”…) 0,3. Od 0,5 `reklama` (flaga `violation`), poniżej `wzmianka` (`ok`).
+4. **Dowód:** linia tekstu z frazą, kodem albo linkiem (do 300 znaków) — jak w modułach AI, z `timestamp_s`, gdy pada w napisach filmu.
+
+Nie łapie samej wzmianki nazwy firmy bez linku. To miejsce, gdzie AI mogłoby dołożyć sygnał.
 
 ## Zdarzenia Socket.io
 

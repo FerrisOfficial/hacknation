@@ -9,6 +9,12 @@ export const ANALYSIS_MODULES = [
   "unauthorized_advisory",
 ] as const satisfies readonly AnalysisModule[];
 
+// Moduły oceniane przez model AI (POST /analyze). Moduł 1 (finfluencer) liczą reguły w backendzie.
+export const AI_MODULES = [
+  "risk_disclosure",
+  "unauthorized_advisory",
+] as const satisfies readonly AnalysisModule[];
+
 export const REVIEW_STATUSES = [
   "new",
   "in_review",

@@ -41,13 +41,15 @@ export function normalizeDomain(value: string): string | null {
   return host.toLowerCase().replace(/^www\./, "");
 }
 
-function isPlatformDomain(domain: string): boolean {
+export function isPlatformDomain(domain: string): boolean {
   return [...PLATFORM_DOMAINS].some((d) => domain === d || domain.endsWith(`.${d}`));
 }
 
 const linksSchema = z.object({
   links: z.array(
     z.object({
+      url: z.string().nullable().optional(),
+      final_url: z.string().nullable().optional(),
       domain: z.string().nullable().optional(),
       final_domain: z.string().nullable().optional(),
       followed: z.boolean().optional(),
@@ -71,6 +73,42 @@ export function materialDomain(material: Pick<EntityMaterial, "url" | "metadata"
   return null;
 }
 
+export type OutboundLink = {
+  // Adres z materiału (przed przekierowaniem).
+  url: string | null;
+  // Domena, na którą link faktycznie prowadzi (po przekierowaniach, jeśli kolektor je śledził).
+  domain: string;
+  // Link przez przekierowanie (skracacz, sieć afiliacyjna) albo z parametrem polecającym.
+  affiliate: boolean;
+};
+
+const REFERRAL_PARAM = /[?&](ref|aff|affiliate|partner|promo|refcode|referral|utm_source)=/i;
+
+// Linki wychodzące materiału (opis filmu, linki ze strony WWW) poza platformami i własną
+// domeną materiału, każda domena raz — kandydaci na reklamowaną firmę (moduł 1).
+export function outboundLinks(material: Pick<EntityMaterial, "url" | "metadata">): OutboundLink[] {
+  const own = normalizeDomain(material.url);
+  const parsed = linksSchema.safeParse(material.metadata);
+  if (!parsed.success) return [];
+  const links = new Map<string, OutboundLink>();
+  for (const link of parsed.data.links) {
+    const first = link.domain ? normalizeDomain(link.domain) : null;
+    const final = link.final_domain ? normalizeDomain(link.final_domain) : first;
+    if (!final || final === own || isPlatformDomain(final)) continue;
+    // Adres tak, jak stoi w tekście materiału (przed przekierowaniem) — do wskazania cytatu.
+    const url = link.url ?? link.final_url ?? null;
+    const affiliate =
+      (first !== null && first !== final) || REFERRAL_PARAM.test(link.url ?? url ?? "");
+    const known = links.get(final);
+    links.set(final, {
+      url: known?.url ?? url,
+      domain: final,
+      affiliate: Boolean(known?.affiliate) || affiliate,
+    });
+  }
+  return [...links.values()];
+}
+
 // NIP z treści („NIP: 123-456-78-90”). Tylko z poprawną sumą kontrolną.
 export function extractNip(text: string): string | null {
   for (const match of text.matchAll(/NIP[:\s.]*((?:\d[\s-]?){9}\d)/gi)) {
@@ -87,13 +125,13 @@ function isValidNip(digits: string): boolean {
   return sum % 11 === Number(digits[9]);
 }
 
-function domainMatches(candidate: string, domain: string): boolean {
+export function domainMatches(candidate: string, domain: string): boolean {
   const c = normalizeDomain(candidate);
   // Subdomena materiału (pl.broker.example) też należy do podmiotu z broker.example.
   return c !== null && (c === domain || domain.endsWith(`.${c}`));
 }
 
-function entityNip(entity: KnfEntity): string | null {
+export function entityNip(entity: KnfEntity): string | null {
   const attribute = entity.attributes.find((a) => /^nip$/i.test(a.name.trim()));
   const digits = attribute?.value.replace(/\D/g, "") ?? "";
   return digits.length === 10 ? digits : null;

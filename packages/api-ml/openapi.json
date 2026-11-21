@@ -658,6 +658,14 @@
               }
             ],
             "title": "Html"
+          },
+          "links": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Links",
+            "description": "Linki wychodzące (inna domena niż strona), bez duplikatów, max 100."
           }
         },
         "type": "object",
