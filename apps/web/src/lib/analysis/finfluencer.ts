@@ -1,7 +1,14 @@
 import type { Material } from "@app/db";
 import { z } from "zod";
 import type { Flag, IncidentDetails, IncidentEntity } from "@/lib/incidents/contract";
-import { type BrandMention, matchBrandEntity, mentionedBrands } from "./brands";
+import {
+  type Brand,
+  type BrandMention,
+  brandOfDomain,
+  hasInvestmentContext,
+  matchBrandEntity,
+  mentionedBrands,
+} from "./brands";
 import type { AnalysisResultInput } from "./contract";
 import {
   domainMatches,
@@ -50,7 +57,8 @@ export type FinfluencerMaterial = Pick<
 >;
 
 // Wyniki KNF per domena główna z linków (`registrableDomain`): null = wyszukiwarka nie odpowiedziała.
-// `brands`: wyniki KNF dla marek wymienionych w tekście (`mentionedBrands`), po `Brand.id`.
+// `brands`: wyniki KNF dla marek wymienionych w tekście (`mentionedBrands`) i marek domen z linków
+// (`brandOfDomain`), po `Brand.id`.
 export type FirmLookup = {
   searches: { domain: string; entities: readonly KnfEntity[] | null }[];
   warnings: readonly KnfWarning[] | null;
@@ -197,41 +205,64 @@ export function isOwnChannel(author: string | null, firmName: string): boolean {
   return a.length >= 3 && f.length >= 3 && (a.includes(f) || f.includes(a));
 }
 
+// Kanał pod marką („PKO Bank Polski”), gdy nazwa w KNF jest inna („Powszechna Kasa…”).
+// Równość, nie zawieranie — „ING” jest w „Investing”.
+export function isBrandChannel(author: string | null, brand: Brand | null): boolean {
+  if (!author || !brand) return false;
+  const a = nameCore(author);
+  return a.length >= 2 && [brand.name, ...brand.aliases].some((alias) => nameCore(alias) === a);
+}
+
 type Firm = {
   // null = firma znaleziona po nazwie w tekście (`mention`), bez linku.
   link: OutboundLink | null;
   mention: BrandMention | null;
+  // Marka ze słownika (`brands.ts`), jeśli firmę znaleziono przez nią albo przez jej domenę.
+  brand: Brand | null;
   entity: KnfEntity | null;
   warning: KnfWarning | null;
 };
 
-// Pierwsza domena z linków, która jest firmą z rejestru usług inwestycyjnych; jeśli żadna —
-// pierwsza z listy ostrzeżeń KNF (reklama podmiotu bez zezwolenia); jeśli i tej nie ma —
-// najczęściej wymieniona w tekście marka, którą KNF potwierdza jako firmę z rejestru.
+// Pierwsza domena z linków, która jest firmą z rejestru usług inwestycyjnych (dla domeny znanej
+// marki — wpis KNF po marce, potem po domenie); jeśli żadna — pierwsza z listy ostrzeżeń KNF
+// (reklama podmiotu bez zezwolenia); jeśli i tej nie ma — najczęściej wymieniona w tekście
+// marka, którą KNF potwierdza jako firmę z rejestru. Marka nie tylko od inwestycji (bank,
+// Revolut) liczy się tylko w tekście o inwestowaniu.
 export function findPromotedFirm(
   material: Pick<FinfluencerMaterial, "url" | "metadata" | "text">,
   lookup: FirmLookup,
 ): Firm | null {
   const links = outboundLinks(material);
+  const investing = hasInvestmentContext(material.text);
+  const outOfScope = (brand: Brand | null) => brand?.needsInvestmentContext === true && !investing;
+  const brandEntity = (brand: Brand) => {
+    const search = lookup.brands?.find((b) => b.id === brand.id);
+    return search?.entities ? matchBrandEntity(search.entities, brand) : null;
+  };
+
   for (const link of links) {
+    const brand = brandOfDomain(link.domain);
+    if (outOfScope(brand)) continue;
+    const byBrand = brand ? brandEntity(brand) : null;
+    if (byBrand) return { link, mention: null, brand, entity: byBrand, warning: null };
     const base = registrableDomain(link.domain);
     const search = lookup.searches.find((s) => s.domain === base);
     const entity = search?.entities
       ? (matchEntity(search.entities, { domain: link.domain, nip: null }) ??
         matchBrand(search.entities, link.domain))
       : null;
-    if (entity?.investment_register) return { link, mention: null, entity, warning: null };
+    if (entity?.investment_register) return { link, mention: null, brand, entity, warning: null };
   }
   for (const link of links) {
     const warning = lookup.warnings
       ? matchWarning(lookup.warnings, { domain: link.domain, nip: null })
       : null;
-    if (warning) return { link, mention: null, entity: null, warning };
+    if (warning) return { link, mention: null, brand: null, entity: null, warning };
   }
   for (const mention of mentionedBrands(material.text)) {
-    const search = lookup.brands?.find((b) => b.id === mention.brand.id);
-    const entity = search?.entities ? matchBrandEntity(search.entities, mention.brand) : null;
-    if (entity) return { link: null, mention, entity, warning: null };
+    if (outOfScope(mention.brand)) continue;
+    const entity = brandEntity(mention.brand);
+    if (entity) return { link: null, mention, brand: mention.brand, entity, warning: null };
   }
   return null;
 }
@@ -278,7 +309,7 @@ export function collectSignals(material: FinfluencerMaterial, firm: Firm): Signa
   // nazwa reklamowanej firmy albo jej domena („Partnerem odcinka jest XTB”).
   const keys = [
     firm.link ? (registrableDomain(firm.link.domain).split(".")[0] ?? "") : "",
-    nameCore(firm.mention?.brand.name ?? ""),
+    nameCore(firm.brand?.name ?? ""),
     nameCore(firm.entity?.name ?? firm.warning?.entities ?? ""),
   ].filter((key) => key.length >= 3);
   const phrases = [...material.text.matchAll(AD_PHRASES_ALL)];
@@ -411,7 +442,9 @@ export function buildFinfluencerResult(
   const firm = findPromotedFirm(material, lookup);
   if (!firm) {
     const knfDown =
-      lookup.warnings === null || lookup.searches.some((search) => search.entities === null);
+      lookup.warnings === null ||
+      lookup.searches.some((search) => search.entities === null) ||
+      (lookup.brands ?? []).some((search) => search.entities === null);
     const entity = emptyEntity(advertiser);
     return result(0, knfDown ? "blad_analizy" : "brak_firmy", {
       summary: knfDown
@@ -423,8 +456,9 @@ export function buildFinfluencerResult(
     });
   }
 
+  // Nazwy biur maklerskich banków mają w KNF dwie linie („mBANK S.A.\nBiuro Maklerskie mBank”).
   const firmName =
-    firm.entity?.name ??
+    firm.entity?.name.replace(/\s+/g, " ").trim() ??
     firm.warning?.entities.slice(0, 300) ??
     firm.link?.domain ??
     firm.mention?.brand.name ??
@@ -447,10 +481,14 @@ export function buildFinfluencerResult(
   };
   const knfStatus = firm.entity ? "w rejestrze KNF" : "na liście ostrzeżeń KNF";
 
+  // Własny materiał: kanał o nazwie firmy albo marki, strona z domeny firmy w KNF albo marki.
   const ownDomain = normalizeDomain(material.url);
   const own =
     isOwnChannel(material.author, firmName) ||
-    (ownDomain !== null && (firm.entity?.domains ?? []).some((d) => domainMatches(d, ownDomain)));
+    isBrandChannel(material.author, firm.brand) ||
+    (ownDomain !== null &&
+      ((firm.entity?.domains ?? []).some((d) => domainMatches(d, ownDomain)) ||
+        (firm.brand !== null && brandOfDomain(ownDomain)?.id === firm.brand.id)));
   if (own) {
     const reason = `Materiał publikuje sama firma ${firmName} — to przypadek dla modułu 2.`;
     return result(0, "material_firmy", {

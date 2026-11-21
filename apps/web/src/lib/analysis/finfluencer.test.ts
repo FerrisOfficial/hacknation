@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { brandOfDomain } from "./brands";
 import type { KnfEntity, KnfWarning } from "./entity";
 import {
   buildFinfluencerResult,
   type FinfluencerMaterial,
   type FirmLookup,
+  isBrandChannel,
   isOwnChannel,
   isPolish,
   signalQuote,
@@ -209,6 +211,186 @@ describe("buildFinfluencerResult", () => {
   });
 });
 
+// Wpisy jak w wyszukiwarce KNF (21.11.2026): domenę ma tylko jeden wpis marki albo żaden.
+function knfEntity(
+  id: number,
+  name: string,
+  register_name: string,
+  domains: string[] = [],
+  investment_register = true,
+): KnfEntity {
+  return { ...XTB, id, name, register_name, domains, investment_register };
+}
+
+const NOTIFIED = "Notyfikacje zagranicznych firm inwestycyjnych na terytorium RP";
+const BANK_BROKERAGE = "Firmy inwestycyjne - Banki prowadzące działalność maklerską";
+const XTB_LTD = knfEntity(1002, "XTB Ltd", NOTIFIED, ["xtb.com"]);
+const XTB_SA = knfEntity(1004, "XTB S.A.", "Firmy inwestycyjne - Domy maklerskie");
+const XTB_SA_EEA = knfEntity(
+  1003,
+  "XTB S.A.",
+  "Notyfikacje krajowych domów maklerskich na terytoriach państw należących do EOG",
+);
+const MBANK = knfEntity(3001, "mBank S.A.", "Banki w formie spółek akcyjnych", ["mbank.pl"], false);
+const MBANK_BM = knfEntity(3002, "mBANK S.A.\nBiuro Maklerskie mBank", BANK_BROKERAGE);
+const PKO_BM = knfEntity(
+  6001,
+  "POWSZECHNA KASA OSZCZĘDNOŚCI BANK POLSKI S.A. (PKO BP S.A.)\nBiuro Maklerskie PKO Banku Polskiego",
+  BANK_BROKERAGE,
+);
+const REVOLUT = knfEntity(4001, "Revolut Securities Europe UAB", NOTIFIED);
+const IBKR = knfEntity(5001, "Interactive Brokers Ireland Ltd", NOTIFIED);
+
+describe("firma po marce z domeny linku", () => {
+  const withLink = (text: string, link: Record<string, unknown>): FinfluencerMaterial => ({
+    ...VIDEO,
+    text,
+    metadata: { links: [link] },
+  });
+
+  it("xtb.com to polski dom maklerski XTB S.A., nie XTB Ltd z notyfikacji", () => {
+    const result = buildFinfluencerResult(VIDEO, {
+      searches: [{ domain: "xtb.com", entities: [XTB_LTD] }],
+      warnings: [],
+      brands: [{ id: "xtb", entities: [XTB_LTD, XTB_SA_EEA, XTB_SA] }],
+    });
+    expect(result).toMatchObject({ label: "reklama", score: 0.93 });
+    expect(result.details).toMatchObject({
+      entity: { firm_name: "XTB S.A.", knf_id: 1004, in_register: true, domain: "xtb.com" },
+    });
+  });
+
+  const MBANK_LINK = { url: "https://www.mbank.pl/emakler/?ref=KANAL", domain: "www.mbank.pl" };
+  const MBANK_LOOKUP: FirmLookup = {
+    searches: [{ domain: "mbank.pl", entities: [MBANK] }],
+    warnings: [],
+    brands: [{ id: "mbank", entities: [MBANK, MBANK_BM] }],
+  };
+
+  it("link do banku w tekście o inwestowaniu: biuro maklerskie banku", () => {
+    const result = buildFinfluencerResult(
+      withLink(
+        "Otwórz rachunek maklerski w mBanku z mojego linku i kup pierwsze ETF-y.",
+        MBANK_LINK,
+      ),
+      MBANK_LOOKUP,
+    );
+    // 1 − (1 − 0,5)(1 − 0,3) — link afiliacyjny i fraza
+    expect(result).toMatchObject({ label: "reklama", score: 0.65 });
+    expect(result.details).toMatchObject({
+      entity: {
+        firm_name: "mBANK S.A. Biuro Maklerskie mBank",
+        knf_id: 3002,
+        in_register: true,
+        domain: "mbank.pl",
+      },
+    });
+  });
+
+  it("link do banku bez słów o inwestowaniu (konto osobiste) to nie reklama firmy inwestycyjnej", () => {
+    expect(
+      buildFinfluencerResult(
+        withLink("Załóż konto osobiste w mBanku z moim kodem i odbierz 300 zł premii.", MBANK_LINK),
+        MBANK_LOOKUP,
+      ),
+    ).toMatchObject({ label: "brak_firmy", score: 0 });
+  });
+
+  it("Revolut: polecenie konta pomijamy, polecenie inwestowania to Revolut Securities", () => {
+    const link = { url: "https://revolut.com/referral/kanal", domain: "revolut.com" };
+    const lookup: FirmLookup = {
+      searches: [{ domain: "revolut.com", entities: [] }],
+      warnings: [],
+      brands: [{ id: "revolut", entities: [REVOLUT] }],
+    };
+    expect(
+      buildFinfluencerResult(
+        withLink("Revolut: załóż konto z mojego linku i odbierz bonus na start.", link),
+        lookup,
+      ),
+    ).toMatchObject({ label: "brak_firmy", score: 0 });
+    const investing = buildFinfluencerResult(
+      withLink("W Revolut kupisz akcje i ETF bez prowizji, załóż konto z mojego linku.", link),
+      lookup,
+    );
+    // 1 − (1 − 0,3)(1 − 0,3) — zwykły link i fraza
+    expect(investing).toMatchObject({ label: "reklama", score: 0.51 });
+    expect(investing.details).toMatchObject({
+      entity: { firm_name: "Revolut Securities Europe UAB", in_register: true },
+    });
+  });
+
+  it("Interactive Brokers: KNF nie zna domeny, firma z marki, waga linku zostaje", () => {
+    const result = buildFinfluencerResult(
+      withLink("Konto w Interactive Brokers założysz z mojego linku.", {
+        url: "https://ibkr.com/referral/kanal",
+        domain: "ibkr.com",
+        followed: true,
+        final_url: "https://www.interactivebrokers.ie/pl/home.php",
+        final_domain: "www.interactivebrokers.ie",
+      }),
+      {
+        searches: [{ domain: "interactivebrokers.ie", entities: [] }],
+        warnings: [],
+        brands: [{ id: "ibkr", entities: [IBKR] }],
+      },
+    );
+    // 1 − (1 − 0,5)(1 − 0,3) — link afiliacyjny (przekierowanie) i fraza
+    expect(result).toMatchObject({ label: "reklama", score: 0.65 });
+    expect(result.details).toMatchObject({
+      entity: { firm_name: "Interactive Brokers Ireland Ltd", domain: "interactivebrokers.ie" },
+    });
+  });
+
+  it("kanał i strona pod marką banku to materiał firmy", () => {
+    const pko = buildFinfluencerResult(
+      {
+        ...withLink("Rachunek maklerski i IKE w PKO BP — załóż konto.", {
+          url: "https://www.pkobp.pl/inwestycje/",
+          domain: "www.pkobp.pl",
+        }),
+        author: "PKO Bank Polski",
+      },
+      {
+        searches: [{ domain: "pkobp.pl", entities: [] }],
+        warnings: [],
+        brands: [{ id: "pkobp", entities: [PKO_BM] }],
+      },
+    );
+    expect(pko).toMatchObject({ label: "material_firmy", score: 0 });
+
+    const page = buildFinfluencerResult(
+      {
+        url: "https://www.mbank.pl/indywidualny/inwestycje/emakler/",
+        platform: "web",
+        language: "pl",
+        author: null,
+        title: "eMakler",
+        text: "eMakler w mBanku: rachunek maklerski bez opłat za prowadzenie. Załóż konto.",
+        metadata: { kind: "web_page", links: [] },
+      },
+      MBANK_LOOKUP,
+    );
+    expect(page).toMatchObject({ label: "material_firmy", score: 0 });
+  });
+
+  it("marka z linku bez odpowiedzi KNF: błąd analizy, nie brak firmy", () => {
+    expect(
+      buildFinfluencerResult(
+        withLink("W Revolut kupisz akcje i ETF, załóż konto z mojego linku.", {
+          url: "https://revolut.com/referral/kanal",
+          domain: "revolut.com",
+        }),
+        {
+          searches: [{ domain: "revolut.com", entities: [] }],
+          warnings: [],
+          brands: [{ id: "revolut", entities: null }],
+        },
+      ),
+    ).toMatchObject({ label: "blad_analizy", score: 0 });
+  });
+});
+
 describe("kody polecające z tekstu", () => {
   const codeOf = (text: string) => {
     const result = buildFinfluencerResult(
@@ -293,6 +475,15 @@ describe("pomocnicze", () => {
     );
     expect(isOwnChannel("Kanał Testowy", "XTB S.A.")).toBe(false);
     expect(isOwnChannel(null, "XTB S.A.")).toBe(false);
+  });
+
+  it("isBrandChannel: nazwa kanału równa marce albo jej aliasowi, nie zawarta w niej", () => {
+    const ing = brandOfDomain("ing.pl");
+    expect(isBrandChannel("ING", ing)).toBe(true);
+    expect(isBrandChannel("Investing PL", ing)).toBe(false);
+    expect(isBrandChannel("PKO Bank Polski", brandOfDomain("pkobp.pl"))).toBe(true);
+    expect(isBrandChannel("Kanał Testowy", brandOfDomain("pkobp.pl"))).toBe(false);
+    expect(isBrandChannel("ING", null)).toBe(false);
   });
 
   it("signalScore liczy każdy rodzaj sygnału raz", () => {

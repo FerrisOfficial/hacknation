@@ -1,5 +1,5 @@
 import "server-only";
-import { mentionedBrands } from "@/lib/analysis/brands";
+import { type Brand, brandOfDomain, mentionedBrands } from "@/lib/analysis/brands";
 import {
   brandOf,
   type EntityMaterial,
@@ -86,17 +86,26 @@ const MAX_FIRM_DOMAINS = 5;
 const MAX_BRANDS = 3;
 
 // Dane KNF dla domen z linków wychodzących i marek z tekstu — kandydatów na reklamowaną firmę.
+// Marki szukamy też dla domen z linków (`brandOfDomain`): wpis po marce ma pierwszeństwo przed
+// wpisem po domenie (XTB S.A. zamiast XTB Ltd, biuro maklerskie banku zamiast samego banku).
 export async function lookupPromotedFirm(
   material: Pick<EntityMaterial, "url" | "metadata" | "text">,
 ): Promise<FirmLookup> {
-  const brands = mentionedBrands(material.text).slice(0, MAX_BRANDS);
   const domains = [
     ...new Set(outboundLinks(material).map((link) => registrableDomain(link.domain))),
   ].slice(0, MAX_FIRM_DOMAINS);
+  const brands = new Map<string, Brand>();
+  for (const { brand } of mentionedBrands(material.text).slice(0, MAX_BRANDS)) {
+    brands.set(brand.id, brand);
+  }
+  for (const domain of domains) {
+    const brand = brandOfDomain(domain);
+    if (brand) brands.set(brand.id, brand);
+  }
   const [warnings, brandSearches, searches] = await Promise.all([
     knfWarnings(),
     Promise.all(
-      brands.map(async ({ brand }) => ({
+      [...brands.values()].map(async (brand) => ({
         id: brand.id,
         entities: await knfSearch(brand.knfQuery),
       })),
