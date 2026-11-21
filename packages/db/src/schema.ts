@@ -188,11 +188,13 @@ export const analysisResults = pgTable(
   ],
 ).enableRLS();
 
-// Próg kalibracji per moduł (panel kalibracji). Brak wiersza = domyślny próg z aplikacji.
-// Wynik ze `score >= threshold` jest flagowany (alert), poniżej — traktowany jako negatywny.
+// Progi kalibracji per moduł (panel kalibracji). Brak wiersza = domyślne progi z aplikacji.
+// `threshold` (próg `flag`): wynik ze `score >= threshold` jest incydentem, poniżej — negatywny.
+// `alert_threshold` (próg `alert`): od niego leci powiadomienie `incident.high_risk`. null = domyślny.
 export const moduleSettings = pgTable("module_settings", {
   module: analysisModule("module").primaryKey(),
   threshold: real("threshold").notNull(),
+  alertThreshold: real("alert_threshold"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

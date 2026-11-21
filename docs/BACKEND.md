@@ -1,5 +1,7 @@
 # Backend #InvestWatch
 
+> **Uwaga:** kształty endpointów dashboardu, zdarzeń Socket.io i `POST /analyze` wyznacza [KONTRAKT.md](KONTRAKT.md). Tam, gdzie ten plik się z nim nie zgadza, obowiązuje kontrakt — lista zmian do zrobienia jest na jego końcu.
+
 Backend to route handlery Next.js (`apps/web/src/app/api`) plus procesy w tle startowane z `apps/web/src/instrumentation.ts`. Wszystko pod `http://localhost:3000/hacknation/api`.
 
 ```
@@ -34,18 +36,17 @@ Dashboard (bez logowania, tylko localhost):
 | `GET /materials/:id/content` | surowy HTML jako `text/plain` (dowód do sprawy) |
 | `POST /materials/:id/analyze` | ponowna analiza AI |
 | `GET /results` | wyniki modułów (materiał × moduł) |
-| `GET /incidents` | to samo, zgrupowane per materiał (`maxScore`, `riskLevel`, `flaggedModules`, `results.{module}`) |
-| `PATCH /results/:id` | zmiana statusu: `{ status: new \| in_review \| confirmed \| dismissed, note? }` |
-| `GET /thresholds` · `PUT /thresholds` | progi modułów. PUT: `{ module, threshold }` (0,01–0,99) |
-| `GET /calibration?module=&threshold=` | TP/FP/FN/TN, precision, recall, F1 i liczba alertów dla progu, krzywa co 0,05, `recommendedThreshold` (max F1) |
+| `GET /incidents` · `GET/PATCH /incidents/:id` · `GET /incidents/:id/snapshot` | incydenty dla dashboardu (wynik modułu ≥ próg `flag`), szczegół z dowodami, zmiana statusu, kopia strony — kształty w [KONTRAKT.md](KONTRAKT.md) §4–§6 |
+| `GET /settings/threshold` · `PUT /settings/threshold` | progi `flag` i `alert` per moduł ([KONTRAKT.md](KONTRAKT.md) §8) |
+| `GET /calibration?module=&threshold=` | TP/FP/FN/TN, precyzja, pełność i liczba oflagowanych dla progu ([KONTRAKT.md](KONTRAKT.md) §9) |
 | `GET /stats/summary` | kafelki: źródła, materiały, wyniki per moduł/ryzyko/status, zadania z 24 h |
-| `GET /stats/trend?bucket=hour\|day\|week&scope=flagged\|high\|all` | incydenty w czasie, gotowe pod Recharts: `[{ bucket, finfluencer, risk_disclosure, unauthorized_advisory, total }]` |
+| `GET /stats/trend?from=&to=` | incydenty (≥ próg `flag`) na dzień, per moduł ([KONTRAKT.md](KONTRAKT.md) §7) |
 | `GET /reports/:module?format=csv\|json` | raport modułu dla UKNF (podmiot, reklamujący, treść, URL, frazy, braki informacji o ryzyku). CSV pod polskiego Excela |
 | `GET /realtime` | port Socket.io dla przeglądarki |
 
-Filtry `/results` i `/incidents`: `module`, `status`, `risk` (`low|medium|high`), `platform` (listy po przecinku), `sourceId`, `from`/`to` (data wykrycia), `q`, `minScore`, `sort=date|score`, `page`, `pageSize`.
+Filtry `/results`: `module`, `status`, `risk` (`low|medium|high`), `platform` (listy po przecinku), `sourceId`, `from`/`to` (data wykrycia), `q`, `minScore`, `sort=date|score`, `page`, `pageSize`.
 
-**Ryzyko** liczymy względem progu modułu: `low` < próg ≤ `medium` < (próg+1)/2 ≤ `high`. Zmiana progu w panelu kalibracji od razu zmienia listy, statystyki i raporty, bez przeliczania wyników.
+**Ryzyko** (`risk` w `/results`, `/stats/summary`, raportach) liczymy względem progu `flag` modułu: `low` < próg ≤ `medium` < (próg+1)/2 ≤ `high`. Zmiana progu w panelu kalibracji od razu zmienia listy, statystyki i raporty, bez przeliczania wyników.
 
 **Kalibracja**: prawdą bazową są decyzje analityków (`confirmed` = naruszenie, `dismissed` = fałszywy alarm). Bez oznaczonych wyników metryki mają `null`.
 
@@ -87,14 +88,14 @@ Gdy endpoint trafi do OpenAPI serwisu ML (`pnpm api:generate`), przepnij `analyz
 import { io } from "socket.io-client";
 const { port } = await fetch(withBasePath("/api/realtime")).then((r) => r.json());
 const socket = io(`${location.protocol}//${location.hostname}:${port}`);
-socket.on("alert", (e: AlertEvent) => toast(...));
+socket.on("incident.high_risk", (e: RealtimePayload<"incident.high_risk">) => toast(...));
 ```
 
 Typy: `apps/web/src/lib/realtime/events.ts`.
 
 | Zdarzenie | Kiedy |
 |---|---|
-| `alert` | wynik właśnie przekroczył próg modułu (`riskLevel`: `medium` albo `high`). Ponowna analiza już flagowanego materiału nie wysyła go drugi raz |
+| `incident.high_risk` | wynik właśnie przekroczył próg `alert` modułu: `{ id, module, score, summary, url }` ([KONTRAKT.md](KONTRAKT.md) §10). Ponowna analiza już wysokiego wyniku nie wysyła go drugi raz |
 | `job` | zadanie scrapowania zmieniło status (`queued` → `running` → `done`/`failed`) |
 | `result` | analityk zmienił status wyniku |
 | `thresholds` | ktoś zmienił próg w panelu kalibracji |

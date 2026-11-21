@@ -7,7 +7,14 @@ import {
   type SQL,
   sql,
 } from "@app/db";
-import { DEFAULT_THRESHOLDS, type Thresholds } from "@/lib/analysis/modules";
+import {
+  ANALYSIS_MODULES,
+  DEFAULT_THRESHOLD_SETTINGS,
+  flagThresholds,
+  type ModuleThreshold,
+  type ThresholdSettings,
+  type Thresholds,
+} from "@/lib/analysis/modules";
 
 type Reader = Pick<Db, "select">;
 
@@ -16,26 +23,47 @@ function roundThreshold(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-export async function getThresholds(db: Reader): Promise<Thresholds> {
-  const thresholds = { ...DEFAULT_THRESHOLDS };
+// Progi `flag` i `alert` wszystkich modułów (docs/KONTRAKT.md §8).
+export async function getThresholdSettings(db: Reader): Promise<ThresholdSettings> {
+  const settings = structuredClone(DEFAULT_THRESHOLD_SETTINGS);
   const rows = await db.select().from(moduleSettings);
-  for (const row of rows) thresholds[row.module] = roundThreshold(row.threshold);
-  return thresholds;
+  for (const row of rows) {
+    settings[row.module] = {
+      flag: roundThreshold(row.threshold),
+      alert:
+        row.alertThreshold === null
+          ? DEFAULT_THRESHOLD_SETTINGS[row.module].alert
+          : roundThreshold(row.alertThreshold),
+    };
+  }
+  return settings;
 }
 
-export async function setThreshold(
+// Same progi `flag` — tym operują listy, statystyki, raporty i kalibracja.
+export async function getThresholds(db: Reader): Promise<Thresholds> {
+  return flagThresholds(await getThresholdSettings(db));
+}
+
+// Zapis progów z panelu kalibracji. Moduły pominięte w `update` zostają bez zmian.
+export async function saveThresholdSettings(
   db: Db,
-  module: AnalysisModule,
-  threshold: number,
-): Promise<Thresholds> {
-  await db
-    .insert(moduleSettings)
-    .values({ module, threshold })
-    .onConflictDoUpdate({
-      target: moduleSettings.module,
-      set: { threshold, updatedAt: new Date() },
-    });
-  return getThresholds(db);
+  update: Partial<Record<AnalysisModule, ModuleThreshold>>,
+): Promise<ThresholdSettings> {
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    for (const module of ANALYSIS_MODULES) {
+      const value = update[module];
+      if (!value) continue;
+      await tx
+        .insert(moduleSettings)
+        .values({ module, threshold: value.flag, alertThreshold: value.alert, updatedAt: now })
+        .onConflictDoUpdate({
+          target: moduleSettings.module,
+          set: { threshold: value.flag, alertThreshold: value.alert, updatedAt: now },
+        });
+    }
+  });
+  return getThresholdSettings(db);
 }
 
 // Próg modułu danego wiersza `analysis_results` jako wyrażenie SQL (CASE po module). Rzutowanie na

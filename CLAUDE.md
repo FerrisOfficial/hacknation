@@ -9,6 +9,7 @@ Robimy zadanie UKNF **#InvestWatch — na straży inwestorów!** (HackNation 202
 Oddanie: **22.11.2026, 11:00**.
 
 Pełne wymagania, test jury i punktacja: [docs/ZADANIE.md](docs/ZADANIE.md). Przeczytaj przed decyzją produktową lub architektoniczną.
+Kontrakt API (UI ↔ backend ↔ AI): [docs/KONTRAKT.md](docs/KONTRAKT.md). To źródło prawdy dla endpointów dashboardu, zdarzeń Socket.io i wyjścia modelu AI; przy sprzeczności z `docs/BACKEND.md` wygrywa kontrakt. Nie zmieniaj kształtów z kontraktu bez PR-a, który go aktualizuje.
 Wymagania techniczne UKNF: Docker Compose on-premise, tylko open source, bez płatnych i zewnętrznych API. Nie dodawaj usług w chmurze (hosting, baza, auth, LLM).
 
 ## Struktura

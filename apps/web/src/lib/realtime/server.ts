@@ -2,15 +2,20 @@ import "server-only";
 import { createServer } from "node:http";
 import { getDb } from "@app/db";
 import { Server } from "socket.io";
-import { DEFAULT_REALTIME_PORT, EVENTS_CHANNEL, type RealtimeEvent } from "./events";
+import {
+  DEFAULT_REALTIME_PORT,
+  EVENTS_CHANNEL,
+  REALTIME_EVENT_TYPES,
+  type RealtimeEvent,
+} from "./events";
 
 // Serwer WebSocket (Socket.io) dla powiadomień w czasie rzeczywistym. Route handlery Next.js nie
 // utrzymają połączenia WebSocket, więc to osobny port (REALTIME_PORT, domyślnie 3001) w tym samym
 // procesie. Źródłem zdarzeń jest Postgres LISTEN/NOTIFY (kanał `investwatch_events`) — publikuje
 // każdy, kto zapisuje (worker, route handlery), także z innego procesu albo kontenera.
 //
-// Przeglądarka: `io("http://localhost:3001")` (socket.io-client), zdarzenia: alert, job, result,
-// thresholds — typy w @/lib/realtime/events.
+// Przeglądarka: `io("http://localhost:3001")` (socket.io-client), zdarzenia: incident.high_risk,
+// job, result, thresholds — typy w @/lib/realtime/events (`RealtimePayload`).
 
 function corsOrigins(): string[] {
   return (process.env.REALTIME_CORS_ORIGIN ?? "http://localhost:3000,http://127.0.0.1:3000")
@@ -24,7 +29,7 @@ function isRealtimeEvent(value: unknown): value is RealtimeEvent {
     typeof value === "object" &&
     value !== null &&
     "type" in value &&
-    ["alert", "job", "result", "thresholds"].includes(String(value.type))
+    (REALTIME_EVENT_TYPES as readonly string[]).includes(String(value.type))
   );
 }
 
@@ -50,7 +55,9 @@ export async function startRealtimeServer(): Promise<void> {
     } catch {
       return;
     }
-    if (isRealtimeEvent(event)) io.emit(event.type, event);
+    if (!isRealtimeEvent(event)) return;
+    const { type, ...data } = event;
+    io.emit(type, data);
   });
 
   try {

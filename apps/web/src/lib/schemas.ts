@@ -69,24 +69,34 @@ export type SourceUpdateInput = z.infer<typeof sourceUpdateSchema>;
 
 // ─── Wyniki, alerty, kalibracja ─────────────────────────────────────────────────────────────
 
-export const resultUpdateSchema = z.object({
-  status: z.enum(REVIEW_STATUSES),
-  note: z.string().trim().max(2000).nullable().optional(),
-});
+// PATCH /api/incidents/:id (docs/KONTRAKT.md §6).
+export const incidentUpdateSchema = z.object({ status: z.enum(REVIEW_STATUSES) });
 
-export type ResultUpdateInput = z.infer<typeof resultUpdateSchema>;
+export type IncidentUpdateInput = z.infer<typeof incidentUpdateSchema>;
 
-export const thresholdUpdateSchema = z.object({
-  module: z.enum(ANALYSIS_MODULES),
-  // Setne części — tak samo dokładnie liczy histogram w panelu kalibracji.
-  threshold: z
-    .number()
-    .min(0.01)
-    .max(0.99)
-    .transform((value) => Math.round(value * 100) / 100),
-});
+// Setne części — tak samo dokładnie liczy histogram w panelu kalibracji.
+const thresholdValue = z
+  .number()
+  .min(0.01)
+  .max(0.99)
+  .transform((value) => Math.round(value * 100) / 100);
 
-export type ThresholdUpdateInput = z.infer<typeof thresholdUpdateSchema>;
+const moduleThresholdSchema = z
+  .object({ flag: thresholdValue, alert: thresholdValue })
+  .refine((value) => value.alert >= value.flag, {
+    message: "Próg alert nie może być niższy niż próg flag",
+  });
+
+// PUT /api/settings/threshold (docs/KONTRAKT.md §8). Pominięty moduł zostaje bez zmian.
+export const thresholdSettingsUpdateSchema = z
+  .strictObject({
+    finfluencer: moduleThresholdSchema.optional(),
+    risk_disclosure: moduleThresholdSchema.optional(),
+    unauthorized_advisory: moduleThresholdSchema.optional(),
+  })
+  .refine((value) => Object.values(value).some(Boolean), { message: "Brak progów do zmiany" });
+
+export type ThresholdSettingsUpdateInput = z.input<typeof thresholdSettingsUpdateSchema>;
 
 // ─── Wgrywanie danych z zewnątrz (token kolektora) ──────────────────────────────────────────
 
@@ -150,6 +160,22 @@ export const resultsQuerySchema = z.object({
 
 export type ResultsQuery = z.infer<typeof resultsQuerySchema>;
 
+// GET /api/incidents (docs/KONTRAKT.md §4). module, platform i status przyjmują też listy po
+// przecinku. `page_size` (domyślnie 25) jest poza kontraktem — UI może go pominąć.
+export const incidentsQuerySchema = z.object({
+  module: csv(ANALYSIS_MODULES),
+  platform: csv(PLATFORMS),
+  status: csv(REVIEW_STATUSES),
+  // Data wykrycia (analysis_results.created_at), domknięta z obu stron.
+  from: dateParam,
+  to: dateParam,
+  min_score: z.coerce.number().min(0).max(1).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  page_size: z.coerce.number().int().min(1).max(200).default(25),
+});
+
+export type IncidentsQuery = z.infer<typeof incidentsQuerySchema>;
+
 export const materialsQuerySchema = z.object({
   platform: csv(PLATFORMS),
   sourceId: z.uuid().optional(),
@@ -181,6 +207,9 @@ export const trendQuerySchema = z.object({
 });
 
 export type TrendQuery = z.infer<typeof trendQuerySchema>;
+
+// GET /api/stats/trend (docs/KONTRAKT.md §7): dni z zakresu, domyślnie ostatnie 30.
+export const statsTrendQuerySchema = z.object({ from: dateParam, to: dateParam });
 
 export const calibrationQuerySchema = z.object({
   module: z.enum(ANALYSIS_MODULES),
