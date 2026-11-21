@@ -11,8 +11,10 @@ Bezstanowy jak scraper WWW — zapis do bazy robi wołający.
 """
 
 import json
+import os
 import random
 import re
+import time
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -72,7 +74,8 @@ _NOT_FOLLOWED_DOMAINS = (
 
 MAX_LINKED_TEXT = 20_000
 TRANSCRIPT_LANGUAGES = ("pl", "en")
-MAX_WORKERS = 4
+MAX_WORKERS = 4  # strony z linków w opisie (inne domeny niż YouTube)
+DEFAULT_YOUTUBE_DELAY_S = 3.0
 
 _VIDEO_ID_RE = re.compile(r"^[\w-]{11}$")
 _PLAYER_RESPONSE_RE = re.compile(r"ytInitialPlayerResponse\s*=\s*")
@@ -476,22 +479,62 @@ def _analysis_text(title: str, description: str, transcript: Transcript | None) 
     return normalize_text("\n\n".join(part for part in parts if part))
 
 
+def youtube_delay_s() -> float:
+    """Przerwa przed każdym zapytaniem do YouTube (`YOUTUBE_DELAY_S`, domyślnie 3 s, 0 = bez).
+
+    Kilkadziesiąt zapytań na minutę z jednego IP kończy się HTTP 429 na kilkadziesiąt minut.
+    """
+    try:
+        return max(0.0, float(os.environ.get("YOUTUBE_DELAY_S", DEFAULT_YOUTUBE_DELAY_S)))
+    except ValueError:
+        return DEFAULT_YOUTUBE_DELAY_S
+
+
+def _pause(delay_s: float) -> None:
+    # Losowy rozrzut ±50% — równe odstępy wyglądają jak bot.
+    if delay_s > 0:
+        time.sleep(delay_s * random.uniform(0.5, 1.5))
+
+
 def _video_and_transcript(
     hit: SearchHit,
     *,
     client: httpx.Client,
     transcript_fetcher: TranscriptFetcher | None,
+    delay_s: float,
 ) -> tuple[VideoPage, Transcript | None, str | None] | FailedVideo:
+    _pause(delay_s)
     try:
         page = fetch_video_page(hit.video_id, client=client)
     except YoutubeError as exc:
         return FailedVideo(video_id=hit.video_id, error=str(exc))
     if transcript_fetcher is None:
         return page, None, None
+    _pause(delay_s)
     try:
         return page, transcript_fetcher(hit.video_id), None
     except TranscriptUnavailable as exc:
         return page, None, str(exc)
+
+
+def _videos_one_by_one(
+    hits: Sequence[SearchHit],
+    *,
+    client: httpx.Client,
+    transcript_fetcher: TranscriptFetcher | None,
+    delay_s: float,
+) -> list[tuple[VideoPage, Transcript | None, str | None] | FailedVideo]:
+    """Filmy po kolei, z przerwami. Po pierwszym HTTP 429 dalsze zapytania tylko przedłużają
+    blokadę — reszta filmów czeka na następne uruchomienie źródła."""
+    fetched: list[tuple[VideoPage, Transcript | None, str | None] | FailedVideo] = []
+    for hit in hits:
+        item = _video_and_transcript(
+            hit, client=client, transcript_fetcher=transcript_fetcher, delay_s=delay_s
+        )
+        fetched.append(item)
+        if isinstance(item, FailedVideo) and "HTTP 429" in item.error:
+            break
+    return fetched
 
 
 def _map[T, R](fn: Callable[[T], R], items: Iterable[T]) -> list[R]:
@@ -510,10 +553,13 @@ def collect(
     client: httpx.Client | None = None,
     searcher: Searcher | None = None,
     transcript_fetcher: TranscriptFetcher | None = None,
+    delay_s: float | None = None,
 ) -> Collection:
     """Wyszukuje filmy i zbiera dla każdego metadane, etykietę, transkrypcję i strony z opisu.
 
-    `client`, `searcher` i `transcript_fetcher` podmieniamy w testach (bez sieci).
+    Do YouTube po kolei, z przerwą `delay_s` (domyślnie `YOUTUBE_DELAY_S`); strony z linków
+    w opisie (inne domeny) równolegle. `client`, `searcher` i `transcript_fetcher` podmieniamy
+    w testach (bez sieci).
     """
     hits = (searcher or search_videos)(query, limit, paid_only)
     fetch_text = (transcript_fetcher or fetch_transcript) if transcripts else None
@@ -523,9 +569,11 @@ def collect(
         proxy=proxy_from_env(), timeout=DEFAULT_TIMEOUT, follow_redirects=True
     )
     try:
-        fetched = _map(
-            lambda hit: _video_and_transcript(hit, client=http, transcript_fetcher=fetch_text),
+        fetched = _videos_one_by_one(
             hits,
+            client=http,
+            transcript_fetcher=fetch_text,
+            delay_s=youtube_delay_s() if delay_s is None else delay_s,
         )
         pages = [item for item in fetched if not isinstance(item, FailedVideo)]
         failed = tuple(item for item in fetched if isinstance(item, FailedVideo))

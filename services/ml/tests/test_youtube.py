@@ -409,3 +409,33 @@ def test_collect_raises_when_youtube_rate_limits_every_video() -> None:
             searcher=fake_searcher,
             transcript_fetcher=fake_transcript,
         )
+
+
+def test_collect_stops_asking_youtube_after_first_429() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(429)
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as blocked,
+        pytest.raises(YoutubeError, match="HTTP 429"),
+    ):
+        youtube.collect(
+            "XTB kod",
+            limit=3,
+            client=blocked,
+            searcher=fake_searcher,
+            transcript_fetcher=fake_transcript,
+        )
+    assert len(calls) == 1
+
+
+def test_youtube_delay_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("YOUTUBE_DELAY_S", "1.5")
+    assert youtube.youtube_delay_s() == 1.5
+    monkeypatch.setenv("YOUTUBE_DELAY_S", "abc")
+    assert youtube.youtube_delay_s() == youtube.DEFAULT_YOUTUBE_DELAY_S
+    monkeypatch.delenv("YOUTUBE_DELAY_S")
+    assert youtube.youtube_delay_s() == youtube.DEFAULT_YOUTUBE_DELAY_S
