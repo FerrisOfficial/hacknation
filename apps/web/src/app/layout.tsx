@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Open_Sans } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Gov UI: Open Sans 400 / 600 / 700 (+ italic)
+const openSans = Open_Sans({
+  variable: "--font-open-sans",
   subsets: ["latin", "latin-ext"],
 });
 
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pl" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="pl" className={`${openSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <Providers>{children}</Providers>
         <Toaster />
