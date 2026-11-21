@@ -6,7 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.162.7",
+    "httpx>=0.28.1",
     "pydantic>=2.14.3",
+    "selectolax>=1.0.2",
+    "youtube-transcript-api>=1.2.5",
+    "yt-dlp>=2026.10.26",
 ]
 
 [build-system]
@@ -17,6 +21,7 @@ build-backend = "uv_build"
 dev = [
     "pyright>=1.1.414",
     "pytest>=9.2.0",
+    "respx>=0.23.1",
     "ruff>=0.17.5",
 ]
 

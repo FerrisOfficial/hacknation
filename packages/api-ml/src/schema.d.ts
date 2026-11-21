@@ -38,6 +38,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scrape": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scrape Url */
+        post: operations["scrape_url"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/collect/youtube": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Collect Youtube
+         * @description Filmy z YouTube z etykietą płatnej promocji, transkrypcją i stronami z linków w opisie.
+         */
+        post: operations["collect_youtube"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knf/warnings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Knf Warnings
+         * @description Lista ostrzeżeń publicznych KNF (wszystkie sekcje).
+         */
+        get: operations["knf_warnings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knf/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Knf Entities
+         * @description Wyszukiwarka podmiotów KNF: czy firma jest w rejestrze i z jakim zakresem działalności.
+         */
+        get: operations["knf_entities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -55,6 +132,87 @@ export interface components {
              */
             status: "ok";
         };
+        /** KnfEntity */
+        KnfEntity: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Former Names */
+            former_names: string[];
+            /** Deleted */
+            deleted: boolean;
+            /**
+             * Register Name
+             * @description Rejestr KNF, np. „Firmy inwestycyjne - Domy maklerskie”.
+             */
+            register_name: string;
+            /** Register Id */
+            register_id: number | null;
+            /**
+             * Investment Register
+             * @description Aktualny wpis w rejestrze usług inwestycyjnych (firmy inwestycyjne, domy maklerskie, notyfikacje z EOG, agenci). False dla danych historycznych i cofniętych zezwoleń.
+             */
+            investment_register: boolean;
+            /** Attributes */
+            attributes: components["schemas"]["KnfEntityAttribute"][];
+            /** Domains */
+            domains: string[];
+            /** Detail Url */
+            detail_url: string;
+        };
+        /** KnfEntityAttribute */
+        KnfEntityAttribute: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /** KnfEntitySearch */
+        KnfEntitySearch: {
+            /** Phrase */
+            phrase: string;
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Per Page */
+            per_page: number;
+            /** Entities */
+            entities: components["schemas"]["KnfEntity"][];
+        };
+        /** KnfIdentifier */
+        KnfIdentifier: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "KRS" | "NIP" | "REGON";
+            /** Value */
+            value: string;
+        };
+        /** KnfWarning */
+        KnfWarning: {
+            /**
+             * Category
+             * @description Podstawa prawna zawiadomienia (sekcja listy KNF).
+             */
+            category: string;
+            /** Number */
+            number: number;
+            /** Entities */
+            entities: string;
+            /** Identifiers */
+            identifiers: components["schemas"]["KnfIdentifier"][];
+            /** Prosecutor */
+            prosecutor: string | null;
+            /** Rulings */
+            rulings: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Domains */
+            domains: string[];
+        };
         /** PredictRequest */
         PredictRequest: {
             /** Text */
@@ -70,6 +228,59 @@ export interface components {
             /** Score */
             score: number;
         };
+        /** ScrapeRequest */
+        ScrapeRequest: {
+            /**
+             * Url
+             * Format: uri
+             */
+            url: string;
+            /**
+             * Include Html
+             * @description Dołącz surowy HTML (np. do zapisu w materials.raw_html).
+             * @default false
+             */
+            include_html: boolean;
+        };
+        /** ScrapeResult */
+        ScrapeResult: {
+            /** Url */
+            url: string;
+            /**
+             * Final Url
+             * @description Adres po przekierowaniach.
+             */
+            final_url: string;
+            /** Status Code */
+            status_code: number;
+            /** Title */
+            title: string | null;
+            /**
+             * Text
+             * @description Tekst bez tagów HTML, znormalizowane białe znaki.
+             */
+            text: string;
+            /**
+             * Content Hash
+             * @description SHA-256 znormalizowanego tekstu (deduplikacja).
+             */
+            content_hash: string;
+            /** Language */
+            language: string | null;
+            /** Author */
+            author: string | null;
+            /** Description */
+            description: string | null;
+            /** User Agent */
+            user_agent: string;
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Html */
+            html?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -82,6 +293,165 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** YoutubeCollectRequest */
+        YoutubeCollectRequest: {
+            /**
+             * Query
+             * @description Fraza wyszukiwania w YouTube.
+             */
+            query: string;
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
+            /**
+             * Paid Only
+             * @description Tylko filmy z etykietą „Zawiera płatną promocję” (filtr wyszukiwarki).
+             * @default true
+             */
+            paid_only: boolean;
+            /**
+             * Transcripts
+             * @description Dołącz gotowe napisy YouTube jako tekst (pl, potem en). Bez pobierania wideo.
+             * @default true
+             */
+            transcripts: boolean;
+            /**
+             * Follow Links
+             * @description Pobierz strony z linków w opisie (bez social mediów twórcy).
+             * @default true
+             */
+            follow_links: boolean;
+            /**
+             * Max Links Per Video
+             * @default 5
+             */
+            max_links_per_video: number;
+        };
+        /** YoutubeCollection */
+        YoutubeCollection: {
+            /** Query */
+            query: string;
+            /** Paid Only */
+            paid_only: boolean;
+            /** Videos */
+            videos: components["schemas"]["YoutubeVideo"][];
+            /** Failed */
+            failed: components["schemas"]["YoutubeFailedVideo"][];
+        };
+        /** YoutubeFailedVideo */
+        YoutubeFailedVideo: {
+            /** Video Id */
+            video_id: string;
+            /** Error */
+            error: string;
+        };
+        /** YoutubeLinkedPage */
+        YoutubeLinkedPage: {
+            /** Url */
+            url: string;
+            /** Domain */
+            domain: string;
+            /**
+             * Followed
+             * @description False dla social mediów twórcy i linków ponad limit.
+             */
+            followed: boolean;
+            /**
+             * Final Url
+             * @description Adres po przekierowaniach (np. link afiliacyjny).
+             */
+            final_url: string | null;
+            /** Final Domain */
+            final_domain: string | null;
+            /** Title */
+            title: string | null;
+            /** Text */
+            text: string | null;
+            /** Content Hash */
+            content_hash: string | null;
+            /** Error */
+            error: string | null;
+        };
+        /** YoutubeTranscript */
+        YoutubeTranscript: {
+            /** Language */
+            language: string;
+            /**
+             * Is Generated
+             * @description Napisy automatyczne (rozpoznawanie mowy).
+             */
+            is_generated: boolean;
+            /** Text */
+            text: string;
+            /** Segments */
+            segments: components["schemas"]["YoutubeTranscriptSegment"][];
+        };
+        /** YoutubeTranscriptSegment */
+        YoutubeTranscriptSegment: {
+            /**
+             * Start
+             * @description Sekunda filmu — do linku `url&t=<start>s`.
+             */
+            start: number;
+            /** Text */
+            text: string;
+        };
+        /** YoutubeVideo */
+        YoutubeVideo: {
+            /** Video Id */
+            video_id: string;
+            /** Url */
+            url: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /**
+             * Channel
+             * @description Reklamujący (moduł 1) albo firma (moduł 2).
+             */
+            channel: string | null;
+            /** Channel Id */
+            channel_id: string | null;
+            /** Channel Url */
+            channel_url: string | null;
+            /** Published At */
+            published_at: string | null;
+            /** Duration S */
+            duration_s: number | null;
+            /** View Count */
+            view_count: number | null;
+            /** Category */
+            category: string | null;
+            /** Keywords */
+            keywords: string[];
+            /** Is Unlisted */
+            is_unlisted: boolean;
+            /**
+             * Paid Promotion
+             * @description Etykieta „Zawiera płatną promocję”. Deklaracja twórcy, YouTube jej nie sprawdza.
+             */
+            paid_promotion: boolean;
+            transcript: components["schemas"]["YoutubeTranscript"] | null;
+            /** Transcript Error */
+            transcript_error: string | null;
+            /** Links */
+            links: components["schemas"]["YoutubeLinkedPage"][];
+            /**
+             * Promo Codes
+             * @description Kody promocyjne/polecające z opisu.
+             */
+            promo_codes: string[];
+            /**
+             * Text
+             * @description Tytuł, opis i transkrypcja — wejście dla modułów AI.
+             */
+            text: string;
+            /** Content Hash */
+            content_hash: string;
         };
     };
     responses: never;
@@ -142,6 +512,155 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    scrape_url: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScrapeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScrapeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Strony nie udało się pobrać */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    collect_youtube: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YoutubeCollectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YoutubeCollection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Wyszukiwanie w YouTube zawiodło */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    knf_warnings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnfWarning"][];
+                };
+            };
+            /** @description Strony KNF nie udało się pobrać */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    knf_entities: {
+        parameters: {
+            query: {
+                /** @description Nazwa, KRS/NIP albo domena. */
+                q: string;
+                page?: number;
+                per_page?: number;
+                include_deleted?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnfEntitySearch"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Strony KNF nie udało się pobrać */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

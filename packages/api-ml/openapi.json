@@ -60,6 +60,195 @@
           }
         }
       }
+    },
+    "/scrape": {
+      "post": {
+        "summary": "Scrape Url",
+        "operationId": "scrape_url",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeResult"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Strony nie udało się pobrać"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/collect/youtube": {
+      "post": {
+        "summary": "Collect Youtube",
+        "description": "Filmy z YouTube z etykietą płatnej promocji, transkrypcją i stronami z linków w opisie.",
+        "operationId": "collect_youtube",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YoutubeCollectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YoutubeCollection"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Wyszukiwanie w YouTube zawiodło"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knf/warnings": {
+      "get": {
+        "summary": "Knf Warnings",
+        "description": "Lista ostrzeżeń publicznych KNF (wszystkie sekcje).",
+        "operationId": "knf_warnings",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KnfWarning"
+                  },
+                  "type": "array",
+                  "title": "Response Knf Warnings"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Strony KNF nie udało się pobrać"
+          }
+        }
+      }
+    },
+    "/knf/entities": {
+      "get": {
+        "summary": "Knf Entities",
+        "description": "Wyszukiwarka podmiotów KNF: czy firma jest w rejestrze i z jakim zakresem działalności.",
+        "operationId": "knf_entities",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200,
+              "description": "Nazwa, KRS/NIP albo domena.",
+              "title": "Q"
+            },
+            "description": "Nazwa, KRS/NIP albo domena."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 50,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnfEntitySearch"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Strony KNF nie udało się pobrać"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -90,6 +279,235 @@
           "status"
         ],
         "title": "Health"
+      },
+      "KnfEntity": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "former_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Former Names"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          },
+          "register_name": {
+            "type": "string",
+            "title": "Register Name",
+            "description": "Rejestr KNF, np. „Firmy inwestycyjne - Domy maklerskie”."
+          },
+          "register_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Register Id"
+          },
+          "investment_register": {
+            "type": "boolean",
+            "title": "Investment Register",
+            "description": "Aktualny wpis w rejestrze usług inwestycyjnych (firmy inwestycyjne, domy maklerskie, notyfikacje z EOG, agenci). False dla danych historycznych i cofniętych zezwoleń."
+          },
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/KnfEntityAttribute"
+            },
+            "type": "array",
+            "title": "Attributes"
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Domains"
+          },
+          "detail_url": {
+            "type": "string",
+            "title": "Detail Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "former_names",
+          "deleted",
+          "register_name",
+          "register_id",
+          "investment_register",
+          "attributes",
+          "domains",
+          "detail_url"
+        ],
+        "title": "KnfEntity"
+      },
+      "KnfEntityAttribute": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "KnfEntityAttribute"
+      },
+      "KnfEntitySearch": {
+        "properties": {
+          "phrase": {
+            "type": "string",
+            "title": "Phrase"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page"
+          },
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/KnfEntity"
+            },
+            "type": "array",
+            "title": "Entities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "phrase",
+          "total",
+          "page",
+          "per_page",
+          "entities"
+        ],
+        "title": "KnfEntitySearch"
+      },
+      "KnfIdentifier": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "KRS",
+              "NIP",
+              "REGON"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "KnfIdentifier"
+      },
+      "KnfWarning": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "description": "Podstawa prawna zawiadomienia (sekcja listy KNF)."
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "entities": {
+            "type": "string",
+            "title": "Entities"
+          },
+          "identifiers": {
+            "items": {
+              "$ref": "#/components/schemas/KnfIdentifier"
+            },
+            "type": "array",
+            "title": "Identifiers"
+          },
+          "prosecutor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prosecutor"
+          },
+          "rulings": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rulings"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Domains"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "number",
+          "entities",
+          "identifiers",
+          "prosecutor",
+          "rulings",
+          "notes",
+          "domains"
+        ],
+        "title": "KnfWarning"
       },
       "PredictRequest": {
         "properties": {
@@ -131,6 +549,133 @@
         ],
         "title": "Prediction"
       },
+      "ScrapeRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "format": "uri",
+            "title": "Url"
+          },
+          "include_html": {
+            "type": "boolean",
+            "title": "Include Html",
+            "description": "Dołącz surowy HTML (np. do zapisu w materials.raw_html).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "ScrapeRequest"
+      },
+      "ScrapeResult": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "final_url": {
+            "type": "string",
+            "title": "Final Url",
+            "description": "Adres po przekierowaniach."
+          },
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Tekst bez tagów HTML, znormalizowane białe znaki."
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash",
+            "description": "SHA-256 znormalizowanego tekstu (deduplikacja)."
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "User Agent"
+          },
+          "fetched_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fetched At"
+          },
+          "html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Html"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "final_url",
+          "status_code",
+          "title",
+          "text",
+          "content_hash",
+          "language",
+          "author",
+          "description",
+          "user_agent",
+          "fetched_at"
+        ],
+        "title": "ScrapeResult"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -170,6 +715,438 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "YoutubeCollectRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Query",
+            "description": "Fraza wyszukiwania w YouTube."
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 10
+          },
+          "paid_only": {
+            "type": "boolean",
+            "title": "Paid Only",
+            "description": "Tylko filmy z etykietą „Zawiera płatną promocję” (filtr wyszukiwarki).",
+            "default": true
+          },
+          "transcripts": {
+            "type": "boolean",
+            "title": "Transcripts",
+            "description": "Dołącz gotowe napisy YouTube jako tekst (pl, potem en). Bez pobierania wideo.",
+            "default": true
+          },
+          "follow_links": {
+            "type": "boolean",
+            "title": "Follow Links",
+            "description": "Pobierz strony z linków w opisie (bez social mediów twórcy).",
+            "default": true
+          },
+          "max_links_per_video": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Max Links Per Video",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "YoutubeCollectRequest"
+      },
+      "YoutubeCollection": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "paid_only": {
+            "type": "boolean",
+            "title": "Paid Only"
+          },
+          "videos": {
+            "items": {
+              "$ref": "#/components/schemas/YoutubeVideo"
+            },
+            "type": "array",
+            "title": "Videos"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/YoutubeFailedVideo"
+            },
+            "type": "array",
+            "title": "Failed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "paid_only",
+          "videos",
+          "failed"
+        ],
+        "title": "YoutubeCollection"
+      },
+      "YoutubeFailedVideo": {
+        "properties": {
+          "video_id": {
+            "type": "string",
+            "title": "Video Id"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video_id",
+          "error"
+        ],
+        "title": "YoutubeFailedVideo"
+      },
+      "YoutubeLinkedPage": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "followed": {
+            "type": "boolean",
+            "title": "Followed",
+            "description": "False dla social mediów twórcy i linków ponad limit."
+          },
+          "final_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Url",
+            "description": "Adres po przekierowaniach (np. link afiliacyjny)."
+          },
+          "final_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Domain"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "domain",
+          "followed",
+          "final_url",
+          "final_domain",
+          "title",
+          "text",
+          "content_hash",
+          "error"
+        ],
+        "title": "YoutubeLinkedPage"
+      },
+      "YoutubeTranscript": {
+        "properties": {
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "is_generated": {
+            "type": "boolean",
+            "title": "Is Generated",
+            "description": "Napisy automatyczne (rozpoznawanie mowy)."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/YoutubeTranscriptSegment"
+            },
+            "type": "array",
+            "title": "Segments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "language",
+          "is_generated",
+          "text",
+          "segments"
+        ],
+        "title": "YoutubeTranscript"
+      },
+      "YoutubeTranscriptSegment": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "title": "Start",
+            "description": "Sekunda filmu — do linku `url&t=<start>s`."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "text"
+        ],
+        "title": "YoutubeTranscriptSegment"
+      },
+      "YoutubeVideo": {
+        "properties": {
+          "video_id": {
+            "type": "string",
+            "title": "Video Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel",
+            "description": "Reklamujący (moduł 1) albo firma (moduł 2)."
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "channel_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Url"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "view_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "View Count"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Keywords"
+          },
+          "is_unlisted": {
+            "type": "boolean",
+            "title": "Is Unlisted"
+          },
+          "paid_promotion": {
+            "type": "boolean",
+            "title": "Paid Promotion",
+            "description": "Etykieta „Zawiera płatną promocję”. Deklaracja twórcy, YouTube jej nie sprawdza."
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/YoutubeTranscript"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transcript_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Error"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/YoutubeLinkedPage"
+            },
+            "type": "array",
+            "title": "Links"
+          },
+          "promo_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Promo Codes",
+            "description": "Kody promocyjne/polecające z opisu."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Tytuł, opis i transkrypcja — wejście dla modułów AI."
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video_id",
+          "url",
+          "title",
+          "description",
+          "channel",
+          "channel_id",
+          "channel_url",
+          "published_at",
+          "duration_s",
+          "view_count",
+          "category",
+          "keywords",
+          "is_unlisted",
+          "paid_promotion",
+          "transcript",
+          "transcript_error",
+          "links",
+          "promo_codes",
+          "text",
+          "content_hash"
+        ],
+        "title": "YoutubeVideo"
       }
     }
   }

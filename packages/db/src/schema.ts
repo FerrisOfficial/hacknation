@@ -1,4 +1,15 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  jsonb,
+  pgEnum,
+  pgTable,
+  real,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 // Przykładowa tabela — zmień albo usuń. Po każdej zmianie schematu: `pnpm db:generate`.
 // Użytkownicy żyją w Supabase Auth (schemat `auth`), tutaj trzymamy tylko ich id.
@@ -19,3 +30,141 @@ export const notes = pgTable(
 
 export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;
+
+// ─── Pipeline scrapingu i analizy (#InvestWatch) ────────────────────────────────────────────
+// sources → scrape_jobs → materials → analysis_results (po jednym wyniku na moduł AI).
+// Status rekordu (do zmiany w dashboardzie) żyje na analysis_results — próg kalibracji
+// porównujemy ze `score`, więc alert = wynik powyżej progu, bez osobnej tabeli.
+
+export const platform = pgEnum("platform", [
+  "web",
+  "facebook",
+  "instagram",
+  "tiktok",
+  "youtube",
+  "x",
+  "linkedin",
+  "telegram",
+]);
+
+export const scrapeJobStatus = pgEnum("scrape_job_status", ["queued", "running", "done", "failed"]);
+
+export const analysisModule = pgEnum("analysis_module", [
+  "finfluencer",
+  "risk_disclosure",
+  "unauthorized_advisory",
+]);
+
+export const reviewStatus = pgEnum("review_status", ["new", "in_review", "confirmed", "dismissed"]);
+
+// Monitorowana strona albo profil w social mediach.
+export const sources = pgTable(
+  "sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    platform: platform("platform").notNull().default("web"),
+    url: text("url").notNull(),
+    name: text("name").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sources_url_idx").on(table.url),
+    index("sources_platform_idx").on(table.platform),
+  ],
+).enableRLS();
+
+// Jedno uruchomienie scrapera dla źródła (kolejka + historia).
+export const scrapeJobs = pgTable(
+  "scrape_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    status: scrapeJobStatus("status").notNull().default("queued"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("scrape_jobs_source_id_idx").on(table.sourceId),
+    index("scrape_jobs_status_idx").on(table.status),
+    index("scrape_jobs_created_at_idx").on(table.createdAt),
+  ],
+).enableRLS();
+
+// Zescrapowany materiał (reklama, post, strona oferty).
+export const materials = pgTable(
+  "materials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
+    jobId: uuid("job_id").references(() => scrapeJobs.id, { onDelete: "set null" }),
+    // Rodzaj treści (film z YouTube, strona WWW…). Źródło (`sources`) mówi, skąd materiał
+    // znaleźliśmy — np. strona z linku w opisie filmu ma platform = web, a źródło YouTube.
+    platform: platform("platform").notNull().default("web"),
+    url: text("url").notNull(),
+    title: text("title"),
+    // Kto publikuje (finfluencer, firma, strona) — moduł 1 odróżnia reklamującego od firmy.
+    author: text("author"),
+    // Surowy HTML albo odnośnik do object storage (np. s3://…), jeśli treść jest duża.
+    rawHtml: text("raw_html"),
+    contentRef: text("content_ref"),
+    // Tekst po preprocessingu (bez tagów, znormalizowane białe znaki).
+    text: text("text").notNull(),
+    // SHA-256 znormalizowanego tekstu — deduplikacja tych samych treści pod różnymi URL-ami.
+    contentHash: text("content_hash").notNull(),
+    language: text("language"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull().defaultNow(),
+    // Dane zależne od platformy, np. YouTube: etykieta płatnej promocji, kody promocyjne,
+    // linki z opisu, napisy z czasem (do linku `&t=…s`). Kształt: `kind` + pola tego rodzaju.
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  },
+  (table) => [
+    uniqueIndex("materials_url_idx").on(table.url),
+    index("materials_content_hash_idx").on(table.contentHash),
+    index("materials_source_id_idx").on(table.sourceId),
+    index("materials_scraped_at_idx").on(table.scrapedAt),
+    index("materials_platform_idx").on(table.platform),
+  ],
+).enableRLS();
+
+// Wynik jednego modułu AI dla materiału. `status` zmienia analityk w dashboardzie.
+export const analysisResults = pgTable(
+  "analysis_results",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    module: analysisModule("module").notNull(),
+    // 0–1: prawdopodobieństwo naruszenia. Próg z panelu kalibracji porównujemy z tą wartością.
+    score: real("score").notNull(),
+    label: text("label").notNull(),
+    // Szczegóły modułu: znalezione frazy, firma inwestycyjna, brakujące elementy informacji o ryzyku…
+    details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+    model: text("model").notNull(),
+    status: reviewStatus("status").notNull().default("new"),
+    reviewedBy: uuid("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("analysis_results_material_id_idx").on(table.materialId),
+    index("analysis_results_module_score_idx").on(table.module, table.score),
+    index("analysis_results_status_idx").on(table.status),
+    index("analysis_results_created_at_idx").on(table.createdAt),
+  ],
+).enableRLS();
+
+export type Source = typeof sources.$inferSelect;
+export type NewSource = typeof sources.$inferInsert;
+export type ScrapeJob = typeof scrapeJobs.$inferSelect;
+export type NewScrapeJob = typeof scrapeJobs.$inferInsert;
+export type Material = typeof materials.$inferSelect;
+export type NewMaterial = typeof materials.$inferInsert;
+export type AnalysisResult = typeof analysisResults.$inferSelect;
+export type NewAnalysisResult = typeof analysisResults.$inferInsert;
