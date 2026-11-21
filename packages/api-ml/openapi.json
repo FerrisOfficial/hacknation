@@ -60,6 +60,47 @@
           }
         }
       }
+    },
+    "/scrape": {
+      "post": {
+        "summary": "Scrape Url",
+        "operationId": "scrape_url",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeResult"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Strony nie udało się pobrać"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -130,6 +171,133 @@
           "score"
         ],
         "title": "Prediction"
+      },
+      "ScrapeRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "format": "uri",
+            "title": "Url"
+          },
+          "include_html": {
+            "type": "boolean",
+            "title": "Include Html",
+            "description": "Dołącz surowy HTML (np. do zapisu w materials.raw_html).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "ScrapeRequest"
+      },
+      "ScrapeResult": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "final_url": {
+            "type": "string",
+            "title": "Final Url",
+            "description": "Adres po przekierowaniach."
+          },
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Tekst bez tagów HTML, znormalizowane białe znaki."
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash",
+            "description": "SHA-256 znormalizowanego tekstu (deduplikacja)."
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "User Agent"
+          },
+          "fetched_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fetched At"
+          },
+          "html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Html"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "final_url",
+          "status_code",
+          "title",
+          "text",
+          "content_hash",
+          "language",
+          "author",
+          "description",
+          "user_agent",
+          "fetched_at"
+        ],
+        "title": "ScrapeResult"
       },
       "ValidationError": {
         "properties": {

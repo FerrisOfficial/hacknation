@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scrape": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scrape Url */
+        post: operations["scrape_url"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -69,6 +86,59 @@ export interface components {
             label: "positive" | "negative" | "neutral";
             /** Score */
             score: number;
+        };
+        /** ScrapeRequest */
+        ScrapeRequest: {
+            /**
+             * Url
+             * Format: uri
+             */
+            url: string;
+            /**
+             * Include Html
+             * @description Dołącz surowy HTML (np. do zapisu w materials.raw_html).
+             * @default false
+             */
+            include_html: boolean;
+        };
+        /** ScrapeResult */
+        ScrapeResult: {
+            /** Url */
+            url: string;
+            /**
+             * Final Url
+             * @description Adres po przekierowaniach.
+             */
+            final_url: string;
+            /** Status Code */
+            status_code: number;
+            /** Title */
+            title: string | null;
+            /**
+             * Text
+             * @description Tekst bez tagów HTML, znormalizowane białe znaki.
+             */
+            text: string;
+            /**
+             * Content Hash
+             * @description SHA-256 znormalizowanego tekstu (deduplikacja).
+             */
+            content_hash: string;
+            /** Language */
+            language: string | null;
+            /** Author */
+            author: string | null;
+            /** Description */
+            description: string | null;
+            /** User Agent */
+            user_agent: string;
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Html */
+            html?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -142,6 +212,46 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    scrape_url: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScrapeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScrapeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Strony nie udało się pobrać */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
