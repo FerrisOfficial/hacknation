@@ -6,3 +6,13 @@ export const predictInputSchema = z.object({
 });
 
 export type PredictInput = z.infer<typeof predictInputSchema>;
+
+// POST /api/collect/youtube — uruchomienie kolektora YouTube z zapisem do bazy.
+export const youtubeCollectInputSchema = z.object({
+  query: z.string().trim().min(2, "Fraza musi mieć co najmniej 2 znaki").max(200),
+  limit: z.number().int().min(1).max(50).default(10),
+  // Tylko filmy z etykietą „Zawiera płatną promocję”.
+  paidOnly: z.boolean().default(true),
+});
+
+export type YoutubeCollectInput = z.infer<typeof youtubeCollectInputSchema>;
