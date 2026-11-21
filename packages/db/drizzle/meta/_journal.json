@@ -15,6 +15,13 @@
       "when": 1794606962938,
       "tag": "0001_lowly_the_spike",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795267162267,
+      "tag": "0002_medical_quicksilver",
+      "breakpoints": true
     }
   ]
 }
