@@ -5,6 +5,7 @@ import {
   type FinfluencerMaterial,
   type FirmLookup,
   isOwnChannel,
+  isPolish,
   signalQuote,
   signalScore,
 } from "./finfluencer";
@@ -42,6 +43,7 @@ const TEXT = [
 const VIDEO: FinfluencerMaterial = {
   url: "https://www.youtube.com/watch?v=AAAAAAAAAA1",
   platform: "youtube",
+  language: "pl",
   author: "Kanał Testowy",
   title: "Jak zacząć inwestować",
   text: TEXT,
@@ -116,6 +118,7 @@ describe("buildFinfluencerResult", () => {
       {
         url: "https://blog-o-zyskach.example/wpis",
         platform: "web",
+        language: "pl",
         author: null,
         title: "Mój sposób na zysk",
         text: "Materiał sponsorowany. Zarejestruj się na szybki-zysk.example i odbierz bonus.",
@@ -234,6 +237,51 @@ describe("kody polecające z tekstu", () => {
     expect(codeOf("Po kliknięciu w nasz link partnerski trafisz na stronę XTB")).toContain(
       "„link partnerski”",
     );
+  });
+});
+
+describe("język i wzmianka marki", () => {
+  it("materiał nie po polsku jest poza zakresem M1", () => {
+    const result = buildFinfluencerResult({ ...VIDEO, language: "en" }, LOOKUP);
+    expect(result).toMatchObject({ label: "inny_jezyk", score: 0 });
+    expect(
+      isPolish({ language: null, text: "How to buy gold on Trading 212 and what you should know" }),
+    ).toBe(false);
+    expect(
+      isPolish({ language: null, text: "Jak kupić złoto w XTB i na co uważać, to jest proste" }),
+    ).toBe(true);
+  });
+
+  it("firma po nazwie w tekście, bez linku: sygnał wzmianki marki", () => {
+    const material: FinfluencerMaterial = {
+      ...VIDEO,
+      text: "Od roku inwestuję w XTB. Z moim kodem dostaniesz darmowe akcje, polecam XTB.",
+      metadata: { paid_promotion: false, links: [] },
+    };
+    const lookup: FirmLookup = {
+      searches: [],
+      warnings: [],
+      brands: [{ id: "xtb", entities: [XTB] }],
+    };
+    const result = buildFinfluencerResult(material, lookup);
+    // 1 − (1 − 0,2)(1 − 0,3) — wzmianka marki i fraza
+    expect(result).toMatchObject({ score: 0.44, label: "wzmianka" });
+    expect(result.details).toMatchObject({
+      entity: { firm_name: "XTB S.A.", in_register: true, domain: null },
+    });
+    const [flag] = (result.details as { flags: { reason: string }[] }).flags;
+    expect(flag?.reason).toContain("nazwa XTB w tekście (2×), bez linku");
+  });
+
+  it("marka bez potwierdzenia w KNF nie przechodzi bramki", () => {
+    const material: FinfluencerMaterial = { ...VIDEO, text: "Polecam XTB.", metadata: {} };
+    expect(
+      buildFinfluencerResult(material, {
+        searches: [],
+        warnings: [],
+        brands: [{ id: "xtb", entities: [] }],
+      }),
+    ).toMatchObject({ label: "brak_firmy", score: 0 });
   });
 });
 

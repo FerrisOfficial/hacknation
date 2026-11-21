@@ -75,6 +75,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/collect/youtube/channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Collect Youtube Channel
+         * @description Najnowsze filmy kanału (wszystkie, nie tylko płatne promocje) z transkrypcją i linkami.
+         */
+        post: operations["collect_youtube_channel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/knf/warnings": {
         parameters: {
             query?: never;
@@ -298,6 +318,35 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** YoutubeChannelCollectRequest */
+        YoutubeChannelCollectRequest: {
+            /**
+             * Channel Url
+             * @description Adres kanału, np. https://www.youtube.com/@kanal albo /channel/UC….
+             */
+            channel_url: string;
+            /**
+             * Limit
+             * @description Ile najnowszych filmów.
+             * @default 15
+             */
+            limit: number;
+            /**
+             * Transcripts
+             * @default true
+             */
+            transcripts: boolean;
+            /**
+             * Follow Links
+             * @default true
+             */
+            follow_links: boolean;
+            /**
+             * Max Links Per Video
+             * @default 5
+             */
+            max_links_per_video: number;
         };
         /** YoutubeCollectRequest */
         YoutubeCollectRequest: {
@@ -592,6 +641,46 @@ export interface operations {
                 };
             };
             /** @description Wyszukiwanie w YouTube zawiodło */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    collect_youtube_channel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YoutubeChannelCollectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YoutubeCollection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Listy filmów kanału nie udało się pobrać */
             502: {
                 headers: {
                     [name: string]: unknown;

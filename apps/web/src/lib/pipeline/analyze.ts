@@ -7,6 +7,7 @@ import { AI_MODULES } from "@/lib/analysis/modules";
 import { requestedRuleIds } from "@/lib/analysis/rules";
 import { analyzeMaterial } from "@/lib/ml";
 import { lookupEntity, lookupPromotedFirm } from "./entity";
+import { followAdvertiserChannel } from "./m1-sources";
 import { saveAnalysisResults } from "./results";
 
 export type AnalyzeOutcome = "analyzed" | "skipped" | "missing";
@@ -43,6 +44,8 @@ export async function runAnalysis(
   if (!options.force && material.analyzedHash === material.contentHash) return "skipped";
 
   const finfluencer = await runFinfluencer(material);
+  // Kanał z reklamą staje się źródłem obserwowanym (błąd zapisu źródła nie blokuje analizy).
+  await followAdvertiserChannel(db, material, finfluencer).catch(() => false);
   const outputs: ModuleOutputs = [];
   try {
     for (const module of AI_MODULES) {

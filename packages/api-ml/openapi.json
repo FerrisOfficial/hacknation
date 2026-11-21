@@ -144,6 +144,48 @@
         }
       }
     },
+    "/collect/youtube/channel": {
+      "post": {
+        "summary": "Collect Youtube Channel",
+        "description": "Najnowsze filmy kanału (wszystkie, nie tylko płatne promocje) z transkrypcją i linkami.",
+        "operationId": "collect_youtube_channel",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YoutubeChannelCollectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YoutubeCollection"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Listy filmów kanału nie udało się pobrać"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/knf/warnings": {
       "get": {
         "summary": "Knf Warnings",
@@ -723,6 +765,47 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "YoutubeChannelCollectRequest": {
+        "properties": {
+          "channel_url": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 20,
+            "title": "Channel Url",
+            "description": "Adres kanału, np. https://www.youtube.com/@kanal albo /channel/UC…."
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Ile najnowszych filmów.",
+            "default": 15
+          },
+          "transcripts": {
+            "type": "boolean",
+            "title": "Transcripts",
+            "default": true
+          },
+          "follow_links": {
+            "type": "boolean",
+            "title": "Follow Links",
+            "default": true
+          },
+          "max_links_per_video": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Max Links Per Video",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "channel_url"
+        ],
+        "title": "YoutubeChannelCollectRequest"
       },
       "YoutubeCollectRequest": {
         "properties": {

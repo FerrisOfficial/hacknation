@@ -55,7 +55,7 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
 ```
 
 - `result`: `violation` | `ok` | `n/a`
-- `label`: `potencjalne_doradztwo` | `usluga_dozwolona` (M3); w M2 `label` i `probability` = `null`. Etykiety M1 nadaje backend: `reklama` | `wzmianka` | `material_firmy` | `brak_firmy` | `blad_analizy`
+- `label`: `potencjalne_doradztwo` | `usluga_dozwolona` (M3); w M2 `label` i `probability` = `null`. Etykiety M1 nadaje backend: `reklama` | `wzmianka` | `material_firmy` | `brak_firmy` | `inny_jezyk` | `blad_analizy`
 - `quote`: dosłowny fragment `text`, jeden akapit, do 300 znaków, bez parafrazy; obowiązkowy przy `violation`
 - `confidence`, `probability`: od 0 do 1, wartości ciągłe
 - model nie zwraca URL-i, pozycji znaków ani sekund filmu

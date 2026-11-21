@@ -1,4 +1,5 @@
 import "server-only";
+import { mentionedBrands } from "@/lib/analysis/brands";
 import {
   brandOf,
   type EntityMaterial,
@@ -81,15 +82,25 @@ export async function lookupEntity(material: EntityMaterial): Promise<IncidentEn
 // Moduł 1: ile domen z linków materiału sprawdzamy w KNF (opisy filmów mają ich kilkanaście).
 const MAX_FIRM_DOMAINS = 5;
 
-// Dane KNF dla domen z linków wychodzących — kandydatów na reklamowaną firmę.
+// Moduł 1: ile marek wymienionych w tekście sprawdzamy w KNF.
+const MAX_BRANDS = 3;
+
+// Dane KNF dla domen z linków wychodzących i marek z tekstu — kandydatów na reklamowaną firmę.
 export async function lookupPromotedFirm(
-  material: Pick<EntityMaterial, "url" | "metadata">,
+  material: Pick<EntityMaterial, "url" | "metadata" | "text">,
 ): Promise<FirmLookup> {
+  const brands = mentionedBrands(material.text).slice(0, MAX_BRANDS);
   const domains = [
     ...new Set(outboundLinks(material).map((link) => registrableDomain(link.domain))),
   ].slice(0, MAX_FIRM_DOMAINS);
-  const [warnings, searches] = await Promise.all([
+  const [warnings, brandSearches, searches] = await Promise.all([
     knfWarnings(),
+    Promise.all(
+      brands.map(async ({ brand }) => ({
+        id: brand.id,
+        entities: await knfSearch(brand.knfQuery),
+      })),
+    ),
     Promise.all(
       domains.map(async (domain) => {
         // Po domenie, a gdy żaden wynik nie ma tej domeny — po marce z domeny (`brandOf`).
@@ -101,5 +112,5 @@ export async function lookupPromotedFirm(
       }),
     ),
   ]);
-  return { searches, warnings };
+  return { searches, warnings, brands: brandSearches };
 }

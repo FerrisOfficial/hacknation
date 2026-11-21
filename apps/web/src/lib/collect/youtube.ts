@@ -46,12 +46,36 @@ async function runCollector(ml: MlClient, search: YoutubeSearch): Promise<Youtub
   return data;
 }
 
-export async function collectYoutube(
+export type YoutubeChannel = { channelUrl: string; limit: number };
+
+async function runChannelCollector(
   ml: MlClient,
-  search: YoutubeSearch,
+  channel: YoutubeChannel,
+): Promise<YoutubeCollection> {
+  const { data, error, response } = await ml
+    .POST("/collect/youtube/channel", {
+      body: {
+        channel_url: channel.channelUrl,
+        limit: channel.limit,
+        transcripts: true,
+        follow_links: true,
+        max_links_per_video: 5,
+      },
+    })
+    .catch(() => {
+      throw new Error("Serwis ML nie odpowiada");
+    });
+  if (!data) {
+    const detail = errorDetail(error) ?? `HTTP ${response.status}`;
+    throw new Error(`Kolektor kanału YouTube w serwisie ML zwrócił błąd: ${detail}`);
+  }
+  return data;
+}
+
+function summarize(
+  collection: YoutubeCollection,
   ids: { sourceId: string; jobId: string },
-): Promise<YoutubeCollected> {
-  const collection = await runCollector(ml, search);
+): YoutubeCollected {
   const rows = youtubeMaterialRows(collection, ids, new Date());
   return {
     rows,
@@ -60,4 +84,21 @@ export async function collectYoutube(
     pages: rows.filter((row) => row.platform === "web").length,
     failed: collection.failed.map(({ video_id, error }) => ({ id: video_id, error })),
   };
+}
+
+// Najnowsze filmy kanału (wszystkie, nie tylko płatne promocje) — źródło `youtube_channel`.
+export async function collectYoutubeChannel(
+  ml: MlClient,
+  channel: YoutubeChannel,
+  ids: { sourceId: string; jobId: string },
+): Promise<YoutubeCollected> {
+  return summarize(await runChannelCollector(ml, channel), ids);
+}
+
+export async function collectYoutube(
+  ml: MlClient,
+  search: YoutubeSearch,
+  ids: { sourceId: string; jobId: string },
+): Promise<YoutubeCollected> {
+  return summarize(await runCollector(ml, search), ids);
 }

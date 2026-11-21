@@ -1,6 +1,7 @@
 import type { Material } from "@app/db";
 import { z } from "zod";
 import type { Flag, IncidentDetails, IncidentEntity } from "@/lib/incidents/contract";
+import { type BrandMention, matchBrandEntity, mentionedBrands } from "./brands";
 import type { AnalysisResultInput } from "./contract";
 import {
   domainMatches,
@@ -21,10 +22,11 @@ import { findRule } from "./rules";
 // Moduł 1 — finfluencerzy i podmioty trzecie — bez modelu AI (docs/ZADANIE.md: moduł ma znaleźć
 // reklamę firmy inwestycyjnej publikowaną przez kogoś innego, nie oceniać jej treści).
 // Czysta funkcja na sygnałach, które zbierają kolektory:
-// 1. bramka: link z materiału prowadzi do firmy z rejestru KNF (albo z listy ostrzeżeń),
-//    a materiał nie pochodzi od tej firmy (własna strona / własny kanał to przypadek dla M2);
+// 1. bramki: materiał po polsku; link z materiału prowadzi do firmy z rejestru KNF (albo z listy
+//    ostrzeżeń) albo tekst wymienia markę, którą KNF potwierdza; materiał nie pochodzi od tej
+//    firmy (własna strona / własny kanał to przypadek dla M2);
 // 2. score = noisy-OR wag sygnałów reklamy: etykieta płatnej promocji, kod polecający,
-//    link afiliacyjny albo bezpośredni do firmy, frazy reklamowe.
+//    link afiliacyjny albo bezpośredni do firmy (albo sama nazwa w tekście), frazy reklamowe.
 
 export const FINFLUENCER_MODEL = "rules/m1";
 export const AD_LABEL_FROM = 0.5;
@@ -35,6 +37,8 @@ export const SIGNAL_WEIGHTS = {
   affiliate_link: 0.5,
   direct_link: 0.3,
   ad_phrase: 0.3,
+  // Nazwa firmy w tekście bez linku do niej („polecam XTB”) — słabsza od linku.
+  brand_mention: 0.2,
 } as const;
 
 export type SignalKind = keyof typeof SIGNAL_WEIGHTS;
@@ -42,14 +46,77 @@ export type Signal = { kind: SignalKind; detail: string; at: number | null };
 
 export type FinfluencerMaterial = Pick<
   Material,
-  "url" | "platform" | "author" | "title" | "text" | "metadata"
+  "url" | "platform" | "author" | "title" | "text" | "metadata" | "language"
 >;
 
 // Wyniki KNF per domena główna z linków (`registrableDomain`): null = wyszukiwarka nie odpowiedziała.
+// `brands`: wyniki KNF dla marek wymienionych w tekście (`mentionedBrands`), po `Brand.id`.
 export type FirmLookup = {
   searches: { domain: string; entities: readonly KnfEntity[] | null }[];
   warnings: readonly KnfWarning[] | null;
+  brands?: { id: string; entities: readonly KnfEntity[] | null }[];
 };
+
+// Moduł 1 dotyczy polskiego rynku: reklam po polsku (także zagranicznych firm).
+const PL_WORDS = new Set([
+  "i",
+  "w",
+  "na",
+  "nie",
+  "się",
+  "to",
+  "jest",
+  "że",
+  "z",
+  "do",
+  "jak",
+  "co",
+  "ale",
+  "po",
+  "za",
+  "od",
+  "dla",
+  "czy",
+  "tak",
+  "jestem",
+  "oraz",
+  "który",
+  "które",
+  "są",
+]);
+const EN_WORDS = new Set([
+  "the",
+  "and",
+  "to",
+  "of",
+  "is",
+  "you",
+  "in",
+  "that",
+  "it",
+  "for",
+  "this",
+  "with",
+  "are",
+  "on",
+  "your",
+  "how",
+  "what",
+  "be",
+]);
+
+export function isPolish(material: Pick<FinfluencerMaterial, "language" | "text">): boolean {
+  const language = material.language?.toLowerCase();
+  if (language) return language.startsWith("pl");
+  const words =
+    material.text
+      .toLowerCase()
+      .match(/\p{L}+/gu)
+      ?.slice(0, 600) ?? [];
+  const pl = words.filter((w) => PL_WORDS.has(w)).length;
+  const en = words.filter((w) => EN_WORDS.has(w)).length;
+  return pl >= 3 && pl >= en;
+}
 
 // Frazy, którymi twórcy zapowiadają współpracę i zachęcają do założenia konta.
 // `(?<!\p{L})` zamiast `\b` — `\b` w JS nie zna polskich liter.
@@ -131,15 +198,18 @@ export function isOwnChannel(author: string | null, firmName: string): boolean {
 }
 
 type Firm = {
-  link: OutboundLink;
+  // null = firma znaleziona po nazwie w tekście (`mention`), bez linku.
+  link: OutboundLink | null;
+  mention: BrandMention | null;
   entity: KnfEntity | null;
   warning: KnfWarning | null;
 };
 
 // Pierwsza domena z linków, która jest firmą z rejestru usług inwestycyjnych; jeśli żadna —
-// pierwsza z listy ostrzeżeń KNF (reklama podmiotu bez zezwolenia).
+// pierwsza z listy ostrzeżeń KNF (reklama podmiotu bez zezwolenia); jeśli i tej nie ma —
+// najczęściej wymieniona w tekście marka, którą KNF potwierdza jako firmę z rejestru.
 export function findPromotedFirm(
-  material: Pick<FinfluencerMaterial, "url" | "metadata">,
+  material: Pick<FinfluencerMaterial, "url" | "metadata" | "text">,
   lookup: FirmLookup,
 ): Firm | null {
   const links = outboundLinks(material);
@@ -150,13 +220,18 @@ export function findPromotedFirm(
       ? (matchEntity(search.entities, { domain: link.domain, nip: null }) ??
         matchBrand(search.entities, link.domain))
       : null;
-    if (entity?.investment_register) return { link, entity, warning: null };
+    if (entity?.investment_register) return { link, mention: null, entity, warning: null };
   }
   for (const link of links) {
     const warning = lookup.warnings
       ? matchWarning(lookup.warnings, { domain: link.domain, nip: null })
       : null;
-    if (warning) return { link, entity: null, warning };
+    if (warning) return { link, mention: null, entity: null, warning };
+  }
+  for (const mention of mentionedBrands(material.text)) {
+    const search = lookup.brands?.find((b) => b.id === mention.brand.id);
+    const entity = search?.entities ? matchBrandEntity(search.entities, mention.brand) : null;
+    if (entity) return { link: null, mention, entity, warning: null };
   }
   return null;
 }
@@ -184,17 +259,26 @@ export function collectSignals(material: FinfluencerMaterial, firm: Firm): Signa
       at: at >= 0 ? at : null,
     });
   }
-  const linkAt = firm.link.url ? material.text.indexOf(firm.link.url) : -1;
-  const domainAt = material.text.toLowerCase().indexOf(firm.link.domain);
-  signals.push({
-    kind: firm.link.affiliate ? "affiliate_link" : "direct_link",
-    detail: `${firm.link.affiliate ? "link afiliacyjny" : "link"} do ${firm.link.domain}`,
-    at: linkAt >= 0 ? linkAt : domainAt >= 0 ? domainAt : null,
-  });
+  if (firm.link) {
+    const linkAt = firm.link.url ? material.text.indexOf(firm.link.url) : -1;
+    const domainAt = material.text.toLowerCase().indexOf(firm.link.domain);
+    signals.push({
+      kind: firm.link.affiliate ? "affiliate_link" : "direct_link",
+      detail: `${firm.link.affiliate ? "link afiliacyjny" : "link"} do ${firm.link.domain}`,
+      at: linkAt >= 0 ? linkAt : domainAt >= 0 ? domainAt : null,
+    });
+  } else if (firm.mention) {
+    signals.push({
+      kind: "brand_mention",
+      detail: `nazwa ${firm.mention.brand.name} w tekście (${firm.mention.count}×), bez linku`,
+      at: firm.mention.at,
+    });
+  }
   // Film bywa sponsorowany przez kilka marek — pierwszeństwo ma fraza z linii, w której pada
   // nazwa reklamowanej firmy albo jej domena („Partnerem odcinka jest XTB”).
   const keys = [
-    registrableDomain(firm.link.domain).split(".")[0] ?? "",
+    firm.link ? (registrableDomain(firm.link.domain).split(".")[0] ?? "") : "",
+    nameCore(firm.mention?.brand.name ?? ""),
     nameCore(firm.entity?.name ?? firm.warning?.entities ?? ""),
   ].filter((key) => key.length >= 3);
   const phrases = [...material.text.matchAll(AD_PHRASES_ALL)];
@@ -225,7 +309,13 @@ const SENTENCE_END = /[.!?…]+(?=\s)/gu;
 // link do sekundy filmu), w obrębie linii i najwyżej 300 znaków. Transkrypcja to jedna długa
 // linia, więc okno tniemy na granicy zdania, a gdy jej nie ma — na granicy słowa.
 export function signalQuote(text: string, signals: readonly Signal[]): string | null {
-  const order: SignalKind[] = ["ad_phrase", "promo_code", "affiliate_link", "direct_link"];
+  const order: SignalKind[] = [
+    "ad_phrase",
+    "promo_code",
+    "affiliate_link",
+    "direct_link",
+    "brand_mention",
+  ];
   const at = order
     .map((kind) => signals.find((s) => s.kind === kind)?.at ?? null)
     .find((value) => value !== null);
@@ -281,6 +371,22 @@ function m1Flag(
   };
 }
 
+function emptyEntity(advertiser: string | null): IncidentEntity {
+  return {
+    firm_name: null,
+    knf_id: null,
+    in_register: null,
+    advertiser,
+    nip: null,
+    domain: null,
+    on_warning_list: null,
+  };
+}
+
+function entityNipOf(firm: Firm): string | null {
+  return firm.entity ? entityNip(firm.entity) : null;
+}
+
 function advertiserOf(material: FinfluencerMaterial): string | null {
   return material.author ?? (material.platform === "web" ? normalizeDomain(material.url) : null);
 }
@@ -294,30 +400,36 @@ export function buildFinfluencerResult(
   lookup: FirmLookup,
 ): AnalysisResultInput {
   const advertiser = advertiserOf(material);
+  if (!isPolish(material)) {
+    return result(0, "inny_jezyk", {
+      summary: "Materiał nie jest po polsku — poza zakresem modułu 1 (polski rynek).",
+      entity: emptyEntity(advertiser),
+      flags: [],
+      error: null,
+    });
+  }
   const firm = findPromotedFirm(material, lookup);
   if (!firm) {
     const knfDown =
       lookup.warnings === null || lookup.searches.some((search) => search.entities === null);
-    const entity: IncidentEntity = {
-      firm_name: null,
-      knf_id: null,
-      in_register: null,
-      advertiser,
-      nip: null,
-      domain: null,
-      on_warning_list: null,
-    };
+    const entity = emptyEntity(advertiser);
     return result(0, knfDown ? "blad_analizy" : "brak_firmy", {
       summary: knfDown
         ? "Nie udało się sprawdzić linków w rejestrze KNF."
-        : "Materiał nie linkuje do firmy z rejestru KNF ani z listy ostrzeżeń.",
+        : "Materiał nie linkuje do firmy z rejestru KNF ani z listy ostrzeżeń i nie wymienia żadnej z nich.",
       entity,
       flags: [],
       error: knfDown ? "Wyszukiwarka KNF nie odpowiedziała" : null,
     });
   }
 
-  const firmName = firm.entity?.name ?? firm.warning?.entities.slice(0, 300) ?? firm.link.domain;
+  const firmName =
+    firm.entity?.name ??
+    firm.warning?.entities.slice(0, 300) ??
+    firm.link?.domain ??
+    firm.mention?.brand.name ??
+    "";
+  const firmDomain = firm.link?.domain ?? null;
   const entity: IncidentEntity = {
     firm_name: firmName,
     knf_id: firm.entity?.id ?? null,
@@ -327,11 +439,11 @@ export function buildFinfluencerResult(
       (firm.entity ? entityNip(firm.entity) : null) ??
       firm.warning?.identifiers.find((i) => i.kind === "NIP")?.value ??
       null,
-    domain: firm.link.domain,
+    domain: firmDomain,
     on_warning_list:
       lookup.warnings === null
         ? null
-        : matchWarning(lookup.warnings, { domain: firm.link.domain, nip: null }) !== null,
+        : matchWarning(lookup.warnings, { domain: firmDomain, nip: entityNipOf(firm) }) !== null,
   };
   const knfStatus = firm.entity ? "w rejestrze KNF" : "na liście ostrzeżeń KNF";
 
