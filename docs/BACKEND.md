@@ -81,6 +81,8 @@ Co backend dokłada do wyjścia modelu (`lib/pipeline/analyze.ts` → `lib/analy
 | `label` | M1/M3: etykieta modelu; M2: `naruszenie` / `brak_naruszen`; błąd modelu: `blad_analizy` | `lib/analysis/details.ts` |
 | `model` | opcjonalne pole `model` w odpowiedzi (poza kontraktem), domyślnie `services/ml` | `lib/analysis/details.ts` |
 
+**Zakres M1 i M2:** wynik powstaje tylko dla podmiotu z wpisem w rejestrze KNF (`in_register === true`). M3 analizuje wszystko. Szczegóły w [KONTRAKT.md](KONTRAKT.md#m1-i-m2-tylko-dla-podmiot%C3%B3w-z-rejestru-knf-ustalenie-z-mentorami-22112026).
+
 ### Moduł 1 bez AI
 
 Moduł ma znaleźć reklamę firmy inwestycyjnej publikowaną przez kogoś innego (docs/ZADANIE.md), a nie oceniać jej treść, więc liczą go reguły w `lib/analysis/finfluencer.ts` (`model = rules/m1`). Wynik ma ten sam kształt §3 co moduły AI, z jedną flagą `M1.ad`.

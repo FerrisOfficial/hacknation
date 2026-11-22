@@ -40,6 +40,8 @@ Budowa: **jeden uniwersalny silnik scrapingu + trzy moduły analityczne**.
 - **Analiza:** frazy i treści sugerujące, że w Polsce faktycznie świadczą doradztwo inwestycyjne bez zezwolenia.
 - **Daje:** raport: dane podmiotu, treść oferty, URL potencjalnego naruszenia.
 
+**Ustalenie z mentorami HackNation (22.11.2026):** w modułach 1 i 2 interesują nas tylko podmioty z wpisem w rejestrze usług inwestycyjnych KNF. Materiały innych firm nie są analizowane ani pokazywane. Moduł 3 dotyczy z definicji podmiotów bez zezwolenia, więc to ograniczenie go nie obejmuje.
+
 ## Oczekiwane MVP
 
 ### 1. Backend i silnik scrapingu (.NET / Python / Node.js)

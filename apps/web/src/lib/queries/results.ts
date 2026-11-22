@@ -28,6 +28,7 @@ import {
 } from "@/lib/analysis/modules";
 import { riskLevelSql } from "@/lib/pipeline/thresholds";
 import type { ResultsQuery } from "@/lib/schemas";
+import { knfScopeSql } from "./scope";
 
 // Odczyty dla dashboardu: lista wyników modułów (z filtrami po dacie, źródle, ryzyku, module),
 // zunifikowane incydenty (materiał + wyniki modułów 1–3 w jednym obiekcie) i szczegóły materiału.
@@ -39,7 +40,8 @@ export function escapeLike(value: string): string {
 }
 
 export function resultConditions(query: Partial<ResultsQuery>, thresholds: Thresholds): SQL[] {
-  const conditions: (SQL | undefined)[] = [];
+  // M1 i M2 tylko dla podmiotów z rejestru KNF (@/lib/analysis/knf-scope).
+  const conditions: (SQL | undefined)[] = [knfScopeSql()];
   if (query.module?.length) conditions.push(inArray(analysisResults.module, query.module));
   if (query.status?.length) conditions.push(inArray(analysisResults.status, query.status));
   if (query.risk?.length) conditions.push(inArray(riskLevelSql(thresholds), query.risk));
@@ -219,7 +221,10 @@ export async function listIncidents(
       .from(materials)
       .leftJoin(sources, eq(sources.id, materials.sourceId))
       .where(inArray(materials.id, ids)),
-    db.select().from(analysisResults).where(inArray(analysisResults.materialId, ids)),
+    db
+      .select()
+      .from(analysisResults)
+      .where(and(inArray(analysisResults.materialId, ids), knfScopeSql())),
   ]);
   const materialById = new Map(materialRows.map((row) => [row.id, row]));
 
@@ -263,7 +268,7 @@ export async function getIncident(
   const results = await db
     .select()
     .from(analysisResults)
-    .where(eq(analysisResults.materialId, materialId));
+    .where(and(eq(analysisResults.materialId, materialId), knfScopeSql()));
   return {
     ...aggregateIncident(row.summary, results, thresholds),
     text: row.text,

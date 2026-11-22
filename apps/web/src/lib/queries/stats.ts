@@ -20,6 +20,7 @@ import type { ScoreBucket } from "@/lib/analysis/calibration";
 import { ANALYSIS_MODULES, type Thresholds, UNDECIDED_STATUSES } from "@/lib/analysis/modules";
 import { highRiskSql, riskLevelSql, thresholdSql } from "@/lib/pipeline/thresholds";
 import type { TrendQuery } from "@/lib/schemas";
+import { knfScopeSql } from "./scope";
 
 // Strefa czasowa koszyków trendu — dzień „21.11” ma się zgadzać z kalendarzem analityka.
 const TIME_ZONE = "Europe/Warsaw";
@@ -94,6 +95,7 @@ export async function incidentTrend(
   const conditions: SQL[] = [
     gte(analysisResults.createdAt, from),
     lte(analysisResults.createdAt, to),
+    knfScopeSql(),
   ];
   if (query.scope === "flagged")
     conditions.push(sql`${analysisResults.score} >= ${thresholdSql(thresholds)}`);
@@ -162,6 +164,7 @@ export async function summary(db: Db, thresholds: Thresholds) {
         n: count(),
       })
       .from(analysisResults)
+      .where(knfScopeSql())
       // Po pozycjach: wyrażenie z parametrami w GROUP BY to dla Postgresa inne wyrażenie niż
       // to samo w SELECT (inne numery $n).
       .groupBy(sql`1, 2, 3`),
@@ -231,7 +234,7 @@ export async function scoreHistogram(db: Db, module: AnalysisModule): Promise<Sc
       unlabeled: sql<number>`count(*) filter (where ${inArray(analysisResults.status, [...UNDECIDED_STATUSES])})::int`,
     })
     .from(analysisResults)
-    .where(eq(analysisResults.module, module))
+    .where(and(eq(analysisResults.module, module), knfScopeSql()))
     .groupBy(bucket);
   return rows;
 }
