@@ -60,8 +60,6 @@ services:
       # Moduł 2: rules (regex, bez LLM), hybrid (regex + LLM — zalecany), llm (sam LLM).
       M2_ENGINE: ${M2_ENGINE:-rules}
       OLLAMA_RISK_MODEL: ${OLLAMA_RISK_MODEL:-hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0}
-      # Klatki filmów dla reguł wizualnych M2 (4, 5, 6, 13): <MEDIA_DIR>/<material_id>/manifest.json + PNG.
-      MEDIA_DIR: /data/media
       SCRAPER_PROXY_URL: ${SCRAPER_PROXY_URL:-}
       YOUTUBE_DELAY_S: ${YOUTUBE_DELAY_S:-3}
       # Klatki filmów od serwisu `media` (reguły wizualne M2, docs/KLATKI.md) — tylko odczyt.
@@ -74,8 +72,6 @@ services:
         condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - media:/data/media
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
