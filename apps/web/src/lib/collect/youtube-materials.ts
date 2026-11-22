@@ -68,7 +68,7 @@ function videoRow(video: YoutubeVideo, query: string): NewMaterial {
   };
 }
 
-function pageRow(page: ScrapedPage, foundIn: string[]): NewMaterial {
+function pageRow(page: ScrapedPage, foundIn: string[], contentRef: string | null): NewMaterial {
   return {
     platform: "web",
     url: page.final_url ?? page.url,
@@ -76,6 +76,7 @@ function pageRow(page: ScrapedPage, foundIn: string[]): NewMaterial {
     author: null,
     text: page.text,
     contentHash: page.content_hash,
+    contentRef,
     metadata: {
       kind: "linked_page",
       link_url: page.url,
@@ -90,12 +91,26 @@ function isScrapedPage(link: YoutubeLinkedPage): link is ScrapedPage {
   return link.followed && !link.error && Boolean(link.text) && Boolean(link.content_hash);
 }
 
+// Surowy HTML pobranych stron z linków pod filmami, po adresie materiału (final_url ?? url).
+// Kolektor zapisuje go do bazy treści i podaje odnośniki do `youtubeMaterialRows`.
+export function linkedPageHtml(collection: YoutubeCollection): Map<string, string> {
+  const html = new Map<string, string>();
+  for (const video of collection.videos) {
+    for (const page of video.links.filter(isScrapedPage)) {
+      if (page.html) html.set(page.final_url ?? page.url, page.html);
+    }
+  }
+  return html;
+}
+
 // Filmy i pobrane strony z ich opisów. Każdy URL raz (upsert w Postgresie nie może dotknąć
-// tego samego wiersza dwa razy w jednym zapytaniu).
+// tego samego wiersza dwa razy w jednym zapytaniu). `contentRefs`: odnośniki do kopii HTML
+// stron w bazie treści, po adresie strony (z `linkedPageHtml`).
 export function youtubeMaterialRows(
   collection: YoutubeCollection,
   ids: { sourceId: string; jobId: string },
   scrapedAt: Date,
+  contentRefs: ReadonlyMap<string, string> = new Map(),
 ): NewMaterial[] {
   const videos = new Map<string, NewMaterial>();
   const pages = new Map<string, { page: ScrapedPage; foundIn: string[] }>();
@@ -110,6 +125,6 @@ export function youtubeMaterialRows(
   }
   const pageRows = [...pages.entries()]
     .filter(([url]) => !videos.has(url))
-    .map(([, { page, foundIn }]) => pageRow(page, foundIn));
+    .map(([url, { page, foundIn }]) => pageRow(page, foundIn, contentRefs.get(url) ?? null));
   return [...videos.values(), ...pageRows].map((row) => ({ ...row, ...ids, scrapedAt }));
 }

@@ -110,6 +110,9 @@ class YoutubeLinkedPage(_FromAttributes):
     text: str | None
     content_hash: str | None
     error: str | None
+    html: str | None = Field(
+        description="Surowy HTML strony z dnia pobrania (kopia do materials.content_ref)."
+    )
 
 
 class YoutubeVideo(_FromAttributes):
