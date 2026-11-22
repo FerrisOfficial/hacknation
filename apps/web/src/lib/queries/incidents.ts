@@ -12,6 +12,7 @@ import {
   sql,
 } from "@app/db";
 import type { Thresholds } from "@/lib/analysis/modules";
+import { riskScore } from "@/lib/analysis/risk";
 import { getContent } from "@/lib/content-store";
 import {
   type HistoryEntry,
@@ -23,7 +24,7 @@ import {
   readIncidentDetails,
 } from "@/lib/incidents/contract";
 import { statusAction, withDetection } from "@/lib/incidents/history";
-import { thresholdSql } from "@/lib/pipeline/thresholds";
+import { getThresholds, riskScoreSql, thresholdSql } from "@/lib/pipeline/thresholds";
 import { currentReviewer } from "@/lib/reviewer";
 import type { IncidentsQuery } from "@/lib/schemas";
 import { resultConditions } from "./results";
@@ -31,9 +32,6 @@ import { resultConditions } from "./results";
 // Incydent = wynik jednego modułu AI dla materiału (wiersz `analysis_results`) ze score ≥ próg
 // `flag` modułu (M2: któraś reguła ≥ próg). Kolejność: risk_score (priorytet) albo data.
 // Kształty odpowiedzi: docs/KONTRAKT.md §4–§6.
-
-// Priorytet do sortowania: risk_score z ML, a bez niego (M1, M3, starsze wyniki) score.
-const prioritySql = sql<number>`coalesce(${analysisResults.riskScore}, ${analysisResults.score})`;
 
 const reviewColumns = {
   status: analysisResults.status,
@@ -92,7 +90,7 @@ export async function listIncidentItems(
         id: analysisResults.id,
         module: analysisResults.module,
         score: analysisResults.score,
-        priority: prioritySql,
+        priority: riskScoreSql(thresholds),
         label: analysisResults.label,
         details: analysisResults.details,
         createdAt: analysisResults.createdAt,
@@ -108,7 +106,7 @@ export async function listIncidentItems(
       .orderBy(
         ...(query.sort === "date"
           ? [desc(analysisResults.createdAt), desc(analysisResults.score)]
-          : [desc(prioritySql), desc(analysisResults.createdAt)]),
+          : [desc(riskScoreSql(thresholds)), desc(analysisResults.createdAt)]),
         desc(analysisResults.id),
       )
       .limit(query.page_size)
@@ -181,7 +179,6 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
       id: analysisResults.id,
       module: analysisResults.module,
       score: analysisResults.score,
-      riskScore: analysisResults.riskScore,
       label: analysisResults.label,
       details: analysisResults.details,
       createdAt: analysisResults.createdAt,
@@ -208,11 +205,13 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
   const { material } = row;
   const score = roundScore(row.score);
   const createdAt = row.createdAt.toISOString();
+  const details = readIncidentDetails(row.details);
+  const thresholds = await getThresholds(db);
   return {
     id: row.id,
     module: row.module,
     score,
-    risk_score: roundScore(row.riskScore ?? row.score),
+    risk_score: riskScore(details.flags, thresholds[row.module], score),
     label: row.label,
     created_at: createdAt,
     ...readReview(row),
@@ -229,7 +228,7 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
       duration_s: material.durationS === null ? null : Number(material.durationS),
       content_hash: material.contentHash,
     },
-    details: readIncidentDetails(row.details),
+    details,
     history: withDetection(await incidentEventsOf(db, id), { at: createdAt, score }),
   };
 }

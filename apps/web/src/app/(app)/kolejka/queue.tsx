@@ -148,7 +148,11 @@ function Row({
         </span>
         <Chip>{MODULE_SHORT[item.module]}</Chip>
         <PlatformLabel platform={item.platform} className="w-[104px] text-[13px]" />
-        <ScoreCell score={item.score} flag={threshold.flag} alert={threshold.alert} />
+        <ScoreCell
+          score={item.risk_score ?? item.score}
+          flag={threshold.flag}
+          alert={threshold.alert}
+        />
       </Link>
     </li>
   );

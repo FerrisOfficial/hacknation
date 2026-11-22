@@ -111,7 +111,11 @@ function MaterialCard({ item }: { item: UiListItem }) {
           <Chip>{MODULE_SHORT[item.module]}</Chip>
           <PlatformLabel platform={item.platform} className="text-[13px]" />
           {threshold ? (
-            <ScoreCell score={item.score} flag={threshold.flag} alert={threshold.alert} />
+            <ScoreCell
+              score={item.risk_score ?? item.score}
+              flag={threshold.flag}
+              alert={threshold.alert}
+            />
           ) : null}
         </span>
         <span className="truncate text-[13px] text-ink-600">

@@ -438,11 +438,20 @@ function WhyFlagged({
   onSeek: (seconds: number) => void;
 }) {
   const [showOk, setShowOk] = useState(false);
-  const high = detail.score >= threshold.alert;
+  // Risk score (backend, @/lib/analysis/risk) z naruszeń ponad progiem flagi; próg porównujemy
+  // z wynikiem każdego naruszenia osobno.
+  const risk = detail.risk_score ?? detail.score;
+  const high = risk >= threshold.alert;
+  const ruleScore = (flag: UiFlag) => flag.score ?? flag.confidence;
+  // Naruszenie = reguła ze score ≥ próg flagi (ten sam score decyduje o liście i o risk score);
+  // reguły bez score'u (M1) — według etykiety modelu.
+  const isViolation = (flag: UiFlag) =>
+    flag.score === null ? flag.result === "violation" : flag.score >= threshold.flag;
   const violations = detail.details.flags
-    .filter((flag) => flag.result === "violation")
-    .sort((a, b) => b.confidence - a.confidence);
-  const rest = detail.details.flags.filter((flag) => flag.result !== "violation");
+    .filter(isViolation)
+    .sort((a, b) => ruleScore(b) - ruleScore(a));
+  const aboveFlag = violations.filter((flag) => ruleScore(flag) >= threshold.flag).length;
+  const rest = detail.details.flags.filter((flag) => !isViolation(flag));
   return (
     <Card className="p-4">
       <SectionTitle>Dlaczego oflagowano</SectionTitle>
@@ -453,36 +462,17 @@ function WhyFlagged({
             high ? "text-risk-700" : "text-ink-900",
           )}
         >
-          {fmtScore(detail.score)}
+          {fmtScore(risk)}
         </span>
         <span className={cn("text-sm", high ? "text-risk-700" : "text-ink-600")}>
-          {high ? "wysokie" : "średnie"}
+          risk score · {high ? "wysokie" : "średnie"}
         </span>
       </p>
-      <div className="relative mt-3 mb-9 h-1 rounded-full bg-line-200" aria-hidden="true">
-        <span
-          className={cn(
-            "absolute inset-y-0 left-0 rounded-full",
-            high ? "bg-risk-700" : "bg-ink-500",
-          )}
-          style={{ width: `${detail.score * 100}%` }}
-        />
-        {[
-          { value: threshold.flag, label: `próg flagi ${fmtScore(threshold.flag)}` },
-          { value: threshold.alert, label: `alert ${fmtScore(threshold.alert)}` },
-        ].map((tick) => (
-          <span
-            key={tick.label}
-            className="absolute -top-1"
-            style={{ left: `${tick.value * 100}%` }}
-          >
-            <span className="block h-3 w-px bg-ink-900" />
-            <span className="absolute top-4 -translate-x-1/2 whitespace-nowrap text-[11px] text-ink-600">
-              {tick.label}
-            </span>
-          </span>
-        ))}
-      </div>
+      <p className="mt-1 mb-3 text-[13px] text-ink-600">
+        Z naruszeń ponad próg flagi {fmtScore(threshold.flag)}: {aboveFlag}{" "}
+        {plural(aboveFlag, "naruszenie", "naruszenia", "naruszeń")}. Im więcej wysokich, tym wyżej;
+        naruszenia poniżej progu się nie liczą (alert od {fmtScore(threshold.alert)}).
+      </p>
       {detail.details.error ? (
         <p className="mb-3 rounded-md bg-warning-100 px-3 py-2 text-[13px] text-warning-800">
           Analiza zgłosiła błąd: {detail.details.error}
@@ -502,6 +492,7 @@ function WhyFlagged({
               className={cn(
                 "rounded-md bg-surface-1 p-3 transition-colors duration-150",
                 active === flag.rule_id && "bg-risk-50",
+                ruleScore(flag) < threshold.flag && "opacity-60",
               )}
             >
               <p className="font-medium text-ink-900 text-sm">
@@ -531,10 +522,19 @@ function WhyFlagged({
                     {flag.legal_basis || "podstawa prawna do uzupełnienia"}
                   </OutlineChip>
                 </Tip>
-                <Tip label="Pewność modelu dla tej reguły">
-                  <OutlineChip>
+                <Tip label="Wynik naruszenia, porównywany z progiem flagi i alertu">
+                  <OutlineChip
+                    className={cn(
+                      ruleScore(flag) >= threshold.alert && "border-risk-700 text-risk-700",
+                    )}
+                  >
                     <Gauge className="size-3.5 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
-                    <span className="tnum">{fmtScore(flag.confidence)}</span>
+                    <span className="tnum">{fmtScore(ruleScore(flag))}</span>
+                    {ruleScore(flag) >= threshold.alert
+                      ? " · ponad alert"
+                      : ruleScore(flag) >= threshold.flag
+                        ? " · ponad próg"
+                        : " · poniżej progu"}
                   </OutlineChip>
                 </Tip>
                 {time !== null && detail.material.platform === "youtube" ? (

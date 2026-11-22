@@ -258,7 +258,7 @@ Wysyłany po zapisie wyniku, gdy score ≥ `alert` danego modułu.
 - `status`: `new` | `in_review` | `postponed` | `confirmed` | `dismissed`
 - `id` incydentu = id wyniku analizy (`analysis_results`), czyli para (materiał, moduł). Jeden materiał może dać do trzech incydentów.
 - `score`: z nim porównujemy próg. W M2 to najwyższy score reguły, więc wynik jest incydentem, gdy **którakolwiek** reguła ma score ≥ próg `flag`.
-- `risk_score`: priorytet do sortowania (M2: z ML; M1, M3 i starsze wyniki: równy `score`). Nie porównujemy go z progiem.
+- `risk_score`: priorytet do sortowania i liczba pokazywana analitykowi. Liczy go backend przy odczycie z `flags[].score` reguł, które przekraczają aktualny próg `flag` modułu: od najwyższego, `1 − (1 − s1)·(1 − s2·½)·(1 − s3·¼)·…`. Więcej wysokich naruszeń daje wyższy wynik (nigdy niższy niż najwyższe naruszenie), reguły poniżej progu się nie liczą, a zmiana suwaka od razu go zmienia. M1, M3 i wyniki bez score'ów reguł: równy `score`. `risk_score` z ML nie jest używany.
 
 ## Do zrobienia: różnice względem obecnego `main`
 
