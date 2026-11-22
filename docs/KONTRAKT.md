@@ -234,6 +234,7 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 **AI (`services/ml`)**
 - [ ] `POST /analyze` zwraca kształt z punktu 2: `findings[]` per reguła (`result`, `confidence`, `quote`, `reason`) oraz `label`, `probability`, `summary`. Wejście jak w punkcie 1 — jeden moduł i lista reguł na wywołanie.
 - [ ] `pnpm api:generate` w tym samym PR.
+- [ ] Wagi reguł M2 (`RULE_WEIGHTS` w `services/ml/src/ml/risk.py`): zdecydować, czy trenujemy je na oznaczonych fragmentach (regresja logistyczna, razem z kalibracją `confidence`), czy zostawiamy obecne, ustawione ręcznie (0,3 dla reguł 1 i 2, 1,0 dla pozostałych).
 - [ ] `POST /media/frames`: pobranie filmu z YouTube i wycięcie klatek (osobna warstwa, bez OCR), plan w [KLATKI.md](KLATKI.md).
 - [ ] M2 w `POST /analyze`: reguły 4, 5, 6, 13 z klatek filmu (OCR + Gemma w module M2), `findings[]` z `frame` (punkty 1–2).
 
