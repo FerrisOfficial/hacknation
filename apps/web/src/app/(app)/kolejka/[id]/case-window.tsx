@@ -12,7 +12,6 @@ import {
   Gauge,
   History,
   Link2,
-  RadioTower,
   Scale,
   TriangleAlert,
   Video,
@@ -25,7 +24,6 @@ import { PlatformLabel, StatusGlyph } from "@/components/iw/icons";
 import { RegistryChip } from "@/components/iw/registry";
 import { showDecisionToast } from "@/components/iw/toasts";
 import {
-  Avatar,
   Button,
   Card,
   Chip,
@@ -60,7 +58,6 @@ import {
   plural,
   reviewText,
   STATUS_LABEL,
-  shortName,
   statusLabelFor,
 } from "@/lib/client/format";
 import { useHotkeys } from "@/lib/client/hotkeys";
@@ -558,7 +555,7 @@ function WhyFlagged({
                         {flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}
                         {flag.legal_basis ? `: ${flag.legal_basis}` : ""}
                       </span>
-                      {legalSummaries(flag.legal_basis).map((text) => (
+                      {legalSummaries(flag.legal_basis, flag.rule_id).map((text) => (
                         <span key={text} className="text-white/85">
                           {text}
                         </span>
@@ -818,18 +815,7 @@ function HistoryCard({ detail, threshold }: { detail: UiDetail; threshold: Modul
                 <span className="tnum w-10 shrink-0 font-medium text-ink-900">
                   {fmtTime(entry.at)}
                 </span>
-                {entry.actor ? (
-                  <Avatar reviewer={entry.actor} />
-                ) : (
-                  <RadioTower
-                    className="size-4 shrink-0 text-ink-600"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                )}
-                <span>
-                  {entry.actor ? shortName(entry.actor) : "system"} · {entry.action}
-                </span>
+                <span>{entry.action}</span>
               </p>
             </li>
           );

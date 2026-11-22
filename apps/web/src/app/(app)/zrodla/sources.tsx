@@ -1,6 +1,15 @@
 "use client";
 
-import { Plus, RefreshCw, TriangleAlert } from "lucide-react";
+import {
+  CalendarClock,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  RefreshCw,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PlatformIcon } from "@/components/iw/icons";
@@ -17,13 +26,16 @@ import {
 import {
   type SourceItem,
   sourceHasError,
+  useDeleteSource,
+  useEngine,
   useRunSource,
+  useSetEngine,
   useSources,
   useUpdateSource,
 } from "@/lib/client/api";
-import { fmtRelative, hostOf, plural } from "@/lib/client/format";
+import { fmtDateTime, fmtRelative, hostOf, plural } from "@/lib/client/format";
 import { cn } from "@/lib/utils";
-import { AddSource, INTERVAL_OPTIONS } from "./add-source";
+import { INTERVAL_OPTIONS, Modal, SourceDialog } from "./add-source";
 
 // Harmonogram źródła do zmiany w miejscu (PATCH /api/sources/:id, intervalMinutes).
 function IntervalSelect({ source }: { source: SourceItem }) {
@@ -77,7 +89,15 @@ function describe(source: SourceItem): string {
 
 function State({ source }: { source: SourceItem }) {
   const job = source.lastJob;
-  if (!source.active) return <span className="text-ink-600">Wyłączone</span>;
+  if (!source.active) return <span className="text-ink-600">Wstrzymane</span>;
+  if (source.scheduledAt && new Date(source.scheduledAt).getTime() > Date.now()) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-ink-700">
+        <CalendarClock className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
+        zaplanowane na {fmtDateTime(source.scheduledAt)}
+      </span>
+    );
+  }
   if (sourceHasError(source) && job) {
     return (
       <span className="flex min-w-0 items-start gap-1.5 font-medium text-ink-900">
@@ -109,11 +129,110 @@ function State({ source }: { source: SourceItem }) {
   );
 }
 
+// Przełącznik „skanuj / wstrzymane” dla jednego źródła (PATCH active).
+function ActiveSwitch({ source }: { source: SourceItem }) {
+  const update = useUpdateSource();
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={source.active}
+      aria-label={`Skanowanie: ${source.name}`}
+      title={source.active ? "Wstrzymaj skanowanie tego źródła" : "Wznów skanowanie"}
+      disabled={update.isPending}
+      onClick={() =>
+        update.mutate(
+          { id: source.id, active: !source.active },
+          {
+            onSuccess: () =>
+              toast.success(`${source.active ? "Wstrzymano" : "Wznowiono"}: ${source.name}`),
+            onError: (error) => toast.error(error.message),
+          },
+        )
+      }
+      className={cn(
+        "focus-visible:focus-ring relative h-5 w-9 shrink-0 rounded-full transition-colors duration-150",
+        source.active ? "bg-primary-700" : "bg-line-300",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform duration-150",
+          source.active && "translate-x-4",
+        )}
+      />
+    </button>
+  );
+}
+
+function IconAction({
+  label,
+  onClick,
+  children,
+  danger,
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <Tip label={label}>
+      <button
+        type="button"
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+        className={cn(
+          "focus-visible:focus-ring inline-flex size-8 items-center justify-center rounded-md text-ink-600 hover:bg-surface-hover disabled:opacity-40",
+          danger ? "hover:text-risk-700" : "hover:text-ink-900",
+        )}
+      >
+        {children}
+      </button>
+    </Tip>
+  );
+}
+
+// Wyłącznik całego silnika: stoi harmonogram wszystkich źródeł.
+function EngineToggle() {
+  const engine = useEngine();
+  const set = useSetEngine();
+  const paused = engine.data?.paused ?? false;
+  return (
+    <Button
+      variant={paused ? "primary" : "secondary"}
+      disabled={!engine.data || set.isPending}
+      icon={
+        paused ? (
+          <Play className="size-4" strokeWidth={1.5} aria-hidden="true" />
+        ) : (
+          <Pause className="size-4" strokeWidth={1.5} aria-hidden="true" />
+        )
+      }
+      onClick={() =>
+        set.mutate(!paused, {
+          onSuccess: (data) =>
+            toast.success(data.paused ? "Skanowanie wstrzymane" : "Skanowanie wznowione"),
+          onError: (error) => toast.error(error.message),
+        })
+      }
+    >
+      {paused ? "Wznów skanowanie" : "Wstrzymaj skanowanie"}
+    </Button>
+  );
+}
+
 // Źródła (Z1, R9): stan pobierania i Ponów. Konfiguracja techniczna jest poza produktem.
 export function Sources() {
   const sources = useSources();
   const run = useRunSource();
-  const [adding, setAdding] = useState(false);
+  const remove = useDeleteSource();
+  const engine = useEngine();
+  const [dialog, setDialog] = useState<{ source: SourceItem | null } | null>(null);
+  const [deleting, setDeleting] = useState<SourceItem | null>(null);
   const items = sources.data?.items ?? [];
   const failed = items.filter(sourceHasError).length;
   const active = items.filter((source) => source.active).length;
@@ -124,18 +243,62 @@ export function Sources() {
         title="Źródła"
         description="System pobiera źródła według harmonogramu. Tu dodasz źródło, zmienisz, jak często je skanować, i ponowisz pobranie."
         actions={
-          adding ? undefined : (
+          <div className="flex gap-2">
+            <EngineToggle />
             <Button
               variant="primary"
               icon={<Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />}
-              onClick={() => setAdding(true)}
+              onClick={() => setDialog({ source: null })}
             >
-              Dodaj źródło
+              Nowe źródło
             </Button>
-          )
+          </div>
         }
       />
-      <AddSource open={adding} setOpen={setAdding} />
+      {engine.data?.paused ? (
+        <p className="flex items-center gap-2 rounded-md bg-warning-100 px-3 py-2 text-[13px] text-warning-800">
+          <Pause className="size-4" strokeWidth={1.5} aria-hidden="true" />
+          Skanowanie wstrzymane: harmonogram nie pobiera żadnego źródła. „Pobierz teraz” działa
+          dalej.
+        </p>
+      ) : null}
+      <SourceDialog
+        open={dialog !== null}
+        source={dialog?.source ?? null}
+        onClose={() => setDialog(null)}
+      />
+      <Modal
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Usunąć źródło?"
+        width="w-[440px]"
+      >
+        <p className="text-ink-700 text-sm">
+          „{deleting?.name}” przestanie być skanowane, a jego historia pobrań zniknie. Zebrane
+          materiały i decyzje zostają.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={() => setDeleting(null)}>Anuluj</Button>
+          <Button
+            variant="primary"
+            className="bg-risk-700 hover:bg-risk-700/90"
+            disabled={remove.isPending}
+            onClick={() => {
+              if (!deleting) return;
+              const name = deleting.name;
+              remove.mutate(deleting.id, {
+                onSuccess: () => {
+                  toast.success(`Usunięto: ${name}`);
+                  setDeleting(null);
+                },
+                onError: (error) => toast.error(error.message),
+              });
+            }}
+          >
+            Usuń źródło
+          </Button>
+        </div>
+      </Modal>
       {sources.data ? (
         <div className="flex gap-2">
           <Chip>
@@ -154,7 +317,7 @@ export function Sources() {
         <Skeleton className="h-60 w-full" />
       ) : items.length === 0 ? (
         <EmptyState illustration="systemy-inf" title="Brak źródeł">
-          Dodaj pierwsze źródło przyciskiem „Dodaj źródło”.
+          Dodaj pierwsze źródło przyciskiem „Nowe źródło”.
         </EmptyState>
       ) : (
         <Card className="overflow-hidden">
@@ -165,7 +328,10 @@ export function Sources() {
                 <th className="px-4 py-2.5 text-right font-medium">Materiały</th>
                 <th className="px-4 py-2.5 text-right font-medium">Co ile</th>
                 <th className="px-4 py-2.5 font-medium">Stan</th>
-                <th className="w-28 px-4 py-2.5">
+                <th className="w-12 px-2 py-2.5">
+                  <span className="sr-only">Skanowanie</span>
+                </th>
+                <th className="w-36 px-4 py-2.5">
                   <span className="sr-only">Akcje</span>
                 </th>
               </tr>
@@ -176,7 +342,12 @@ export function Sources() {
                 return (
                   <tr
                     key={source.id}
-                    className={cn("group hover:bg-surface-hover", error && "bg-surface-1")}
+                    className={cn(
+                      "group hover:bg-surface-hover",
+                      error && "bg-surface-1",
+                      !source.active &&
+                        "text-ink-600 [&_td:not(:last-child):not(:nth-last-child(2))]:opacity-60",
+                    )}
                   >
                     <td className="max-w-[360px] px-4 py-3">
                       <span className="flex items-center gap-2 truncate font-medium text-ink-900">
@@ -204,23 +375,36 @@ export function Sources() {
                         <State source={source} />
                       </Tip>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        icon={<RefreshCw className="size-4" strokeWidth={1.5} aria-hidden="true" />}
-                        className={cn(
-                          !error &&
-                            "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
-                        )}
-                        disabled={run.isPending || !source.active}
-                        onClick={() =>
-                          run.mutate(source.id, {
-                            onSuccess: () => toast.success(`Ponowiono pobieranie: ${source.name}`),
-                            onError: (failure) => toast.error(failure.message),
-                          })
-                        }
-                      >
-                        {run.isPending && run.variables === source.id ? "Ponawiam…" : "Ponów"}
-                      </Button>
+                    <td className="px-2 py-3">
+                      <ActiveSwitch source={source} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="flex justify-end gap-0.5">
+                        <IconAction
+                          label="Pobierz teraz"
+                          disabled={run.isPending || !source.active}
+                          onClick={() =>
+                            run.mutate(source.id, {
+                              onSuccess: () => toast.success(`Pobieram: ${source.name}`),
+                              onError: (failure) => toast.error(failure.message),
+                            })
+                          }
+                        >
+                          <RefreshCw
+                            className={cn(
+                              "size-4",
+                              run.isPending && run.variables === source.id && "animate-spin",
+                            )}
+                            strokeWidth={1.5}
+                          />
+                        </IconAction>
+                        <IconAction label="Edytuj i zaplanuj" onClick={() => setDialog({ source })}>
+                          <Pencil className="size-4" strokeWidth={1.5} />
+                        </IconAction>
+                        <IconAction label="Usuń źródło" danger onClick={() => setDeleting(source)}>
+                          <Trash2 className="size-4" strokeWidth={1.5} />
+                        </IconAction>
+                      </span>
                     </td>
                   </tr>
                 );
@@ -230,9 +414,7 @@ export function Sources() {
         </Card>
       )}
       {failed === 0 && items.length > 0 ? (
-        <p className="text-[13px] text-ink-600">
-          Wszystkie źródła działają. Ponów pojawia się po najechaniu na wiersz.
-        </p>
+        <p className="text-[13px] text-ink-600">Wszystkie aktywne źródła działają.</p>
       ) : null}
     </div>
   );

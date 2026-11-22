@@ -197,7 +197,7 @@ function Nav({ onToggle }: { onToggle: () => void }) {
           onClick={onToggle}
           aria-label={collapsed ? "Rozwiń pasek" : "Zwiń pasek"}
           title={collapsed ? "Rozwiń pasek" : "Zwiń pasek"}
-          className="focus-ring flex size-8 items-center justify-center rounded-md text-ink-600 hover:bg-surface-hover hover:text-ink-900"
+          className="focus-visible:focus-ring flex size-8 items-center justify-center rounded-md text-ink-600 hover:bg-surface-hover hover:text-ink-900"
         >
           {collapsed ? (
             <PanelLeftOpen className="size-4" strokeWidth={1.5} />

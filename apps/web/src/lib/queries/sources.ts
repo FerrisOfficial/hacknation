@@ -25,7 +25,10 @@ export type SourceView = Source & {
 };
 
 function nextRunAt(source: Source): Date | null {
-  if (!source.active || source.intervalMinutes === null) return null;
+  if (!source.active) return null;
+  const now = Date.now();
+  if (source.scheduledAt && source.scheduledAt.getTime() > now) return source.scheduledAt;
+  if (source.intervalMinutes === null) return null;
   if (!source.lastScrapedAt) return new Date();
   return new Date(source.lastScrapedAt.getTime() + source.intervalMinutes * 60_000);
 }

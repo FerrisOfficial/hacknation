@@ -96,6 +96,9 @@ export const sources = pgTable(
     // Co ile minut harmonogram scrapuje źródło ponownie. null = tylko ręcznie.
     intervalMinutes: integer("interval_minutes"),
     lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
+    // Zaplanowane pobranie: harmonogram nie rusza źródła przed tą chwilą, a o tej chwili pobiera
+    // je raz (także przy „tylko ręcznie”). null = bez planu.
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -246,6 +249,13 @@ export const moduleSettings = pgTable("module_settings", {
   module: analysisModule("module").primaryKey(),
   threshold: real("threshold").notNull(),
   alertThreshold: real("alert_threshold"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Ustawienia całej aplikacji (klucz → wartość). Np. `scrape_paused`: harmonogram stoi.
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

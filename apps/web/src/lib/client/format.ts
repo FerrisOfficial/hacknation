@@ -189,12 +189,10 @@ export function reviewText(review: {
 }): string {
   const label = STATUS_LABEL[review.status];
   if (!review.reviewed_by && !review.reviewed_at) return label;
-  const who = review.reviewed_by ? shortName(review.reviewed_by) : null;
+  // Bez nazwiska osoby: interfejs nie pokazuje, kto podjął decyzję (decyzja z 22.11).
   const when = review.reviewed_at ? fmtDateTime(review.reviewed_at) : null;
-  if (review.status === "in_review") {
-    return [label, [who, when ? `od ${when}` : null].filter(Boolean).join(" ")].join(", ");
-  }
-  return [label, [who, when].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
+  if (!when) return label;
+  return review.status === "in_review" ? `${label} od ${when}` : `${label} · ${when}`;
 }
 
 // Moduł 1 rozstrzyga „czy to reklama”, nie „czy to naruszenie” (R18): własne słowa statusów.

@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { PlatformLabel, StatusGlyph } from "@/components/iw/icons";
 import { RegistryChip } from "@/components/iw/registry";
 import {
-  Avatar,
   Card,
   EmptyState,
   ErrorNote,
@@ -33,7 +32,6 @@ import {
   plural,
   reviewText,
   STATUS_LABEL,
-  shortName,
 } from "@/lib/client/format";
 import { entityName, materialTitle } from "@/lib/client/queue";
 import { cn } from "@/lib/utils";
@@ -123,7 +121,6 @@ function MaterialCard({ item }: { item: UiListItem }) {
           oflagowano {fmtDateTime(item.created_at)} · {hostOf(item.url)}
         </span>
         <span className="flex items-center gap-2 text-[13px] text-ink-700">
-          {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
           {reviewText(item)}
           {item.review_note ? `: ${item.review_note}` : ""}
         </span>
@@ -299,12 +296,11 @@ export function Entity() {
                   <ul className="mt-2 flex flex-col gap-2 text-[13px] text-ink-700">
                     {decisions.map((item) => (
                       <li key={item.id} className="flex items-start gap-2">
-                        {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
                         <span>
                           <span className="tnum">
                             {fmtDateTime(item.reviewed_at ?? item.created_at)}
                           </span>
-                          {item.reviewed_by ? ` · ${shortName(item.reviewed_by)}` : ""} ·{" "}
+                          {" · "}
                           {STATUS_LABEL[item.status]}
                           {item.review_note ? `: ${item.review_note}` : ""}
                         </span>

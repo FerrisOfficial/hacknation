@@ -23,7 +23,6 @@ import { toast } from "sonner";
 import { PlatformLabel } from "@/components/iw/icons";
 import { RegistryChip } from "@/components/iw/registry";
 import {
-  Avatar,
   Button,
   EmptyState,
   ErrorNote,
@@ -165,9 +164,6 @@ function Row({
         aria-hidden="true"
         className="flex shrink-0 items-center gap-4 self-stretch py-2 pr-4 pl-3"
       >
-        <span className="flex w-5 justify-center">
-          {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
-        </span>
         {item.related_modules?.map((other) => (
           <Tip
             key={other}

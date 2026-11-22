@@ -57,6 +57,13 @@
       "when": 1795308805050,
       "tag": "0007_gorgeous_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795326382661,
+      "tag": "0008_chief_psynapse",
+      "breakpoints": true
     }
   ]
 }

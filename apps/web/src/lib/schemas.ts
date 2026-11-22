@@ -34,6 +34,8 @@ const sourceCommon = {
   active: z.boolean().default(true),
   // Od razu dodaj zadanie scrapingu do kolejki.
   runNow: z.boolean().default(true),
+  // Zaplanowane pierwsze pobranie (ISO 8601).
+  scheduledAt: z.iso.datetime({ offset: true }).optional(),
 };
 
 export const sourceCreateSchema = z.discriminatedUnion("kind", [
@@ -61,6 +63,11 @@ export const sourceUpdateSchema = z
     name: z.string().trim().min(1).max(200),
     active: z.boolean(),
     intervalMinutes,
+    // Zaplanowane pobranie (ISO 8601) albo null = bez planu.
+    scheduledAt: z.iso.datetime({ offset: true }).nullable(),
+    // Nowa fraza (źródło „fraza w YouTube”) albo nowy adres (strona WWW).
+    query: z.string().trim().min(2, "Fraza musi mieć co najmniej 2 znaki").max(200),
+    url: httpUrl,
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: "Brak pól do zmiany" });
@@ -77,6 +84,8 @@ export const sourceAddFormSchema = z
     target: z.string().trim().min(2, "Wpisz frazę albo adres (min. 2 znaki)").max(2000),
     name: z.string().trim().max(200),
     interval: z.enum(SOURCE_INTERVALS),
+    // Wartość pola datetime-local ("" = bez planu, pobierz od razu).
+    scheduledAt: z.string(),
   })
   .superRefine((value, ctx) => {
     if (value.kind === "web_page" && !httpUrl.safeParse(value.target).success) {
@@ -89,9 +98,26 @@ export type SourceAddForm = z.infer<typeof sourceAddFormSchema>;
 export function sourceAddToCreate(form: SourceAddForm): SourceCreateInput {
   const intervalMinutes = form.interval === "manual" ? null : Number(form.interval);
   const name = form.name || undefined;
+  const scheduledAt = localToIso(form.scheduledAt);
+  const common = { name, intervalMinutes, runNow: !scheduledAt, scheduledAt };
   return form.kind === "web_page"
-    ? { kind: "web_page", url: form.target, platform: "web", name, intervalMinutes, runNow: true }
-    : { kind: "youtube_search", query: form.target, name, intervalMinutes, runNow: true };
+    ? { kind: "web_page", url: form.target, platform: "web", ...common }
+    : { kind: "youtube_search", query: form.target, ...common };
+}
+
+// "2026-11-22T14:30" z pola datetime-local → ISO z czasem UTC; "" → undefined.
+export function localToIso(value: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+// Odwrotnie: ISO → wartość pola datetime-local w strefie przeglądarki.
+export function isoToLocal(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 // ─── Wyniki, alerty, kalibracja ─────────────────────────────────────────────────────────────
