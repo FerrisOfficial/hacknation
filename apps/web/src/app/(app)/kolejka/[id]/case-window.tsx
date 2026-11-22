@@ -238,6 +238,66 @@ function FrameShot({
   );
 }
 
+// ID filmu z adresu YouTube (watch?v=, youtu.be/, shorts/, embed/, live/) albo null.
+function youtubeId(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.replace(/^(www\.|m\.)/, "");
+  let id: string | null = null;
+  if (host === "youtu.be") id = parsed.pathname.split("/")[1] ?? null;
+  else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+    const [, kind, value] = parsed.pathname.split("/");
+    id = kind === "watch" ? parsed.searchParams.get("v") : (value ?? null);
+    if (kind && !["watch", "shorts", "embed", "live"].includes(kind)) id = null;
+  }
+  return id && /^[\w-]{11}$/.test(id) ? id : null;
+}
+
+const YOUTUBE_ORIGIN = "https://www.youtube-nocookie.com";
+
+// Odtwarzacz YouTube, gdy filmu nie ma jeszcze lokalnie. Ładuje się z serwerów YouTube,
+// więc bez internetu zostaje link do oryginału. Przewijanie przez IFrame API (postMessage).
+function YouTubeEmbed({
+  videoId,
+  start,
+  seek,
+  title,
+}: {
+  videoId: string;
+  start: number | null;
+  seek: { t: number; n: number } | null;
+  title: string;
+}) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const query = new URLSearchParams({ enablejsapi: "1", rel: "0" });
+  if (start !== null) query.set("start", String(Math.floor(start)));
+
+  useEffect(() => {
+    const player = ref.current?.contentWindow;
+    if (!player || !seek) return;
+    const command = (func: string, args: unknown[] = []) =>
+      player.postMessage(JSON.stringify({ event: "command", func, args }), YOUTUBE_ORIGIN);
+    command("seekTo", [seek.t, true]);
+    command("playVideo");
+  }, [seek]);
+
+  return (
+    <iframe
+      ref={ref}
+      title={title}
+      src={`${YOUTUBE_ORIGIN}/embed/${videoId}?${query}`}
+      allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+      allowFullScreen
+      referrerPolicy="strict-origin-when-cross-origin"
+      className="aspect-video w-full rounded-md bg-ink-900"
+    />
+  );
+}
+
 function VideoPanel({
   detail,
   seek,
@@ -257,6 +317,8 @@ function VideoPanel({
   );
   const first = violations.map(evidenceTime).find((value) => value !== null) ?? null;
   const frames = violations.filter((flag) => flag.evidence?.frame);
+  const embedId = detail.material.has_video ? null : youtubeId(detail.material.url);
+  const youtubeHref = `${detail.material.url}${first !== null ? `&t=${Math.floor(first)}s` : ""}`;
 
   useEffect(() => {
     const video = ref.current;
@@ -281,6 +343,27 @@ function VideoPanel({
           }}
           className="aspect-video w-full rounded-md bg-ink-900"
         />
+      ) : embedId ? (
+        <>
+          <YouTubeEmbed
+            videoId={embedId}
+            start={first}
+            seek={seek}
+            title={detail.material.title ?? "Film z YouTube"}
+          />
+          <p className="flex flex-wrap items-center gap-x-2 text-[13px] text-ink-600">
+            Odtwarzacz YouTube: filmu nie ma jeszcze w kopii, wymaga internetu.
+            <a
+              href={youtubeHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-primary-700 hover:underline"
+            >
+              Otwórz w YouTube
+              <ExternalLink className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            </a>
+          </p>
+        </>
       ) : (
         <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-md bg-surface-1 px-6 py-8 text-center">
           <span className="flex size-10 items-center justify-center rounded-full border border-line-300 bg-surface-0">
@@ -290,7 +373,7 @@ function VideoPanel({
             Film nie jest jeszcze pobrany. Transkrypcja jest niżej, a oryginał otworzysz w YouTube.
           </p>
           <a
-            href={`${detail.material.url}${first !== null ? `&t=${Math.floor(first)}s` : ""}`}
+            href={youtubeHref}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 font-medium text-[13px] text-primary-700 hover:underline"
