@@ -184,16 +184,28 @@ export function moduleRules(module: AnalysisModule): Rule[] {
 // `rules` w wejściu modelu (§1): reguły modułu, które da się ocenić z tekstu.
 // Reguły wizualne M2 oceniane z klatek filmu (docs/KLATKI.md). Wysyłamy je, gdy serwis media
 // pobrał film i wyciął klatki (`metadata.frames.status = "done"`) — docs/KONTRAKT.md §1.
-export const FRAME_RULE_IDS = ["4", "5", "6", "13"] as const;
+export const FRAME_RULE_IDS = ["4", "5", "6", "8", "13"] as const;
+
+// Reguły M2 dla filmu YouTube z częściami w wejściu (`video`): 7 — czy ostrzeżenie widać bez
+// rozwijania opisu. Z klatkami serwis ML sprawdza też ostrzeżenie w kadrze.
+export const VIDEO_RULE_IDS = ["7"] as const;
+
+// Reguły M2 dla strony WWW z zapisanym HTML-em w wejściu (`page`): serwis ML renderuje ją
+// w Chromium na komputerze, tablecie i telefonie (7 — ostrzeżenie schowane, 8 — czytelność).
+export const PAGE_RULE_IDS = ["7", "8"] as const;
 
 export function requestedRuleIds(
   module: AnalysisModule,
-  options: { frames?: boolean } = {},
+  options: { frames?: boolean; video?: boolean; page?: boolean } = {},
 ): string[] {
   const ids = moduleRules(module)
     .filter((r) => r.textual)
     .map((r) => r.id);
-  if (options.frames && module === "risk_disclosure") ids.push(...FRAME_RULE_IDS);
+  if (module === "risk_disclosure") {
+    if (options.video) ids.push(...VIDEO_RULE_IDS);
+    if (options.page) ids.push(...PAGE_RULE_IDS);
+    if (options.frames) ids.push(...FRAME_RULE_IDS);
+  }
   return [...new Set(ids)];
 }
 

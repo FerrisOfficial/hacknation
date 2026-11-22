@@ -1,4 +1,4 @@
-"""Moduł 2, reguły wizualne z klatek filmu (4, 5, 6, 13). OCR + pomiary pikseli, bez LLM.
+"""Moduł 2, reguły wizualne z klatek filmu (4, 5, 6, 8, 13). OCR + pomiary pikseli, bez LLM.
 
 Jedno przejście OCR po klatkach materiału daje linie tekstu z pomiarami, a z nich reguły:
 - 4  rozmiar czcionki ryzyka: wysokość linii ostrzeżenia / mediana wysokości pozostałych linii
@@ -7,6 +7,9 @@ Jedno przejście OCR po klatkach materiału daje linie tekstu z pomiarami, a z n
      (3:1 dla dużego tekstu),
 - 6  ukrywanie ostrzeżenia: tylko w pasku przy górnej/dolnej krawędzi kadru albo na ekranie
      krócej, niż trwa jego przeczytanie (3 słowa na sekundę),
+- 8  responsywność: wysokość linii ostrzeżenia w pikselach CSS po przeskalowaniu filmu do
+     odtwarzacza na telefonie, tablecie i komputerze; naruszenie, gdy na którymś ekranie
+     najczytelniejsza linia ostrzeżenia ma mniej niż 9 px,
 - 13 dominacja wyników historycznych: linia z wynikiem historycznym ma najwyższą ekspozycję
      w klatce. Ekspozycja = wysokość x kontrast x położenie x (1 + 3 * udział w mapie uwagi).
 
@@ -36,7 +39,7 @@ from ml.risk import _FEATURES, Finding
 if TYPE_CHECKING:
     from rapidocr import RapidOCR
 
-VISUAL_RULES: tuple[str, ...] = ("4", "5", "6", "13")
+VISUAL_RULES: tuple[str, ...] = ("4", "5", "6", "8", "13")
 
 FONT_RATIO_MIN = 0.6  # reguła 4
 CONTRAST_MIN = 4.5  # reguła 5, tekst zwykły
@@ -51,6 +54,16 @@ SALIENCY_GAIN = 3.0
 OCR_MIN_SCORE = 0.5
 QUOTE_MAX = 300
 DEFAULT_FRAME_SECONDS = 1.0  # gdy manifest nie podaje `until`
+DEFAULT_ASPECT = 16 / 9  # szerokość / wysokość klatki, gdy jej nie znamy
+# Reguła 8: odtwarzacz YouTube w widoku domyślnym (bez pełnego ekranu) — szerokość i maksymalna
+# wysokość obszaru filmu w pikselach CSS. Film skaluje się proporcjonalnie, aż trafi na któryś bok.
+DEVICES: tuple[tuple[str, float, float], ...] = (
+    ("telefon", 375, 812),
+    ("tablet", 768, 1024),
+    ("komputer", 854, 480),
+)
+# Wysokość ramki OCR linii (≈ rozmiar czcionki) w px CSS, poniżej której tekst jest nieczytelny.
+READABLE_MIN_PX = 9.0
 
 # OCR potrafi zamienić polskie litery na podobne z innych alfabetów łacińskich.
 _PL_FIX = str.maketrans({"ž": "ż", "Ž": "Ż", "š": "ś", "Š": "Ś", "č": "ć", "Č": "Ć"})
@@ -96,6 +109,11 @@ class TextLine:
 class FrameText:
     ref: FrameRef
     lines: list[TextLine]
+    aspect: float = DEFAULT_ASPECT  # szerokość / wysokość klatki
+
+    def displayed_height(self, width: float, max_height: float) -> float:
+        """Wysokość filmu w px CSS w odtwarzaczu o szerokości `width` i wysokości `max_height`."""
+        return min(width / self.aspect, max_height)
 
 
 # ─── OCR i pomiary ──────────────────────────────────────────────────────────────────────────
@@ -273,6 +291,32 @@ def _rule_6(warnings: Warnings) -> Finding:
     return _finding("6", bool(problems), confidence, frame.ref, line, reason)
 
 
+def _rule_8(warnings: Warnings) -> Finding:
+    def smallest_px(item: tuple[FrameText, TextLine]) -> float:
+        frame, line = item
+        return min(line.height * frame.displayed_height(w, h) for _, w, h in DEVICES)
+
+    # Najczytelniejsza linia ostrzeżenia: jeśli ona jest za mała, każda inna też.
+    frame, warning = max(warnings, key=smallest_px)
+    sizes = [(name, warning.height * frame.displayed_height(w, h)) for name, w, h in DEVICES]
+    too_small = [name for name, px in sizes if px < READABLE_MIN_PX]
+    listed = ", ".join(f"{name} {px:.0f} px" for name, px in sizes)
+    if too_small:
+        reason = (
+            f"Ostrzeżenie (klatka {_ts(frame.ref.ts)}) po przeskalowaniu filmu jest nieczytelne "
+            f"na ekranie: {', '.join(too_small)}. Wysokość tekstu: {listed} "
+            f"(minimum {READABLE_MIN_PX:g} px)."
+        )
+    else:
+        reason = (
+            f"Ostrzeżenie (klatka {_ts(frame.ref.ts)}) czytelne na wszystkich ekranach. "
+            f"Wysokość tekstu: {listed} (minimum {READABLE_MIN_PX:g} px)."
+        )
+    smallest = min(px for _, px in sizes)
+    confidence = _confidence(smallest - READABLE_MIN_PX, READABLE_MIN_PX / 2)
+    return _finding("8", bool(too_small), confidence, frame.ref, warning, reason)
+
+
 def _rule_13(frames: list[FrameText]) -> Finding:
     best: tuple[float, FrameRef, TextLine, TextLine | None] | None = None
     for frame in frames:
@@ -314,16 +358,40 @@ _WARNING_RULES: dict[str, Callable[[Warnings], Finding]] = {
     "4": _rule_4,
     "5": _rule_5,
     "6": _rule_6,
+    "8": _rule_8,
 }
 
 
+def read_frames(frames: list[tuple[FrameRef, np.ndarray]]) -> list[FrameText]:
+    """Jedno przejście OCR po klatkach materiału (dla reguł wizualnych i reguły 7)."""
+    texts: list[FrameText] = []
+    for ref, image in frames:
+        h, w = image.shape[:2]
+        texts.append(FrameText(ref, read_lines(image), w / h if h else DEFAULT_ASPECT))
+    return texts
+
+
+def warning_lines(texts: list[FrameText]) -> Warnings:
+    """Linie z wyraźnym ostrzeżeniem o ryzyku ze wszystkich klatek."""
+    return [(frame, line) for frame in texts for line in frame.lines if is_warning(line.text)]
+
+
+def frame_of(frame: FrameText, line: TextLine) -> dict[str, Any]:
+    """Klatka i ramka linii jako `Finding.frame` (dowód z klatki, KONTRAKT.md §2)."""
+    return _frame(frame.ref, line)
+
+
 def evaluate_frames(frames: list[tuple[FrameRef, np.ndarray]]) -> list[Finding]:
-    """Reguły 4, 5, 6, 13 dla klatek jednego materiału (jedno przejście OCR)."""
-    if not frames:
+    """Reguły 4, 5, 6, 8, 13 dla klatek jednego materiału (jedno przejście OCR)."""
+    return evaluate_texts(read_frames(frames))
+
+
+def evaluate_texts(texts: list[FrameText]) -> list[Finding]:
+    """Reguły 4, 5, 6, 8, 13 z tekstu klatek odczytanego przez `read_frames`."""
+    if not texts:
         reason = "Brak klatek filmu: reguła wymaga obrazu."
         return [Finding(rule, "n/a", 0.0, None, reason) for rule in VISUAL_RULES]
-    texts = [FrameText(ref, read_lines(image)) for ref, image in frames]
-    warnings = [(frame, line) for frame in texts for line in frame.lines if is_warning(line.text)]
+    warnings = warning_lines(texts)
     findings: list[Finding] = []
     for rule, evaluate in _WARNING_RULES.items():
         if warnings:

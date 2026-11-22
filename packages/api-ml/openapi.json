@@ -436,6 +436,29 @@
         ],
         "title": "AnalysisSubject"
       },
+      "AnalyzePage": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "format": "uri",
+            "title": "Url",
+            "description": "Adres strony (baza dla względnych arkuszy CSS)."
+          },
+          "html": {
+            "type": "string",
+            "maxLength": 6000000,
+            "title": "Html",
+            "description": "Surowy HTML z dnia scrapingu."
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "html"
+        ],
+        "title": "AnalyzePage"
+      },
       "AnalyzeRequest": {
         "properties": {
           "material_id": {
@@ -466,6 +489,28 @@
             "type": "array",
             "title": "Rules",
             "description": "Reguły do oceny; pusta lista = wszystkie reguły modułu."
+          },
+          "video": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalyzeVideo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "M2, reguła 7: części filmu YouTube (tytuł, opis, transkrypcja) osobno."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalyzePage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "M2, reguły 7 i 8 dla strony WWW: HTML renderowany w Chromium (bez JS)."
           }
         },
         "type": "object",
@@ -607,6 +652,37 @@
           "findings"
         ],
         "title": "AnalyzeResponse"
+      },
+      "AnalyzeVideo": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Title",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 20000,
+            "title": "Description",
+            "default": ""
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript",
+            "description": "Tekst transkrypcji; null = film bez transkrypcji."
+          }
+        },
+        "type": "object",
+        "title": "AnalyzeVideo"
       },
       "FindingFrame": {
         "properties": {

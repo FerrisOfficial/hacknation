@@ -69,7 +69,7 @@ Co backend dokłada do wyjścia modelu (`lib/pipeline/analyze.ts` → `lib/analy
 
 | Pole | Skąd | Plik |
 |---|---|---|
-| `rules` w wejściu | reguły modułu oceniane z tekstu (M2 bez reguł wizualnych 4–8 i 13) | `lib/analysis/rules.ts` |
+| `rules` w wejściu | reguły modułu oceniane z tekstu; M2 dla filmu YouTube także 7 (z `video`), z klatkami 4, 5, 6, 8, 13; dla strony WWW z zapisanym HTML-em 7 i 8 (z `page`) | `lib/analysis/rules.ts` |
 | `rule_name`, `legal_basis`, `kind` | katalog reguł; reguły spoza katalogu modułu i duplikaty są odrzucane | `lib/analysis/rules.ts` |
 | `evidence.quote`, `start`, `end` | cytat szukany w `materials.text` dosłownie, potem bez różnic w wielkości liter, białych znakach, cudzysłowach i myślnikach; `quote` = dokładny fragment tekstu; `evidence = null`, gdy nie znaleziono | `lib/analysis/evidence.ts` |
 | `evidence.timestamp_s` | segment napisów filmu (`metadata.transcript.segments`), w którym zaczyna się cytat; `null` dla cytatu z tytułu albo opisu | `lib/analysis/evidence.ts` |

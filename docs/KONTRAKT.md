@@ -6,7 +6,7 @@ Przy sprzeczności z [BACKEND.md](BACKEND.md) wygrywa ten plik. Endpointy, któr
 
 ## Kto co dostarcza
 
-- **AI** (`services/ml`): `result`, `confidence`, `quote`, `reason` dla każdej reguły oraz `label`, `probability` i `summary` dla materiału — w modułach 2 i 3. W regułach wizualnych M2 (4, 5, 6, 13, z klatek filmu) także `frame` (klatka i ramka cytatu). **Moduł 1 nie używa AI**: backend liczy go regułami (firma z rejestru KNF w linkach materiału + sygnały reklamy), szczegóły w [BACKEND.md](BACKEND.md#modu%C5%82-1-bez-ai).
+- **AI** (`services/ml`): `result`, `confidence`, `quote`, `reason` dla każdej reguły oraz `label`, `probability` i `summary` dla materiału — w modułach 2 i 3. W regułach wizualnych M2 (4, 5, 6, 8, 13, z klatek filmu) także `frame` (klatka i ramka cytatu). **Moduł 1 nie używa AI**: backend liczy go regułami (firma z rejestru KNF w linkach materiału + sygnały reklamy), szczegóły w [BACKEND.md](BACKEND.md#modu%C5%82-1-bez-ai).
 - **Backend** (`apps/web/src/app/api`): wszystko pozostałe — pozycje cytatu (`start`, `end`), `timestamp_s`, `link`, dane z katalogu reguł (`rule_name`, `legal_basis`, `kind`), dane z rejestru KNF, `score`, endpointy, progi i alert.
 - **UI**: korzysta tylko z punktów 4–10.
 
@@ -27,13 +27,22 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
   "material_id": "uuid",
   "module": "risk_disclosure",
   "text": "materials.text",
-  "rules": ["1", "3", "10", "14", "15", "17", "18"]
+  "rules": ["1", "3", "7", "10", "14", "15", "17", "18"],
+  "video": { "title": "…", "description": "…", "transcript": "… albo null" }
 }
 ```
 
 `module`: `risk_disclosure` | `unauthorized_advisory` (M1 liczy backend bez modelu). W M3 `rules` = `["M3.advisory", "M3.offer", "M3.recommendation", "M3.personal", "M3.paid", "M3.claims", "M3.disclaimer"]` (werdykt i przesłanki doradztwa); `M3.license` (zezwolenie KNF) dokłada backend.
 
-Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym samym `POST /analyze`: backend dodaje je do `rules`, gdy materiał ma wycięte klatki (`materials.metadata.frames.status = "done"`). Klatki serwis ML czyta z dysku po `material_id`, kształt wejścia się nie zmienia. Bez klatek te reguły dostają `n/a`. Stan i plan: [KLATKI.md](KLATKI.md).
+Reguły wizualne M2 (4, 5, 6, 8, 13) dla filmów ocenia ten sam moduł M2 w tym samym `POST /analyze`: backend dodaje je do `rules`, gdy materiał ma wycięte klatki (`materials.metadata.frames.status = "done"`). Klatki serwis ML czyta z dysku po `material_id`. Bez klatek te reguły dostają `n/a`.
+
+`video` (opcjonalne, tylko M2 dla filmu YouTube): tytuł, opis i transkrypcja osobno, bo `text` skleja je w jeden tekst. Z nim backend dodaje do `rules` regułę 7: naruszenie, gdy ostrzeżenie o ryzyku jest tylko w opisie za „…więcej” (po pierwszych 150 znakach), a nie ma go w kadrze (OCR klatek), w transkrypcji ani w tytule. Bez transkrypcji i bez klatek reguła 7 daje `n/a`. Stan i plan: [KLATKI.md](KLATKI.md).
+
+`page` (opcjonalne, tylko M2 dla strony WWW z zapisanym HTML-em): `{ "url": "…", "html": "…" }` — surowy HTML z dnia scrapingu (baza treści, do 6 mln znaków). Z nim backend dodaje do `rules` reguły 7 i 8, a serwis ML renderuje HTML w Chromium (Playwright, bez JavaScriptu) na komputerze 1280×800, tablecie 768×1024 i telefonie 375×812 (`services/ml/src/ml/risk_web.py`):
+
+- **7:** naruszenie, gdy ostrzeżenie jest w HTML-u, ale schowane (zamknięty `<details>`, atrybut `hidden`, `display:none`, blok o wysokości 0), albo gdy strona ma tylko link do ostrzeżenia na innej stronie. Ostrzeżenie w tekście ze scrapingu, którego nie ma w renderze (strona budowana skryptami): `n/a`.
+- **8:** naruszenie, gdy na którymś ekranie ostrzeżenie jest ukryte, ucięte (wielokropek, line-clamp, poza ekranem) albo ma czcionkę < 12 px po przeskalowaniu strony.
+- Bez przeglądarki albo przy błędzie renderowania obie reguły dostają `n/a` z powodem w `reason`.
 
 ## 2. Model AI: wyjście
 
@@ -59,7 +68,7 @@ Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym sam
 
 - `result`: `violation` | `ok` | `n/a`
 - `label`: `potencjalne_doradztwo` | `brak_przeslanek` (M3; backend zmienia `potencjalne_doradztwo` na `usluga_dozwolona`, gdy podmiot ma zezwolenie KNF); w M2 `label` i `probability` = `null`. Etykiety M1 nadaje backend: `reklama` | `wzmianka` | `material_firmy` | `brak_firmy` | `inny_jezyk` | `blad_analizy`
-- `quote`: dosłowny fragment `text`, jeden akapit, do 300 znaków, bez parafrazy; obowiązkowy przy `violation`. W regułach wizualnych (4, 5, 6, 13): tekst linii odczytanej przez OCR z klatki `frame`
+- `quote`: dosłowny fragment `text`, jeden akapit, do 300 znaków, bez parafrazy; obowiązkowy przy `violation`. W regułach wizualnych (4, 5, 6, 8, 13) i w regule 7 z ostrzeżeniem w kadrze: tekst linii odczytanej przez OCR z klatki `frame`
 - `frame`: tylko reguły wizualne M2, gdy cytat pochodzi z klatki filmu: `{ "ts": 42.0, "file": "42000.png", "box": [0.05, 0.94, 0.93, 0.97] }` — sekunda klatki od początku filmu, plik klatki materiału i ramka tekstu `[x0, y0, x1, y1]` jako ułamki 0–1 szerokości i wysokości klatki. W pozostałych przypadkach `null` (brak pola = `null`). Wartości liczy kod OCR, nie model językowy
 - `confidence`, `probability`: od 0 do 1, wartości ciągłe
 - model nie zwraca URL-i, pozycji znaków ani sekund filmu (wyjątek: `frame` wyżej)
@@ -269,7 +278,7 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - [x] `POST /analyze` zwraca kształt z punktu 2: `findings[]` per reguła (`result`, `confidence`, `quote`, `reason`) oraz `label`, `probability`, `summary` — M2 (13 reguł tekstowych, #25), z `rule_scores` i `risk_score`.
 - [x] `pnpm api:generate` w tym samym PR.
 - [x] Pobranie filmu z YouTube i wycięcie klatek: osobny serwis `services/media` (`POST /videos`, bez OCR), plan w [KLATKI.md](KLATKI.md). Klatki i `manifest.json` na wolumenie `media`, podmontowanym do `ml` pod `MEDIA_DIR` (tylko odczyt).
-- [x] M2 w `POST /analyze`: reguły 4, 5, 6, 13 z klatek filmu (OCR + pomiary pikseli, bez LLM), `findings[]` z `frame` (punkty 1–2). Klatki z `${MEDIA_DIR}/<material_id>/`, opis w [KLATKI.md](KLATKI.md).
+- [x] M2 w `POST /analyze`: reguły 4, 5, 6, 8, 13 z klatek filmu (OCR + pomiary pikseli, bez LLM), `findings[]` z `frame` (punkty 1–2). Klatki z `${MEDIA_DIR}/<material_id>/`, opis w [KLATKI.md](KLATKI.md).
 
 **Backend (`apps/web`)**
 - [x] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory` + przesłanki i `M3.license`).
@@ -283,7 +292,7 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - [x] Zdarzenie Socket.io `incident.high_risk` (punkt 10), wysyłane, gdy `score ≥ alert` modułu. Typy w `apps/web/src/lib/realtime/events.ts`.
 - [x] Usunięte stare ścieżki: `GET/PUT /thresholds`, `PATCH /results/:id`, zdarzenie `alert`.
 - [x] Aktualizacja [BACKEND.md](BACKEND.md).
-- [x] Kolejka `download-video` → `POST /videos` serwisu media; po sukcesie manifest w `metadata.frames` i ponowna analiza z regułami 4, 5, 6, 13 w `rules` M2 (punkt 1). Film zamawia analiza (YouTube z incydentem) albo otwarcie sprawy; ręcznie `POST /api/materials/:id/video`.
+- [x] Kolejka `download-video` → `POST /videos` serwisu media; po sukcesie manifest w `metadata.frames` i ponowna analiza z regułami 4, 5, 6, 8, 13 w `rules` M2 (punkt 1). Film zamawia analiza (YouTube z incydentem) albo otwarcie sprawy; ręcznie `POST /api/materials/:id/video`.
 - [ ] Dowód z klatki: `evidence.frame`, `start`/`end` = `null`, `timestamp_s` = `frame.ts` (punkt 3); typy w `lib/analysis/contract.ts` i `lib/incidents/contract.ts`.
 - [x] `GET /api/incidents/:id/frames/:file` (punkt 5).
 
