@@ -1,124 +1,110 @@
 <p align="center">
-  <img src="docs/assets/ive-banner.png" alt="IVE, Investor Vigilance Engine: czuwamy nad inwestorami. HackNation 2026, zadanie UKNF #InvestWatch">
+  <img src="docs/assets/ive-banner.png" alt="IVE, Investor Vigilance Engine: czuwamy nad inwestorami">
 </p>
 
-# IVE: czuwamy nad inwestorami
+# IVE — InvestWatch
 
-Finfluencer poleca brokera. **Czy to reklama? Czy mówi o ryzyku? Czy może doradzać?**
-IVE sam zbiera takie materiały, ocenia je trzema modułami i daje analitykowi sprawę z dowodem. Decyduje człowiek.
+System monitoringu internetu dla UKNF (HackNation 2026, zadanie **#InvestWatch — na straży inwestorów!**). Sam wyszukuje materiały o usługach inwestycyjnych, ocenia je trzema modułami i pokazuje analitykowi alerty z dowodami. Działa w całości lokalnie, na Docker Compose.
 
-## Uruchom demo
+## Uruchomienie
 
-Potrzebujesz tylko Dockera z Compose v2 i internetu. Bez kont i kluczy API.
+Wymagany jest tylko Docker z Compose v2. Dashboard: **http://localhost:3000/hacknation**
 
-```bash
-git clone https://github.com/FerrisOfficial/hacknation.git
-cd hacknation
-cp .env.example .env
-```
+| | **Tryb szybki** (zalecany do oceny) | **Tryb pełny** |
+|---|---|---|
+| Komenda | `cp .env.example .env`<br>`docker compose up --build web` | `cp .env.example .env`<br>`IVE_MODE=full M2_ENGINE=hybrid M3_ENGINE=hybrid docker compose up --build` |
+| Co widać | 54 przykładowe materiały M1, M2 i M3 z wynikami, dowodami i decyzjami analityka. Działają wszystkie zakładki, a Kalibracja od razu liczy FP/FN | to samo, a do tego prawdziwe zbieranie: źródła M1 i M3 zakładają się same i harmonogram od razu szuka w YouTube i na stronach WWW |
+| Internet | niepotrzebny (harmonogram wstrzymany, włączysz go w zakładce Źródła) | potrzebny (YouTube, rejestr KNF) |
+| Model AI | brak, M2 i M3 działają na regułach | Bielik-PL-11B w Ollamie, ok. 12 GB, pobierany raz |
+| Sprzęt | bez GPU | zalecane GPU NVIDIA z ok. 12 GB VRAM; bez GPU działa na CPU, wolno |
+| Pierwszy start | kilkanaście minut (budowa obrazów), potem kilkanaście sekund | jak w szybkim, plus pobranie modelu; do jego końca M2 i M3 działają na regułach |
 
-Potem wybierz jedną z dwóch opcji:
-
-### Opcja A: szybkie demo (polecamy)
-
-Reguły, bez modelu i GPU. Pierwszy build trwa kilka minut.
-
-```bash
-docker compose up --build web
-```
-
-### Opcja B: pełne demo z polskim LLM Bielik
-
-Ok. 12 GB do pobrania, najlepiej z GPU. W `.env` ustaw `M2_ENGINE=hybrid` i `M3_ENGINE=hybrid`, potem:
-
-```bash
-docker compose up --build
-```
-
-### Potem, w obu opcjach
-
-**1. Otwórz dashboard:** http://localhost:3000/hacknation
-
-**2. Daj mu coś do znalezienia.** Baza startuje pusta.
-Wejdź w **Źródła → Nowe źródło**, wybierz frazę YouTube (np. `kod polecający broker`) i zapisz. Materiały i wyniki pojawią się po pobraniu i analizie.
+Przykładowe materiały dotyczą wymyślonych firm z domenami `.example`. Tryb działa tylko przy pierwszym starcie na pustej bazie, więc baza z danymi zostaje bez zmian. Zmiana trybu: `docker compose down -v`, a potem start od nowa.
 
 <details>
-<summary>Albo dodaj gotowy zestaw źródeł dla M1 i M3</summary>
+<summary>Windows, GPU, Ollama na hoście, development</summary>
 
-W `.env` ustaw `COLLECTOR_TOKEN=jury-demo`, uruchom stos ponownie, a potem w drugim terminalu:
-
-```bash
-curl -X POST -H "Authorization: Bearer jury-demo" http://localhost:3000/hacknation/api/sources/m1
-curl -X POST -H "Authorization: Bearer jury-demo" http://localhost:3000/hacknation/api/sources/m3
-```
-
-Harmonogram pobiera jedno źródło na minutę, żeby YouTube nie blokował zapytań.
+- **Windows** (PowerShell): w `.env` ustaw `IVE_MODE=full`, `M2_ENGINE=hybrid`, `M3_ENGINE=hybrid` i uruchom `docker compose up --build`.
+- **GPU NVIDIA:** `docker compose -f compose.yaml -f compose.gpu.yaml up --build`
+- **Mac z GPU Apple:** uruchom Ollamę natywnie, a w `.env` ustaw `OLLAMA_URL=http://host.docker.internal:11434`. Mniejszy model Q4_K_M (ok. 7 GB) opisuje [services/ml/README.md](services/ml/README.md).
+- **Development:** Node 24, pnpm, [uv](https://docs.astral.sh/uv/), ffmpeg:
+  ```bash
+  pnpm install && pnpm db:up && pnpm dev   # web :3000, ml :8000, media :8100
+  pnpm check                               # lint + typy + testy (TS i Python)
+  ```
 </details>
 
-## Co sprawdzić w 2 minuty
+## Co robi
 
-1. **Źródła:** co, kiedy i z jakim skutkiem zostało pobrane.
-2. **Reklamy:** kto reklamuje którą firmę inwestycyjną, z eksportem CSV.
-3. **Naruszenia:** otwórz sprawę i zobacz cytat, regułę oraz przepis. `1` potwierdza, `2` to fałszywy alarm, `3` odkłada, decyzję można cofnąć.
-4. **Widok podmiotu:** historia firmy i teczka ZIP z potwierdzonych spraw.
-5. **Kalibracja:** przesuń próg i zobacz, co wypada. Precyzja i pełność liczą się z decyzji analityka.
+**Silnik zbierania:** wyszukiwanie i kanały YouTube (opisy, transkrypcje, klatki), strony WWW z linków pod filmami, rejestr i lista ostrzeżeń KNF. Harmonogram w kolejce pg-boss, deduplikacja po hashu treści, opcjonalne proxy i losowe przerwy.
 
-## Gdy coś nie działa
+Każdy moduł daje materiałowi **score 0–1**, czyli ocenę, na ile pewne jest naruszenie. Score ≥ próg modułu (suwak w Kalibracji) → incydent w kolejce. Każda flaga ma dowód: dosłowny cytat z linkiem do miejsca na stronie albo sekundy filmu, albo klatkę.
 
-| Objaw | Co zrobić |
+- **M1, reklamy:** kto reklamuje firmę z rejestru KNF.
+- **M2, ryzyko:** czy materiał firmy z rejestru dobrze informuje o ryzyku (18 reguł UKNF).
+- **M3, doradztwo:** czy ktoś oferuje doradztwo bez zezwolenia KNF.
+
+Moduły się nie wykluczają: jeden materiał może dostać wynik z każdego.
+
+**Dashboard:** kolejka incydentów z filtrami (data, źródło, ryzyko, moduł), zmiana statusu, trend, teczka podmiotu, okno sprawy (film, klatki, kopia HTML), raporty i powiadomienia o wysokim ryzyku na żywo (Socket.io). **Kalibracja:** próg dla każdego modułu, a jego zmiana od razu przelicza FP/FN, precyzję i pełność na decyzjach analityka.
+
+## Wymagania techniczne UKNF
+
+| Wymaganie | Jak spełniamy |
 |---|---|
-| Pusty dashboard | dodaj źródło (krok 2) |
-| „YouTube ogranicza zapytania” | odczekaj i kliknij „Ponów” w Źródłach |
-| Zajęty port | zwolnij 3000, 3001, 5432, 8000 i 8100 |
-| Start od zera | `docker compose down -v` (kasuje dane) |
+| Lekkie, rozdzielone serwisy | Osobne kontenery: `web` (UI i backend), `ml` (AI i scraping), `media` (filmy), `ollama` (LLM), `db`. `web` woła `ml` przez klient generowany z OpenAPI. Przeglądarka nie woła serwisów AI bezpośrednio. |
+| Docker Compose, on-premise | Jedna komenda, obrazy z przypiętymi wersjami. CI w każdym PR buduje stos i sprawdza, czy odpowiada. |
+| Tylko open source, bez płatnych API | Bielik w lokalnej Ollamie, OCR w ONNX Runtime, Postgres. Nie ma kluczy do zewnętrznych usług. |
+| Bezpieczny łańcuch dostaw | CI uruchamia `pnpm audit` i `pip-audit`, lockfile'y są wymuszane. Sekrety trzymamy tylko w `.env` (poza gitem i obrazami), porty wystawiamy tylko na `127.0.0.1`. |
+| README minimalne | Uruchomienie, wymagania sprzętowe i usługi na jednym ekranie. |
 
-## Stan na hackathon
+## Usługi i stack
 
-- Kolektory: **YouTube i WWW**. TikTok, Instagram i Facebook są w planie.
-- Pobieranie wideo w kontenerze wymaga poprawki ścieżki ffmpeg, więc reguły oparte na klatkach nie dają jeszcze wyników. Analiza opisów, napisów i stron tego nie potrzebuje.
-- Progi i wagi wymagają kalibracji na danych UKNF.
-- Ekrany w prezentacji i filmie pokazują interfejs na danych przykładowych.
+| Usługa | Port | Technologie |
+|---|---|---|
+| `web` | 3000, 3001 (Socket.io) | Next.js 16, React 19, Tailwind 4, shadcn/ui, TanStack Query, Zod, pg-boss, Drizzle |
+| `ml` | 8000 (`/docs`) | Python 3.14, FastAPI, pydantic, httpx, selectolax, Playwright, yt-dlp, RapidOCR |
+| `media` | 8100 | FastAPI, yt-dlp, ffmpeg |
+| `ollama` | 11434 | Ollama + Bielik-PL-11B v3.0 (tylko w trybie pełnym) |
+| `db` | 5432 | PostgreSQL 17: metadane, treści, wyniki, decyzje |
 
-## Zespół
+Jakość kodu: Biome, Ruff, Pyright, Vitest, pytest, Playwright, GitHub Actions. Zmienne z opisami: [.env.example](.env.example).
 
-**Maciej Stempniak, Mikołaj Karapka, Franciszek Przeliorz.** Trzy osoby, trzy agenty AI, jedno repo: [jak pracowaliśmy](docs/PROCES-AI.md).
+```
+apps/web/          Next.js: UI, API (src/app/api), pipeline i kolejka (src/lib)
+packages/db/       schemat Drizzle i migracje SQL
+packages/api-ml/   klient TS serwisu ML generowany z OpenAPI
+services/ml/       FastAPI: scraper, kolektory, M2 (risk*.py), M3 (advisory.py), KNF (knf.py)
+services/media/    FastAPI + ffmpeg: filmy i klatki
+docs/              wymagania (ZADANIE.md), kontrakt API (KONTRAKT.md), materiały UKNF
+```
 
-## Jak to działa (dla ciekawych)
+## Jak liczymy (dla ciekawych)
 
-**M1** wykrywa reklamy finfluencerów, **M2** złą informację o ryzyku, **M3** doradztwo bez zezwolenia. Jeden materiał może dostać wynik z każdego.
-
-- [Algorytmy M1 i M3, pipeline i architektura](docs/BACKEND.md)
-- [M2: silniki, reguły i konfiguracja LLM](services/ml/README.md)
-- [18 kryteriów informacji o ryzyku od UKNF](docs/materialy-uknf/kryteria-informacji-o-ryzyku.md)
-- [Analiza klatek wideo](docs/KLATKI.md)
-- [Kontrakt API](docs/KONTRAKT.md) i [wymagania zadania](docs/ZADANIE.md)
+Wzory, wagi, przykłady i działanie Bielika: [docs/ALGORYTMY.md](docs/ALGORYTMY.md).
 
 ## Licencja
 
-Kod projektu: MIT.
+Kod projektu: [MIT](LICENSE). Wszystkie zależności są open source. Kod linkuje tylko biblioteki na licencjach permisywnych, a ffmpeg (GPL) działa jako osobny program.
 
-### Licencje zależności
-
-Wszystkie zależności są open source. Kod projektu linkuje tylko biblioteki na licencjach permisywnych, a ffmpeg (GPL) działa jako osobny program.
+<details>
+<summary>Licencje zależności</summary>
 
 | Komponent | Licencja |
 |---|---|
 | Next.js, React, Tailwind CSS, shadcn/ui, Base UI, TanStack Query, React Hook Form, @hookform/resolvers, Zod, Socket.io, pg-boss, sonner, next-themes, fflate, tw-animate-css, cn, openapi-fetch, openapi-typescript | MIT |
-| class-variance-authority | Apache 2.0 |
+| class-variance-authority, Drizzle ORM | Apache 2.0 |
 | lucide-react | ISC |
 | Inter (@fontsource-variable/inter) | SIL OFL 1.1 |
-| Drizzle ORM | Apache 2.0 |
-| postgres (postgres.js) | Unlicense |
-| FastAPI, pydantic, selectolax, youtube-transcript-api, ONNX Runtime | MIT |
-| httpx | BSD-3-Clause |
-| Playwright, RapidOCR | Apache 2.0 |
-| Chromium (headless shell, w obrazie `ml`) | BSD-3-Clause |
-| yt-dlp | Unlicense |
-| ffmpeg (pakiet Debiana w obrazie `media`, osobny proces, bez linkowania) | GPL 2+ |
+| postgres (postgres.js), yt-dlp | Unlicense |
+| FastAPI, pydantic, selectolax, youtube-transcript-api, ONNX Runtime, Ollama | MIT |
+| httpx, Chromium (headless shell w obrazie `ml`) | BSD-3-Clause |
+| Playwright, RapidOCR, Bielik-PL-11B v3.0 Instruct (SpeakLeash) | Apache 2.0 |
+| ffmpeg (pakiet Debiana w obrazie `media`, osobny proces) | GPL 2+ |
 | PostgreSQL | PostgreSQL License |
-| Ollama | MIT |
-| Obrazy bazowe: `node`, `python` (Debian), `postgres`, `ollama/ollama` | licencje projektów (MIT, PSF, PostgreSQL, MIT) + pakiety Debiana |
-| Bielik-PL-11B v3.0 Instruct (SpeakLeash) | Apache 2.0 |
+| Obrazy bazowe `node`, `python`, `postgres`, `ollama/ollama` | licencje projektów + pakiety Debiana |
 | Ruff, Pyright, Vitest, pytest | MIT |
 | Biome | MIT lub Apache 2.0 |
+</details>
 
+Więcej: [docs/ZADANIE.md](docs/ZADANIE.md) (wymagania), [docs/KONTRAKT.md](docs/KONTRAKT.md) (API), [docs/PROCES-AI.md](docs/PROCES-AI.md) (jak pracowaliśmy z agentami AI).
