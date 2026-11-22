@@ -18,7 +18,7 @@
 | Warstwa | Odpowiada za | Czego **nie** robi |
 |---|---|---|
 | Scraper (`youtube.py`, bez zmian) | link, metadane, napisy | nie pobiera filmów |
-| **Pobieranie filmów** (`media.py`, `POST /media/frames`) | yt-dlp → ffmpeg → klatki PNG na dysku + manifest | nie czyta tekstu, nie ocenia reguł |
+| **Pobieranie filmów** (osobny serwis `services/media`, `POST /videos`) | yt-dlp → ffmpeg → klatki PNG na dysku + manifest | nie czyta tekstu, nie ocenia reguł |
 | **Moduł M2** (`risk.py`, `risk_llm.py`, nowy `risk_visual.py`) | **tekst i obraz**: reguły tekstowe, a dla filmów z klatkami także OCR, pomiary i Gemma dla reguł 4, 5, 6, 13 | nie pobiera filmów |
 
 OCR i Gemma należą do M2, bo to M2 ocenia informację o ryzyku. Reguły wizualne zwracają ten sam `risk.Finding` co reguły tekstowe, a wywołuje je ten sam `_risk_disclosure` w `POST /analyze`. Warstwa pobierania jest wspólna i w przyszłości może dawać klatki także innym modułom, np. M1 albo M3.
@@ -37,7 +37,7 @@ analyze-material ── M1 (reguły) ──┐
    │                 kolejka extract-frames (pg-boss, 1 naraz, singletonKey = material_id)
    │                               │
    │                               ▼
-   │                 POST /media/frames ── warstwa pobierania
+   │                 POST /videos (services/media) ── warstwa pobierania
    │                   yt-dlp → ffmpeg → usunięcie duplikatów → PNG na wolumenie
    │                   manifest → materials.metadata.frames
    │                               │
@@ -56,7 +56,9 @@ jeden wynik M2 → buildAnalysisResult (bez łączenia wyników po stronie backe
 - **Klatki powstają raz na film.** Analizę można powtarzać (po zmianie promptu lub progu) bez ponownego pobierania. Klatki zostają też jako dowód, gdy film zniknie z YouTube, podobnie jak `raw_html` dla WWW.
 - Ponowne `analyze-material` z `force` powtarza też tekstową część M2 i M3. To świadomy koszt: dotyczy tylko podejrzanych filmów i nie wymaga nowej ścieżki w workerze.
 
-## Warstwa pobierania: `POST /media/frames` (`services/ml/src/ml/media.py`)
+## Warstwa pobierania: serwis `services/media` (`POST /videos`)
+
+**Zrobione** jako osobny kontener `media` (FastAPI + yt-dlp + ffmpeg), opis endpointów w [services/media/README.md](../services/media/README.md). Różnice względem planu niżej: film to mp4 z dźwiękiem (H.264 + AAC, do odtwarzania w Oknie sprawy) i **zostaje na dysku**; duplikaty odrzuca filtr `mpdecimate` w ffmpeg (bez OpenCV); bez wykrywania czarnych pasów i gęstszego próbkowania końcówki. Wolumen `media` jest podmontowany do `ml` pod `MEDIA_DIR` tylko do odczytu.
 
 Wejście: `{ material_id, url }`. Wyjście: manifest (niżej). 502, gdy filmu nie udało się pobrać. 422, gdy film jest dłuższy niż `MEDIA_MAX_DURATION_S`.
 
@@ -110,10 +112,10 @@ Pliki: `${MEDIA_DIR}/<material_id>/<ts_ms>.png`. Manifest w `materials.metadata.
 
 ## Zmiany w backendzie (apps/web)
 
-- `lib/queue`: kolejka `extract-frames` (1 zadanie naraz) i handler. Ustawia `metadata.frames.status`, woła `POST /media/frames` i po sukcesie kolejkuje `analyze-material` z `force`.
+- **Zrobione:** `lib/queue`: kolejka `download-video` (`MEDIA_CONCURRENCY`, domyślnie 1) i `lib/pipeline/video.ts`. Ustawia `metadata.frames.status`, woła `POST /media/frames` i po sukcesie kolejkuje `analyze-material` z `force`.
 - `lib/pipeline/analyze.ts`: filtr i kolejkowanie po M1. Gdy `frames.status = "done"`, `requestedRuleIds` dla M2 zawiera też 4, 5, 6 i 13. Łączenie wyników nie jest potrzebne, bo M2 zwraca je w jednym wywołaniu.
 - `lib/analysis/evidence.ts`: finding z `frame` nie jest szukany w `materials.text`. `evidence.frame = { file, box }`, `start`/`end` = `null`, `timestamp_s = frame.ts`, link YouTube `&t=<s>s` (§3).
-- `GET /api/incidents/:id/frames/:file` (§5): route handler przekazujący `GET /media/{material_id}/{file}` z serwisu ML. Przeglądarka nie woła FastAPI bezpośrednio.
+- **Zrobione:** `GET /api/incidents/:id/frames/:file` i `/video` (§5): route handlery przekazujące pliki z serwisu media (`GET /videos/{material_id}/…`). Przeglądarka nie woła FastAPI bezpośrednio.
 
 ## Zależności i Docker
 

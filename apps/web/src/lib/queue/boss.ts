@@ -13,12 +13,15 @@ export const QUEUES = {
   scrape: "scrape-source",
   // Analiza materiału przez moduły AI w serwisie ML. data: { materialId, force? }
   analyze: "analyze-material",
+  // Pobranie filmu YouTube i klatek przez serwis media. data: { materialId }
+  video: "download-video",
   // Co minutę: które źródła mają termin ponownego scrapowania (sources.interval_minutes).
   schedulerTick: "scheduler-tick",
 } as const;
 
 export type ScrapeJobData = { scrapeJobId: string };
 export type AnalyzeJobData = { materialId: string; force?: boolean };
+export type VideoJobData = { materialId: string };
 
 const QUEUE_OPTIONS: Record<(typeof QUEUES)[keyof typeof QUEUES], Omit<Queue, "name">> = {
   // `stately` + singletonKey = źródło: najwyżej jedno zadanie w kolejce i jedno w trakcie, więc
@@ -37,6 +40,15 @@ const QUEUE_OPTIONS: Record<(typeof QUEUES)[keyof typeof QUEUES], Omit<Queue, "n
     retryBackoff: true,
     // Model w Ollamie na CPU potrafi liczyć minutami.
     expireInSeconds: 10 * 60,
+  },
+  // Klucz = materiał: jeden film pobierany najwyżej raz naraz. Ponowienia z dłuższą przerwą,
+  // bo typowy błąd to HTTP 429 z YouTube.
+  [QUEUES.video]: {
+    policy: "stately",
+    retryLimit: 2,
+    retryDelay: 120,
+    retryBackoff: true,
+    expireInSeconds: 30 * 60,
   },
   [QUEUES.schedulerTick]: { policy: "exclusive", retryLimit: 0, expireInSeconds: 120 },
 };

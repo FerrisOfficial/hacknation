@@ -1,17 +1,31 @@
 import { getDb } from "@app/db";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { HttpError, handler, readBody, readId } from "@/lib/api/http";
-import { getIncidentDetail, updateIncidentStatus } from "@/lib/queries/incidents";
+import { requestVideo } from "@/lib/pipeline/video";
+import {
+  getIncidentDetail,
+  getIncidentVideoCandidate,
+  updateIncidentStatus,
+} from "@/lib/queries/incidents";
 import { publishEventSafe } from "@/lib/realtime/publish";
 import { incidentUpdateSchema } from "@/lib/schemas";
 
 // GET /api/incidents/:id — docs/KONTRAKT.md §5: wynik modułu, materiał, `details` (§3), decyzja
-// analityka z autorem i historia.
+// analityka z autorem i historia. Film YouTube bez kopii idzie po odpowiedzi do pobrania (incydenty
+// sprzed serwisu media); gdy będzie gotowy, zdarzenie `result` odświeży Okno sprawy.
 export const GET = handler(
   "incidents/:id",
   async (_request, ctx: RouteContext<"/api/incidents/[id]">) => {
-    const incident = await getIncidentDetail(getDb(), readId((await ctx.params).id));
+    const db = getDb();
+    const id = readId((await ctx.params).id);
+    const incident = await getIncidentDetail(db, id);
     if (!incident) throw new HttpError(404, "Nie ma takiego incydentu");
+    if (incident.material.platform === "youtube" && !incident.material.has_video) {
+      after(async () => {
+        const material = await getIncidentVideoCandidate(db, id);
+        if (material) await requestVideo(db, material);
+      });
+    }
     return NextResponse.json(incident);
   },
 );

@@ -158,6 +158,23 @@ const durationSql = sql<
 >`case when jsonb_typeof(${materials.metadata}->'duration_s') = 'number'
   then (${materials.metadata}->>'duration_s')::float8 end`;
 
+// Film pobrany przez serwis media (`metadata.frames.status = "done"`, @/lib/media-state).
+const hasVideoSql = sql<boolean>`coalesce(${materials.metadata}->'frames'->>'status' = 'done', false)`;
+
+// Materiał incydentu dla filmu i klatek: id w serwisie media i stan pobrania. null = brak.
+export async function getIncidentVideoCandidate(db: Db, id: string) {
+  const [row] = await db
+    .select({
+      id: materials.id,
+      platform: materials.platform,
+      frames: sql<unknown>`${materials.metadata}->'frames'`,
+    })
+    .from(analysisResults)
+    .innerJoin(materials, eq(materials.id, analysisResults.materialId))
+    .where(eq(analysisResults.id, id));
+  return row ?? null;
+}
+
 export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDetail | null> {
   const [row] = await db
     .select({
@@ -180,6 +197,7 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
         hasSnapshot: sql<boolean>`(${materials.contentRef} is not null or ${materials.rawHtml} is not null)`,
         durationS: durationSql,
         contentHash: contentHashSql,
+        hasVideo: hasVideoSql,
       },
     })
     .from(analysisResults)
@@ -207,6 +225,7 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
       published_at: material.publishedAt?.toISOString() ?? null,
       scraped_at: material.scrapedAt.toISOString(),
       has_snapshot: material.hasSnapshot,
+      has_video: material.hasVideo,
       duration_s: material.durationS === null ? null : Number(material.durationS),
       content_hash: material.contentHash,
     },

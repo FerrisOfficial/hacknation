@@ -19,6 +19,7 @@ apps/web/          Next.js 16 — UI, route handlery (src/app/api), Server Actio
 packages/db/       Drizzle — schemat bazy (src/schema.ts) i migracje (drizzle/), Postgres z compose.yaml
 packages/api-ml/   Typowany klient serwisu ML — GENEROWANY z OpenAPI, nie edytuj src/schema.d.ts
 services/ml/       FastAPI + uv — modele ML, endpointy
+services/media/    FastAPI + uv + ffmpeg — pobieranie filmów YouTube i klatek (dla Okna sprawy i M2)
 compose.yaml       Cały stos on-premise w Dockerze: db (Postgres), migrate, ml, web, ollama (+ compose.gpu.yaml)
 ```
 
@@ -29,7 +30,7 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 | Komenda | Co robi |
 |---|---|
 | `pnpm db:up` | lokalna baza (Postgres z `compose.yaml`, port 5432) + migracje. Przed pierwszym `pnpm dev` |
-| `pnpm dev` | web (:3000) + ml (:8000) naraz |
+| `pnpm dev` | web (:3000) + ml (:8000) + media (:8100) naraz; media potrzebuje lokalnie `ffmpeg` |
 | `pnpm check` | lint + typecheck + testy, TS i Python. **Uruchom przed każdym PR.** |
 | `pnpm format` | auto-fix formatowania (Biome + Ruff) |
 | `pnpm test:e2e` | build + Playwright |

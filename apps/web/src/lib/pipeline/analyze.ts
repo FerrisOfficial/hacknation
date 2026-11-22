@@ -5,10 +5,12 @@ import { buildAnalysisResult } from "@/lib/analysis/details";
 import { buildFinfluencerResult } from "@/lib/analysis/finfluencer";
 import { AI_MODULES } from "@/lib/analysis/modules";
 import { requestedRuleIds } from "@/lib/analysis/rules";
+import { framesDone } from "@/lib/media-state";
 import { analyzeMaterial } from "@/lib/ml";
 import { lookupEntity, lookupPromotedFirm } from "./entity";
 import { followAdvertiserChannel } from "./m1-sources";
 import { saveAnalysisResults } from "./results";
+import { requestVideoForIncidents } from "./video";
 
 export type AnalyzeOutcome = "analyzed" | "skipped" | "missing";
 
@@ -47,6 +49,8 @@ export async function runAnalysis(
   // Kanał z reklamą staje się źródłem obserwowanym (błąd zapisu źródła nie blokuje analizy).
   await followAdvertiserChannel(db, material, finfluencer).catch(() => false);
   const outputs: ModuleOutputs = [];
+  // Film z wyciętymi klatkami: M2 ocenia też reguły wizualne (4, 5, 6, 13) z klatek na dysku.
+  const frames = framesDone(material.metadata.frames);
   try {
     for (const module of AI_MODULES) {
       const output = await analyzeMaterial(
@@ -54,7 +58,7 @@ export async function runAnalysis(
           material_id: material.id,
           module,
           text: material.text,
-          rules: requestedRuleIds(module),
+          rules: requestedRuleIds(module, { frames }),
         },
         options.signal,
       );
@@ -64,9 +68,18 @@ export async function runAnalysis(
     await saveAnalysisResults(db, material, [finfluencer], { markAnalyzed: false });
     throw error;
   }
-  await saveAnalysisResults(db, material, [
+  const saved = await saveAnalysisResults(db, material, [
     finfluencer,
     ...(await buildResults(material, outputs)),
   ]);
+  // Film z incydentem idzie do pobrania (Okno sprawy, klatki dla M2). Błąd kolejki nie psuje analizy.
+  const candidate = {
+    id: material.id,
+    platform: material.platform,
+    frames: material.metadata.frames,
+  };
+  await requestVideoForIncidents(db, candidate, saved).catch((error: unknown) => {
+    console.error("[analyze] Nie udało się zamówić filmu:", error);
+  });
   return "analyzed";
 }

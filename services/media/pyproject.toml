@@ -1,0 +1,39 @@
+[project]
+name = "media"
+version = "0.1.0"
+description = "Serwis pobierania filmów i wycinania klatek (FastAPI)"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.162.7",
+    "pydantic>=2.14.3",
+    "yt-dlp>=2026.10.26",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.3,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# E/F: błędy, I: sortowanie importów, UP: nowoczesna składnia, B: typowe bugi, SIM: uproszczenia
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pyright]
+include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]

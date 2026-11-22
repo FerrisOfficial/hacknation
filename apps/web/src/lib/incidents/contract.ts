@@ -106,6 +106,8 @@ export type IncidentDetail = {
     published_at: string | null;
     scraped_at: string;
     has_snapshot: boolean;
+    // Film pobrany przez serwis media: GET /api/incidents/:id/video (mp4 z obsługą Range).
+    has_video: boolean;
     // Długość filmu w sekundach (metadane YouTube), null dla stron WWW.
     duration_s: number | null;
     // SHA-256 zapisanej kopii (R4): kopii HTML, a bez niej tekstu materiału.

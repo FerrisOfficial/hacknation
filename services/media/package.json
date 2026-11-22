@@ -1,0 +1,13 @@
+{
+  "name": "@app/media",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wrapper, żeby Turbo uruchamiał serwis pobierania filmów razem z resztą (pnpm dev / pnpm check).",
+  "scripts": {
+    "dev": "uv run uvicorn media.main:app --reload --reload-dir src --host 127.0.0.1 --port 8100",
+    "lint": "uv run ruff check . && uv run ruff format --check .",
+    "format": "uv run ruff check --fix . && uv run ruff format .",
+    "typecheck": "uv run pyright",
+    "test": "uv run pytest"
+  }
+}

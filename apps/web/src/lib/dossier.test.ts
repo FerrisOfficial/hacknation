@@ -26,6 +26,7 @@ function incident(overrides: Partial<IncidentDetail> = {}): IncidentDetail {
       published_at: null,
       scraped_at: "2026-11-21T19:00:00.000Z",
       has_snapshot: true,
+      has_video: false,
       duration_s: null,
       content_hash: "ab".repeat(32),
     },
