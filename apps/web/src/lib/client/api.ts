@@ -6,6 +6,7 @@ import type { ModuleThreshold, ThresholdSettings } from "@/lib/analysis/modules"
 import { withBasePath } from "@/lib/base-path";
 import type { Calibration, Trend } from "@/lib/incidents/contract";
 import type { Me, UiDetail, UiList, UiStatus } from "./contract-ui";
+import { daysAgoIso } from "./format";
 
 // Klient REST dla dashboardu: docs/KONTRAKT.md §4–§9 oraz /api/sources (poza kontraktem, bez zmian).
 // Przeglądarka woła tylko route handlery Next.js, nigdy FastAPI.
@@ -56,7 +57,7 @@ export const keys = {
   incidents: (filters: IncidentFilters) => ["incidents", filters] as const,
   incident: (id: string) => ["incident", id] as const,
   thresholds: ["thresholds"] as const,
-  trend: (from: string) => ["trend", from] as const,
+  trend: (range: string) => ["trend", range] as const,
   calibration: (module: AnalysisModule, threshold: number) =>
     ["calibration", module, threshold] as const,
   sources: ["sources"] as const,
@@ -112,10 +113,32 @@ export function useThresholds() {
   });
 }
 
-export function useTrend(from: string) {
+// Zakres wykresu trendu: krótkie („5 min”, „1 h”) w koszykach minutowych, długie w dniach.
+export const TREND_RANGES = ["5m", "1h", "7d", "30d"] as const;
+export type TrendRange = (typeof TREND_RANGES)[number];
+
+const MINUTE_MS = 60_000;
+const TREND_QUERY: Record<
+  TrendRange,
+  { bucket: "minute" | "5min" | "day"; from: (now: Date) => string }
+> = {
+  "5m": { bucket: "minute", from: (now) => new Date(now.getTime() - 5 * MINUTE_MS).toISOString() },
+  "1h": { bucket: "5min", from: (now) => new Date(now.getTime() - 60 * MINUTE_MS).toISOString() },
+  "7d": { bucket: "day", from: (now) => daysAgoIso(6, now) },
+  "30d": { bucket: "day", from: (now) => daysAgoIso(29, now) },
+};
+
+export function useTrend(range: TrendRange) {
+  const short = range === "5m" || range === "1h";
   return useQuery({
-    queryKey: keys.trend(from),
-    queryFn: () => request<Trend>(`/api/stats/trend?from=${encodeURIComponent(from)}`),
+    queryKey: keys.trend(range),
+    // `from` liczony przy każdym pobraniu: krótki zakres przesuwa się z czasem.
+    queryFn: () => {
+      const { bucket, from } = TREND_QUERY[range];
+      const params = new URLSearchParams({ from: from(new Date()), bucket });
+      return request<Trend>(`/api/stats/trend?${params.toString()}`);
+    },
+    refetchInterval: short ? 30_000 : false,
   });
 }
 

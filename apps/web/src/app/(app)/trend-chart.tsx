@@ -22,6 +22,11 @@ const STROKE: Record<AnalysisModule, string> = {
 const HEIGHT = 240;
 const PAD = { top: 16, right: 72, bottom: 28, left: 36 };
 
+// „2026-11-22” → „22.11”, „2026-11-22T14:35” (koszyki minutowe) → „14:35”.
+function axisLabel(date: string): string {
+  return date.length > 10 ? date.slice(11, 16) : `${date.slice(8, 10)}.${date.slice(5, 7)}`;
+}
+
 function niceMax(value: number): number {
   if (value <= 5) return 5;
   if (value <= 10) return 10;
@@ -72,7 +77,7 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
         width={width}
         height={HEIGHT}
         role="img"
-        aria-label={`Oflagowane materiały dziennie: ${ANALYSIS_MODULES.map((module) => `moduł ${MODULE_NUMBER[module]} ostatnio ${last?.[module] ?? 0}`).join(", ")}`}
+        aria-label={`Oflagowane materiały w czasie: ${ANALYSIS_MODULES.map((module) => `moduł ${MODULE_NUMBER[module]} ostatnio ${last?.[module] ?? 0}`).join(", ")}`}
       >
         {ticks.map((tick) => (
           <g key={tick}>
@@ -102,7 +107,7 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
               textAnchor="middle"
               className="tnum fill-ink-600 text-[11px]"
             >
-              {point.date.slice(8, 10)}.{point.date.slice(5, 7)}
+              {axisLabel(point.date)}
             </text>
           ) : null,
         )}

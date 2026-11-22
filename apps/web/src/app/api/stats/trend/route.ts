@@ -6,16 +6,16 @@ import { getThresholds } from "@/lib/pipeline/thresholds";
 import { incidentTrend } from "@/lib/queries/stats";
 import { statsTrendQuerySchema } from "@/lib/schemas";
 
-// GET /api/stats/trend?from=&to= — docs/KONTRAKT.md §7: liczba incydentów (score ≥ próg `flag`
-// modułu) na dzień kalendarzowy (Europe/Warsaw), per moduł. Dni bez incydentów mają zera.
-// Bez `from` — ostatnie 30 dni.
+// GET /api/stats/trend?from=&to=&bucket= — docs/KONTRAKT.md §7: liczba incydentów (score ≥ próg
+// `flag` modułu) na koszyk czasu (Europe/Warsaw), per moduł. Koszyki bez incydentów mają zera.
+// `bucket`: `day` (domyślnie, bez `from` ostatnie 30 dni), `5min` albo `minute`.
 export const GET = handler("stats/trend", async (request) => {
-  const { from, to } = readQuery(request, statsTrendQuerySchema);
+  const { from, to, bucket } = readQuery(request, statsTrendQuerySchema);
   const db = getDb();
   try {
     const trend = await incidentTrend(
       db,
-      { bucket: "day", scope: "flagged", from, to },
+      { bucket, scope: "flagged", from, to },
       await getThresholds(db),
     );
     const body: Trend = {

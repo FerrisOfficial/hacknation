@@ -224,8 +224,10 @@ export const jobsQuerySchema = z.object({
 
 export type JobsQuery = z.infer<typeof jobsQuerySchema>;
 
+export const TREND_BUCKETS = ["minute", "5min", "hour", "day", "week"] as const;
+
 export const trendQuerySchema = z.object({
-  bucket: z.enum(["hour", "day", "week"]).default("day"),
+  bucket: z.enum(TREND_BUCKETS).default("day"),
   from: dateParam,
   to: dateParam,
   module: csv(ANALYSIS_MODULES),
@@ -236,8 +238,13 @@ export const trendQuerySchema = z.object({
 
 export type TrendQuery = z.infer<typeof trendQuerySchema>;
 
-// GET /api/stats/trend (docs/KONTRAKT.md §7): dni z zakresu, domyślnie ostatnie 30.
-export const statsTrendQuerySchema = z.object({ from: dateParam, to: dateParam });
+// GET /api/stats/trend (docs/KONTRAKT.md §7): koszyki z zakresu, domyślnie dni z ostatnich 30.
+// `minute` i `5min` dla krótkich zakresów na żywo (wykres „5 min” i „1 h” na Przeglądzie).
+export const statsTrendQuerySchema = z.object({
+  from: dateParam,
+  to: dateParam,
+  bucket: z.enum(["minute", "5min", "day"]).default("day"),
+});
 
 export const calibrationQuerySchema = z.object({
   module: z.enum(ANALYSIS_MODULES),
