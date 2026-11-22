@@ -115,6 +115,7 @@ function MaterialCard({ item }: { item: UiListItem }) {
               score={item.risk_score ?? item.score}
               flag={threshold.flag}
               alert={threshold.alert}
+              confidence={item.module === "finfluencer"}
             />
           ) : null}
         </span>
@@ -196,6 +197,11 @@ export function Entity() {
             <a
               href={dossierUrl(name)}
               download
+              onClick={() =>
+                toast.success(
+                  `Teczka ${name} się pobiera: ${confirmed.length} potwierdzonych materiałów.`,
+                )
+              }
               className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-700 px-3.5 font-medium text-sm text-white transition-colors duration-150 hover:bg-primary-800 active:bg-primary-900"
             >
               <Download className="size-4" strokeWidth={1.5} aria-hidden="true" />

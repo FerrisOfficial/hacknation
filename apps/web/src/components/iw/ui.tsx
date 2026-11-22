@@ -343,12 +343,24 @@ export function ScoreBar({
   );
 }
 
-export function ScoreCell({ score, flag, alert }: { score: number; flag: number; alert: number }) {
-  const high = score >= alert;
+export function ScoreCell({
+  score,
+  flag,
+  alert,
+  confidence = false,
+}: {
+  score: number;
+  flag: number;
+  alert: number;
+  // Moduł 1: wynik to pewność, że materiał jest reklamą, nie ryzyko (R18): bez koloru i bez „wysokie”.
+  confidence?: boolean;
+}) {
+  const high = !confidence && score >= alert;
+  const label = confidence
+    ? `Pewność ${fmtScore(score)}, że to reklama firmy inwestycyjnej przez osobę trzecią. Próg ${fmtScore(flag)}.`
+    : `Wynik ${fmtScore(score)}: ${high ? "wysoki, powyżej progu alertu" : "średni, powyżej progu flagi"} ${fmtScore(high ? alert : flag)}.`;
   return (
-    <Tip
-      label={`Risk score ${fmtScore(score)} (z naruszeń ponad progiem): ${high ? "wysoki, powyżej progu alertu" : "średni, powyżej progu flagi"} ${fmtScore(high ? alert : flag)}.`}
-    >
+    <Tip label={label}>
       <span className="inline-flex items-center gap-3">
         <ScoreBar score={score} flag={flag} high={high} />
         <span
@@ -360,7 +372,7 @@ export function ScoreCell({ score, flag, alert }: { score: number; flag: number;
           {fmtScore(score)}
         </span>
         <span className={cn("w-14 text-[13px]", high ? "text-risk-700" : "text-ink-600")}>
-          {high ? "wysokie" : "średnie"}
+          {confidence ? "pewność" : high ? "wysokie" : "średnie"}
         </span>
       </span>
     </Tip>

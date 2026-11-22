@@ -119,6 +119,8 @@ function Slider({
   alert: number;
   onChange: (value: number) => void;
 }) {
+  const same = Math.abs(saved - alert) < 0.005;
+  const close = !same && Math.abs(saved - alert) < 0.16;
   return (
     <div className="relative pt-7 pb-6">
       <span
@@ -161,21 +163,39 @@ function Slider({
         }
         className="absolute inset-x-0 top-[22px] h-5 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-ink-900 [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-ink-900 [&::-webkit-slider-thumb]:transition-transform hover:[&::-webkit-slider-thumb]:scale-125 focus-visible:[&::-webkit-slider-thumb]:outline-2 focus-visible:[&::-webkit-slider-thumb]:outline-primary-700 focus-visible:[&::-webkit-slider-thumb]:outline-offset-2"
       />
-      <div className="relative mt-3 h-4 text-ink-600 text-xs">
-        <span className="absolute left-0">0,00</span>
-        <span className="absolute -translate-x-1/2" style={{ left: `${saved * 100}%` }}>
-          zapisany {fmtScore(saved)}
-        </span>
-        <span className="absolute -translate-x-1/2" style={{ left: `${alert * 100}%` }}>
-          próg alertu {fmtScore(alert)}
-        </span>
-        <span className="absolute right-0">1,00</span>
+      {/* Podpisy rozsuwamy, gdy progi są blisko siebie: zapisany w pierwszym wierszu, alert w drugim. */}
+      <div className={cn("relative mt-3 text-ink-600 text-xs", close ? "h-8" : "h-4")}>
+        {saved >= 0.12 ? <span className="absolute left-0">0,00</span> : null}
+        {same ? (
+          <span
+            className="absolute -translate-x-1/2 whitespace-nowrap"
+            style={{ left: `${saved * 100}%` }}
+          >
+            zapisany i próg alertu {fmtScore(saved)}
+          </span>
+        ) : (
+          <>
+            <span
+              className="absolute -translate-x-1/2 whitespace-nowrap"
+              style={{ left: `${saved * 100}%` }}
+            >
+              zapisany {fmtScore(saved)}
+            </span>
+            <span
+              className={cn("absolute -translate-x-1/2 whitespace-nowrap", close && "top-4")}
+              style={{ left: `${alert * 100}%` }}
+            >
+              próg alertu {fmtScore(alert)}
+            </span>
+          </>
+        )}
+        {alert <= 0.86 ? <span className="absolute right-0">1,00</span> : null}
       </div>
     </div>
   );
 }
 
-function Matrix({ data }: { data: CalibrationData | undefined }) {
+function Matrix({ data, ads }: { data: CalibrationData | undefined; ads: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <Card className="p-4">
@@ -197,8 +217,10 @@ function Matrix({ data }: { data: CalibrationData | undefined }) {
           <thead>
             <tr className="text-ink-600">
               <th className="py-1 text-left font-normal" />
-              <th className="py-1 text-right font-normal">Potwierdzony</th>
-              <th className="py-1 text-right font-normal">Fałszywy alarm</th>
+              <th className="py-1 text-right font-normal">{ads ? "Reklama" : "Potwierdzony"}</th>
+              <th className="py-1 text-right font-normal">
+                {ads ? "Nie reklama" : "Fałszywy alarm"}
+              </th>
             </tr>
           </thead>
           <tbody className="text-ink-900">
@@ -309,6 +331,7 @@ function ModuleCalibration({
   const after = useCalibration(module, candidate);
   const save = useSaveThreshold();
   const n = MODULE_NUMBER[module];
+  const ads = module === "finfluencer";
   const changed = candidate !== threshold.flag;
   const flaggedBefore = before.data?.flagged;
   const flaggedAfter = after.data?.flagged;
@@ -328,7 +351,8 @@ function ModuleCalibration({
       <Card className="px-5 pt-5 pb-3">
         <p className="font-semibold text-ink-900 text-lg">{headline}</p>
         <p className="mt-1 text-[13px] text-ink-600">
-          Liczone na {labeled ?? "…"} decyzjach analityków (Potwierdzony i Fałszywy alarm).
+          Liczone na {labeled ?? "…"} decyzjach analityków (
+          {ads ? "To reklama i To nie reklama" : "Potwierdzony i Fałszywy alarm"}).
         </p>
         <Slider
           value={candidate}
@@ -351,14 +375,14 @@ function ModuleCalibration({
       {before.error ? <ErrorNote error={before.error} /> : null}
       <div className="grid grid-cols-4 gap-4">
         <Metric
-          title="Fałszywe alarmy (FP)"
+          title={ads ? "Nie-reklamy w rejestrze (FP)" : "Fałszywe alarmy (FP)"}
           before={before.data?.fp}
           after={after.data?.fp}
           digits={0}
           labeled={labeled}
         />
         <Metric
-          title="Przeoczone naruszenia (FN)"
+          title={ads ? "Przeoczone reklamy (FN)" : "Przeoczone naruszenia (FN)"}
           before={before.data?.fn}
           after={after.data?.fn}
           digits={0}
@@ -366,7 +390,11 @@ function ModuleCalibration({
         />
         <Metric
           title="Precyzja"
-          hint="Jaka część oflagowanych materiałów to potwierdzone naruszenia."
+          hint={
+            ads
+              ? "Jaka część wykrytych materiałów to potwierdzone reklamy."
+              : "Jaka część oflagowanych materiałów to potwierdzone naruszenia."
+          }
           before={before.data?.precision}
           after={after.data?.precision}
           digits={2}
@@ -374,7 +402,11 @@ function ModuleCalibration({
         />
         <Metric
           title="Pełność"
-          hint="Jaką część potwierdzonych naruszeń próg wyłapuje."
+          hint={
+            ads
+              ? "Jaką część potwierdzonych reklam próg wyłapuje."
+              : "Jaką część potwierdzonych naruszeń próg wyłapuje."
+          }
           before={before.data?.recall}
           after={after.data?.recall}
           digits={2}
@@ -410,7 +442,7 @@ function ModuleCalibration({
       </div>
 
       <div className="grid grid-cols-[360px_minmax(0,1fr)] items-start gap-4">
-        <Matrix data={after.data} />
+        <Matrix data={after.data} ads={ads} />
         <DropList module={module} saved={threshold.flag} candidate={candidate} />
       </div>
     </div>
@@ -424,7 +456,7 @@ export function Calibration() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-5">
       <PageHeader
         title="Kalibracja"
-        description="Próg flagi decyduje, co trafia do Kolejki. FP i FN liczymy z decyzji analityków."
+        description="Próg flagi decyduje, co trafia do Kolejki (M2, M3) i do rejestru reklam (M1). FP i FN liczymy z decyzji analityków."
         actions={
           <Tabs
             label="Moduł"

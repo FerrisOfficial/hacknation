@@ -86,6 +86,8 @@ export type IncidentListItem = {
   // Tytuł materiału (materials.title) i rejestr KNF z `details.entity` — nagłówki w Kolejce.
   title: string | null;
   in_register: boolean | null;
+  // Lista ostrzeżeń publicznych KNF z `details.entity`: sygnał eskalacji M1 do Kolejki (R18).
+  on_warning_list: boolean | null;
 } & Review;
 
 export type IncidentList = { items: IncidentListItem[]; total: number };

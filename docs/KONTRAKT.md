@@ -335,3 +335,10 @@ W tej wersji zbieramy tylko **YouTube i strony WWW**; Instagram, Facebook, TikTo
 **Bez zmian kontraktu, ale ważne dla UI**
 - Zmiana progu `flag` od razu zmienia listę incydentów (obecne zachowanie). Ekran Kalibracji tak to opisuje.
 - Socket.io: `result` po każdej zmianie statusu, żeby inne przeglądarki odświeżyły Kolejkę.
+
+## Moduł 1 jako rejestr reklam (PR `feat/m1-rejestr`, R18 w briefie)
+
+Reklama firmy inwestycyjnej publikowana przez osobę trzecią nie jest naruszeniem. UI pokazuje M1 w osobnym rejestrze („Reklamy”), a do Kolejki naruszeń bierze tylko M1 z sygnałem naruszenia: `in_register === false` albo `on_warning_list === true`.
+- [x] §4: lista ma też `on_warning_list: boolean | null` (z `details.entity`).
+- [ ] Do decyzji backendu: `incident.high_risk` dla M1 tylko z sygnałem naruszenia. Dziś UI pokazuje alert M1 neutralnie („Nowa reklama · pewność”), bez paska ryzyka.
+- Statusy M1 w UI: `confirmed` = „To reklama”, `dismissed` = „To nie reklama”; kalibracja M1 liczy FP/FN z tych decyzji (bez zmian w API).

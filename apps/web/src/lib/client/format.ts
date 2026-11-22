@@ -187,3 +187,12 @@ export function reviewText(review: {
   }
   return [label, [who, when].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
 }
+
+// Moduł 1 rozstrzyga „czy to reklama”, nie „czy to naruszenie” (R18): własne słowa statusów.
+export function statusLabelFor(status: UiStatus, module: AnalysisModule): string {
+  if (module === "finfluencer") {
+    if (status === "confirmed") return "Reklama";
+    if (status === "dismissed") return "Nie reklama";
+  }
+  return STATUS_LABEL[status];
+}
