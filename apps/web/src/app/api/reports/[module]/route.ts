@@ -13,6 +13,7 @@ import {
 import { NextResponse } from "next/server";
 import { HttpError, handler, readQuery } from "@/lib/api/http";
 import { getThresholds } from "@/lib/pipeline/thresholds";
+import { knfScopeSql } from "@/lib/queries/scope";
 import { reportRow, toCsv } from "@/lib/reports";
 import { reportModuleSchema, reportQuerySchema } from "@/lib/schemas";
 
@@ -61,6 +62,7 @@ export const GET = handler(
           query.status?.length ? inArray(analysisResults.status, query.status) : undefined,
           query.from ? gte(analysisResults.createdAt, query.from) : undefined,
           query.to ? lte(analysisResults.createdAt, query.to) : undefined,
+          knfScopeSql(),
         ),
       )
       .orderBy(desc(analysisResults.score), desc(analysisResults.createdAt))

@@ -28,6 +28,7 @@ import { getThresholds, riskScoreSql, thresholdSql } from "@/lib/pipeline/thresh
 import { currentReviewer } from "@/lib/reviewer";
 import type { IncidentsQuery } from "@/lib/schemas";
 import { resultConditions } from "./results";
+import { knfScopeSql } from "./scope";
 
 // Incydent = wynik jednego modułu AI dla materiału (wiersz `analysis_results`) ze score ≥ próg
 // `flag` modułu (M2: któraś reguła ≥ próg). Kolejność: risk_score (priorytet) albo data.
@@ -201,7 +202,7 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
     .from(analysisResults)
     .innerJoin(materials, eq(materials.id, analysisResults.materialId))
     .leftJoin(reviewers, eq(reviewers.id, analysisResults.reviewedBy))
-    .where(eq(analysisResults.id, id));
+    .where(and(eq(analysisResults.id, id), knfScopeSql()));
   if (!row) return null;
   const { material } = row;
   const score = roundScore(row.score);

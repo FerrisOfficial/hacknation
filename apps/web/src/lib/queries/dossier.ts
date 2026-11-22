@@ -1,8 +1,9 @@
 import "server-only";
-import { analysisResults, asc, type Db, eq, materials } from "@app/db";
+import { analysisResults, and, asc, type Db, eq, materials } from "@app/db";
 import { type DossierCase, entityNameOf } from "@/lib/dossier";
 import { readIncidentDetails } from "@/lib/incidents/contract";
 import { getIncidentDetail, getIncidentSnapshot } from "./incidents";
+import { knfScopeSql } from "./scope";
 
 // Potwierdzone incydenty podmiotu do teczki (Z7), pogrupowane po materiale, od najstarszego.
 // Wszystkie potwierdzone, także poniżej obecnego progu `flag`: decyzja analityka zostaje dowodem,
@@ -16,7 +17,7 @@ export async function loadDossierCases(db: Db, firm: string): Promise<DossierCas
     })
     .from(analysisResults)
     .innerJoin(materials, eq(materials.id, analysisResults.materialId))
-    .where(eq(analysisResults.status, "confirmed"))
+    .where(and(eq(analysisResults.status, "confirmed"), knfScopeSql()))
     .orderBy(asc(materials.scrapedAt), asc(analysisResults.module));
 
   const byMaterial = new Map<string, string[]>();

@@ -16,6 +16,9 @@ import {
 } from "@app/db";
 import type { MaterialsQuery } from "@/lib/schemas";
 import { escapeLike, type MaterialSummary, type Page } from "./results";
+import { knfScopeSql } from "./scope";
+
+const resultInScope = knfScopeSql(sql.raw("r.module"), sql.raw("r.details"));
 
 export type MaterialListItem = MaterialSummary & {
   analyzedAt: Date | null;
@@ -58,10 +61,10 @@ export async function listMaterials(
         sourceId: materials.sourceId,
         sourceName: sources.name,
         analyzedAt: materials.analyzedAt,
-        resultsCount: sql<number>`(select count(*)::int from analysis_results r where r.material_id = ${materials.id})`,
+        resultsCount: sql<number>`(select count(*)::int from analysis_results r where r.material_id = ${materials.id} and ${resultInScope})`,
         maxScore: sql<
           number | null
-        >`(select max(r.score) from analysis_results r where r.material_id = ${materials.id})`,
+        >`(select max(r.score) from analysis_results r where r.material_id = ${materials.id} and ${resultInScope})`,
       })
       .from(materials)
       .leftJoin(sources, eq(sources.id, materials.sourceId))

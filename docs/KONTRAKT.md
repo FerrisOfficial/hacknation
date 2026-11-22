@@ -348,10 +348,18 @@ W tej wersji zbieramy tylko **YouTube i strony WWW**; Instagram, Facebook, TikTo
 
 ## Moduł 1 jako rejestr reklam (PR `feat/m1-rejestr`, R18 w briefie)
 
-Reklama firmy inwestycyjnej publikowana przez osobę trzecią nie jest naruszeniem. UI pokazuje M1 w osobnym rejestrze („Reklamy”), a do Kolejki naruszeń bierze tylko M1 z sygnałem naruszenia: `in_register === false` albo `on_warning_list === true`.
+Reklama firmy inwestycyjnej publikowana przez osobę trzecią nie jest naruszeniem. UI pokazuje M1 w osobnym rejestrze („Reklamy”), a do Kolejki naruszeń bierze tylko M1 z sygnałem naruszenia: `in_register === false` albo `on_warning_list === true`. Od ustalenia z mentorami (sekcja niżej) M1 ma zawsze `in_register === true`, więc zostaje tylko sygnał `on_warning_list`.
 - [x] §4: lista ma też `on_warning_list: boolean | null` (z `details.entity`).
 - [ ] Do decyzji backendu: `incident.high_risk` dla M1 tylko z sygnałem naruszenia. Dziś UI pokazuje alert M1 neutralnie („Nowa reklama · pewność”), bez paska ryzyka.
 - Statusy M1 w UI: `confirmed` = „To reklama”, `dismissed` = „To nie reklama”; kalibracja M1 liczy FP/FN z tych decyzji (bez zmian w API).
+
+## M1 i M2 tylko dla podmiotów z rejestru KNF (ustalenie z mentorami, 22.11.2026)
+
+Firmy spoza rejestru KNF nie interesują UKNF w modułach 1 i 2 (docs/ZADANIE.md). Kształt API się nie zmienia, zmienia się zakres danych:
+- **Pipeline:** wynik M1 i M2 powstaje tylko dla `entity.in_register === true`. `false` (KNF zna podmiot bez wpisu albo go nie zna) i `null` (brak domeny i NIP-u albo KNF nie odpowiedział) = brak wiersza w `analysis_results`. Dane KNF dla M2 liczymy przed `POST /analyze`, więc model nie jest wołany. `PUT /api/materials/:id/analysis` z `outputs` odcina tak samo.
+- **Odczyty:** wszystkie listy, liczniki, trend, histogram kalibracji, teczka i raporty pomijają wiersze M1 i M2 bez `in_register === true`, także zapisane wcześniej. Szczegół takiego incydentu zwraca 404.
+- **M3 bez zmian:** `in_register === false` i lista ostrzeżeń to jego sygnał naruszenia (flaga `M3.license`).
+- Kod: `@/lib/analysis/knf-scope` (reguła) i `@/lib/queries/scope` (warunek SQL).
 
 ## Ten sam materiał w innym module (R19, PR `feat/m1-rejestr`)
 - [ ] §5: `related: [{ "id", "module", "score", "status", "summary" }]` — inne incydenty tego samego materiału (np. reklama + doradztwo). Pusta lista albo brak pola = UI nie pokazuje karty.
