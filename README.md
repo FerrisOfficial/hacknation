@@ -1,6 +1,6 @@
 # IVE — InvestWatch
 
-System monitoringu internetu dla UKNF (zadanie **#InvestWatch — na straży inwestorów!**, HackNation 2026). Sam wyszukuje i zbiera materiały o usługach inwestycyjnych, ocenia je trzema modułami AI i pokazuje analitykowi alerty z dowodami.
+System monitoringu internetu dla UKNF (zadanie **#InvestWatch — na straży inwestorów!**, HackNation 2026). Sam wyszukuje i zbiera materiały o usługach inwestycyjnych, ocenia je trzema modułami analitycznymi (M1 na regułach, M2 i M3 na regułach z opcjonalnym LLM) i pokazuje analitykowi alerty z dowodami.
 
 ## Funkcjonalności
 
@@ -13,7 +13,12 @@ System monitoringu internetu dla UKNF (zadanie **#InvestWatch — na straży inw
 
 ## Quick Start
 
-**Wymagania:** Docker z Compose v2 (Windows: Docker Desktop z WSL 2), 16 GB RAM, ok. 15 GB dysku. GPU opcjonalnie: NVIDIA z min. 6 GB VRAM.
+**Wymagania:** Docker z Compose v2 (Windows: Docker Desktop z WSL 2).
+
+| Tryb | Model | Sprzęt |
+|---|---|---|
+| `rules` (domyślny) | brak | bez GPU; tylko obrazy kontenerów |
+| `hybrid` | Bielik-PL-11B Q8_0, ok. 12 GB dysku | najlepiej GPU NVIDIA z VRAM na cały model, bez GPU działa na CPU (wolno); mniej pamięci: kwantyzacja Q4_K_M ok. 7 GB ([services/ml/README.md](services/ml/README.md)) |
 
 ```bash
 cp .env.example .env
@@ -34,14 +39,14 @@ Dashboard: http://localhost:3000/hacknation. Domyślnie M2 i M3 działają na re
 
 | Usługa | Adres | Rola |
 |---|---|---|
-| `web` | :3000 | Next.js: dashboard, API, kolejka i harmonogram (pg-boss), Socket.io |
+| `web` | :3000, :3001 (Socket.io) | Next.js: dashboard, API, kolejka i harmonogram (pg-boss), powiadomienia na żywo |
 | `ml` | :8000/docs | FastAPI: scraper, kolektory YouTube i KNF, moduły M2 i M3, OCR |
 | `media` | :8100 | FastAPI + ffmpeg: pobieranie filmów i wycinanie klatek |
 | `ollama` | :11434 | lokalny LLM dla trybu `hybrid` |
 | `db` | :5432 | PostgreSQL 17: metadane, wyniki, decyzje analityka |
 | `migrate`, `ollama-pull` | — | jednorazowo: migracje Drizzle, pobranie modelu |
 
-Wszystkie porty są wystawione tylko na `127.0.0.1`. Pełna lista zmiennych z opisami: [.env.example](.env.example).
+Wszystkie porty są wystawione tylko na `127.0.0.1`. Główne zmienne z opisami: [.env.example](.env.example).
 
 ### Development (bez kontenerów aplikacji)
 
@@ -81,8 +86,8 @@ compose.yaml       cały stos on-premise (+ compose.gpu.yaml)
 
 | Wymaganie | Jak spełniamy |
 |---|---|
-| Lekkie, rozdzielone serwisy | Frontend z backendem (`web`), AI (`ml`), media (`media`), LLM (`ollama`) i baza (`db`) to osobne kontenery. Rozmawiają tylko przez HTTP z kontraktem OpenAPI. Przeglądarka nie woła serwisów AI bezpośrednio. |
-| Docker Compose, on-premise | Cały stos startuje jedną komendą `docker compose up --build`. Obrazy mają przypięte wersje. CI w każdym PR buduje stos i sprawdza, czy odpowiada. |
+| Lekkie, rozdzielone serwisy | Frontend z backendem (`web`), AI (`ml`), media (`media`), LLM (`ollama`) i baza (`db`) to osobne kontenery. `web` woła `ml` przez klient generowany z OpenAPI, a `media` przez HTTP z walidacją Zod. Przeglądarka nie woła serwisów AI bezpośrednio. |
+| Docker Compose, on-premise | Cały stos startuje jedną komendą `docker compose up --build`. Obrazy mają przypięte wersje. CI w każdym PR buduje stos bez Ollamy (db, migrate, ml, media, web) i sprawdza, czy odpowiada. |
 | Tylko open source, bez płatnych API | Model Bielik działa lokalnie w Ollamie, OCR lokalnie w ONNX Runtime, baza to Postgres. Nie ma kluczy do zewnętrznych usług. Bez LLM system działa na regułach. |
 | Bezpieczny łańcuch dostaw | CI uruchamia `pnpm audit --audit-level high` i `pip-audit` (ml, media), a lockfile'y są wymuszane (`--frozen-lockfile`, `uv sync --locked`). Sekrety trzymamy tylko w `.env` (poza gitem i obrazami), a porty wystawiamy tylko na localhost. |
 | README minimalne | Ten plik: Quick Start, wymagania sprzętowe, konfiguracja usług. |
@@ -93,22 +98,25 @@ Kod projektu: [MIT](LICENSE).
 
 ### Licencje zależności
 
-Wszystkie zależności są open source i pozwalają na swobodne użycie, także komercyjne.
+Wszystkie zależności są open source. Kod projektu linkuje tylko biblioteki na licencjach permisywnych, a ffmpeg (GPL) działa jako osobny program.
 
 | Komponent | Licencja |
 |---|---|
-| Next.js, React, Tailwind CSS, shadcn/ui, Base UI, TanStack Query, React Hook Form, Zod, Socket.io, pg-boss, sonner, next-themes, fflate, openapi-fetch, openapi-typescript | MIT |
+| Next.js, React, Tailwind CSS, shadcn/ui, Base UI, TanStack Query, React Hook Form, @hookform/resolvers, Zod, Socket.io, pg-boss, sonner, next-themes, fflate, tw-animate-css, cn, openapi-fetch, openapi-typescript | MIT |
+| class-variance-authority | Apache 2.0 |
 | lucide-react | ISC |
-| Inter (font) | SIL OFL 1.1 |
+| Inter (@fontsource-variable/inter) | SIL OFL 1.1 |
 | Drizzle ORM | Apache 2.0 |
 | postgres (postgres.js) | Unlicense |
 | FastAPI, pydantic, selectolax, youtube-transcript-api, ONNX Runtime | MIT |
 | httpx | BSD-3-Clause |
 | Playwright, RapidOCR | Apache 2.0 |
+| Chromium (headless shell, w obrazie `ml`) | BSD-3-Clause |
 | yt-dlp | Unlicense |
-| ffmpeg (osobny program w kontenerze `media`, bez linkowania) | LGPL 2.1+ / GPL 2+ |
+| ffmpeg (pakiet Debiana w obrazie `media`, osobny proces, bez linkowania) | GPL 2+ |
 | PostgreSQL | PostgreSQL License |
 | Ollama | MIT |
+| Obrazy bazowe: `node`, `python` (Debian), `postgres`, `ollama/ollama` | licencje projektów (MIT, PSF, PostgreSQL, MIT) + pakiety Debiana |
 | Bielik-PL-11B v3.0 Instruct (SpeakLeash) | Apache 2.0 |
 | Biome, Ruff, Pyright, Vitest, pytest | MIT |
 
@@ -116,5 +124,5 @@ Wszystkie zależności są open source i pozwalają na swobodne użycie, także 
 
 - [docs/ZADANIE.md](docs/ZADANIE.md): wymagania i kryteria oceny
 - [docs/KONTRAKT.md](docs/KONTRAKT.md): API dashboardu, zdarzenia Socket.io, wyjście modeli
-- [services/ml/README.md](services/ml/README.md): moduły AI i konfiguracja LLM
+- [services/ml/README.md](services/ml/README.md): konfiguracja LLM
 - [CLAUDE.md](CLAUDE.md), [docs/PROCES-AI.md](docs/PROCES-AI.md): zasady pracy zespołu i agentów AI
