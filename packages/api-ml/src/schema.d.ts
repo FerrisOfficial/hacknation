@@ -177,6 +177,8 @@ export interface components {
             quote: string | null;
             /** Reason */
             reason: string;
+            /** @description Tylko reguły wizualne z klatek filmu (KONTRAKT.md §2). */
+            frame?: components["schemas"]["FindingFrame"] | null;
         };
         /** AnalysisSubject */
         AnalysisSubject: {
@@ -266,6 +268,24 @@ export interface components {
             model?: string | null;
             /** Error */
             error?: string | null;
+        };
+        /** FindingFrame */
+        FindingFrame: {
+            /**
+             * Ts
+             * @description Sekunda klatki od początku filmu.
+             */
+            ts: number;
+            /**
+             * File
+             * @description Plik klatki materiału, np. 42000.png.
+             */
+            file: string;
+            /**
+             * Box
+             * @description Ramka cytatu [x0, y0, x1, y1] jako ułamki 0-1 klatki.
+             */
+            box: number[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {

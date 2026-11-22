@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.routing import APIRoute
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
-from ml import advisory, knf, risk, risk_llm, youtube
+from ml import advisory, knf, risk, risk_llm, risk_visual, youtube
 from ml.model import Label, predict_sentiment
 from ml.scraper import ScrapeError, scrape
 
@@ -215,12 +215,21 @@ class AnalyzeRequest(BaseModel):
     )
 
 
+class FindingFrame(BaseModel):
+    ts: float = Field(ge=0, description="Sekunda klatki od początku filmu.")
+    file: str = Field(description="Plik klatki materiału, np. 42000.png.")
+    box: list[float] = Field(description="Ramka cytatu [x0, y0, x1, y1] jako ułamki 0-1 klatki.")
+
+
 class AnalysisFinding(BaseModel):
     rule_id: str
     result: FindingResult
     confidence: float = Field(ge=0, le=1)
     quote: str | None = Field(description="Dosłowny fragment `text`, do 300 znaków.")
     reason: str
+    frame: FindingFrame | None = Field(
+        default=None, description="Tylko reguły wizualne z klatek filmu (KONTRAKT.md §2)."
+    )
 
 
 class RuleScoreOut(BaseModel):
@@ -295,7 +304,25 @@ def predict(request: PredictRequest) -> Prediction:
 log = logging.getLogger(__name__)
 
 
-def _risk_disclosure(text: str, rules: list[str] | None) -> risk.RiskAnalysis:
+def _risk_disclosure(
+    text: str, rules: list[str] | None, material_id: str | None = None
+) -> risk.RiskAnalysis:
+    """M2: reguły tekstowe, a gdy materiał ma klatki filmu, także wizualne (4, 5, 6, 13)."""
+    analysis = _risk_disclosure_text(text, rules)
+    visual_rules = [r for r in risk_visual.VISUAL_RULES if rules is None or r in rules]
+    if material_id is None or not visual_rules:
+        return analysis
+    frames = risk_visual.load_frames(material_id)
+    if frames is None:
+        return analysis
+    visual = {
+        f.rule_id: f for f in risk_visual.evaluate_frames(frames) if f.rule_id in visual_rules
+    }
+    findings = [visual.pop(f.rule_id, f) for f in analysis.findings] + list(visual.values())
+    return risk.RiskAnalysis(findings=findings, summary=risk.summarize(findings))
+
+
+def _risk_disclosure_text(text: str, rules: list[str] | None) -> risk.RiskAnalysis:
     """M2 wg M2_ENGINE: rules (regex), llm (Bielik, 13 reguł) albo hybrid.
 
     hybrid: regex decyduje, czy reguła dotyczy, a LLM ocenia naruszenie.
@@ -359,7 +386,7 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     unknown = sorted(set(request.rules) - set(risk.RULE_IDS))
     if unknown:
         raise HTTPException(status_code=422, detail=f"Nieznane reguły M2: {', '.join(unknown)}")
-    analysis = _risk_disclosure(request.text, request.rules or None)
+    analysis = _risk_disclosure(request.text, request.rules or None, request.material_id)
     return AnalyzeResponse(
         material_id=request.material_id,
         label=None,
@@ -375,6 +402,7 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
             AnalysisFinding(
                 rule_id=f.rule_id, result=f.result, confidence=f.confidence,
                 quote=f.quote, reason=f.reason,
+                frame=FindingFrame(**f.frame) if f.frame else None,
             )
             for f in analysis.findings
         ],

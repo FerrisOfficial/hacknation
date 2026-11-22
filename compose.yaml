@@ -57,7 +57,6 @@ services:
     environment:
       # Ollama na hoście zamiast w kontenerze (np. Mac z GPU Apple): http://host.docker.internal:11434
       OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
       # Moduł 2: rules (regex, bez LLM), hybrid (regex + LLM — zalecany), llm (sam LLM).
       M2_ENGINE: ${M2_ENGINE:-rules}
       # Moduł 3: rules (regex) albo hybrid (regex + LLM ocenia 3 główne przesłanki doradztwa).
@@ -65,6 +64,14 @@ services:
       OLLAMA_RISK_MODEL: ${OLLAMA_RISK_MODEL:-hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0}
       SCRAPER_PROXY_URL: ${SCRAPER_PROXY_URL:-}
       YOUTUBE_DELAY_S: ${YOUTUBE_DELAY_S:-3}
+      # Klatki filmów od serwisu `media` (reguły wizualne M2, docs/KLATKI.md) — tylko odczyt.
+      MEDIA_DIR: /data/media
+    volumes:
+      - media:/data/media:ro
+    # `media` montuje wolumen pierwszy, więc katalog należy do jego użytkownika (zapis klatek).
+    depends_on:
+      media:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -80,6 +87,28 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Pobieranie filmów z YouTube i wycinanie klatek (yt-dlp + ffmpeg). Woła go tylko backend.
+  media:
+    build: services/media
+    environment:
+      MEDIA_DIR: /data/media
+      MEDIA_MAX_DURATION_S: ${MEDIA_MAX_DURATION_S:-1200}
+      SCRAPER_PROXY_URL: ${SCRAPER_PROXY_URL:-}
+    volumes:
+      - media:/data/media
+    ports:
+      - "127.0.0.1:8100:8100"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   web:
     build:
       context: .
@@ -88,6 +117,9 @@ services:
     environment:
       DATABASE_URL: *database-url
       ML_API_URL: http://ml:8000
+      MEDIA_API_URL: http://media:8100
+      # Ile filmów pobiera worker naraz (YouTube blokuje HTTP 429 przy większym tempie).
+      MEDIA_CONCURRENCY: ${MEDIA_CONCURRENCY:-1}
       COLLECTOR_TOKEN: ${COLLECTOR_TOKEN:-}
       # Socket.io (powiadomienia w czasie rzeczywistym) na osobnym porcie — patrz src/lib/realtime.
       REALTIME_PORT: "3001"
@@ -112,6 +144,8 @@ services:
       migrate:
         condition: service_completed_successfully
       ml:
+        condition: service_healthy
+      media:
         condition: service_healthy
     healthcheck:
       test:
@@ -138,27 +172,26 @@ services:
       retries: 20
     restart: unless-stopped
 
-  # Jednorazowo pobiera modele do wolumenu `ollama-models` (pierwszy start: kilka GB).
-  # Model Modułów 2 i 3 tylko przy M2_ENGINE / M3_ENGINE innym niż `rules` (Bielik APT4 Q8_0: ok. 12 GB).
+  # Jednorazowo pobiera model Modułów 2 i 3 do wolumenu `ollama-models` — tylko przy M2_ENGINE
+  # albo M3_ENGINE innym niż `rules` (Bielik APT4 Q8_0: ok. 12 GB). Przy `rules` kończy się od razu.
   ollama-pull:
     image: ollama/ollama:0.40.17
     environment:
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
       M2_ENGINE: ${M2_ENGINE:-rules}
       M3_ENGINE: ${M3_ENGINE:-rules}
       OLLAMA_RISK_MODEL: ${OLLAMA_RISK_MODEL:-hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        ollama pull "$$OLLAMA_MODEL" &&
-        { [ "$$M2_ENGINE" = rules ] && [ "$$M3_ENGINE" = rules ] || ollama pull "$$OLLAMA_RISK_MODEL"; }
+        { [ "$$M2_ENGINE" = rules ] && [ "$$M3_ENGINE" = rules ]; } || ollama pull "$$OLLAMA_RISK_MODEL"
     depends_on:
       ollama:
         condition: service_healthy
     restart: "no"
 
 volumes:
+  media:
   db-data:
   ollama-models:
   content-store:

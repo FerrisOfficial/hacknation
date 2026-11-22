@@ -370,6 +370,17 @@
           "reason": {
             "type": "string",
             "title": "Reason"
+          },
+          "frame": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FindingFrame"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tylko reguły wizualne z klatek filmu (KONTRAKT.md §2)."
           }
         },
         "type": "object",
@@ -596,6 +607,36 @@
           "findings"
         ],
         "title": "AnalyzeResponse"
+      },
+      "FindingFrame": {
+        "properties": {
+          "ts": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Ts",
+            "description": "Sekunda klatki od początku filmu."
+          },
+          "file": {
+            "type": "string",
+            "title": "File",
+            "description": "Plik klatki materiału, np. 42000.png."
+          },
+          "box": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Box",
+            "description": "Ramka cytatu [x0, y0, x1, y1] jako ułamki 0-1 klatki."
+          }
+        },
+        "type": "object",
+        "required": [
+          "ts",
+          "file",
+          "box"
+        ],
+        "title": "FindingFrame"
       },
       "HTTPValidationError": {
         "properties": {

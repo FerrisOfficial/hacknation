@@ -1,10 +1,18 @@
 import "server-only";
 import { getDb } from "@app/db";
+import { MediaError } from "@/lib/media";
 import { MlError, ml } from "@/lib/ml";
 import { runAnalysis } from "@/lib/pipeline/analyze";
 import { enqueueDueSources } from "@/lib/pipeline/scheduler";
 import { runScrapeJob, ScrapeJobError } from "@/lib/pipeline/scrape";
-import { type AnalyzeJobData, getBoss, QUEUES, type ScrapeJobData } from "./boss";
+import { runVideoDownload } from "@/lib/pipeline/video";
+import {
+  type AnalyzeJobData,
+  getBoss,
+  QUEUES,
+  type ScrapeJobData,
+  type VideoJobData,
+} from "./boss";
 
 // Worker kolejki i harmonogram (CronJob): startuje raz na proces z src/instrumentation.ts.
 
@@ -60,6 +68,23 @@ export async function startWorker(): Promise<void> {
           return;
         }
         logThrottled(`Analiza AI: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    },
+  );
+
+  await boss.work<VideoJobData>(
+    QUEUES.video,
+    // Domyślnie 1: równoległe pobrania z YouTube kończą się blokadą HTTP 429.
+    { localConcurrency: envInt("MEDIA_CONCURRENCY", 1) },
+    async ([job]) => {
+      if (!job) return;
+      try {
+        await runVideoDownload(db, job.data.materialId, job.signal);
+      } catch (error) {
+        logThrottled(`Pobranie filmu: ${error instanceof Error ? error.message : String(error)}`);
+        // Błąd jest już w metadata.frames. Ponawiamy tylko to, co ma szansę się udać.
+        if (error instanceof MediaError && !error.retryable) return;
         throw error;
       }
     },

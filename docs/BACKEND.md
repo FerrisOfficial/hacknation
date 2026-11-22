@@ -37,6 +37,7 @@ Dashboard (bez logowania, tylko localhost):
 | `POST /materials/:id/analyze` | ponowna analiza AI |
 | `GET /results` | wyniki modułów (materiał × moduł) |
 | `GET /incidents` · `GET/PATCH /incidents/:id` · `GET /incidents/:id/snapshot` | incydenty dla dashboardu (wynik modułu ≥ próg `flag`), szczegół z dowodami, zmiana statusu, kopia strony — kształty w [KONTRAKT.md](KONTRAKT.md) §4–§6 |
+| `GET /incidents/:id/video` · `GET /incidents/:id/frames/:file` · `POST /materials/:id/video` | film YouTube (mp4, `Range`) i klatki z serwisu `services/media`; ręczne zamówienie pobrania. Film z incydentem pobiera kolejka `download-video` sama |
 | `GET /me` | analityk z env (`UI_USER_NAME`, `UI_USER_ROLE`, `UI_USER_ID`) — autor decyzji i wpisów w historii (tabele `reviewers`, `incident_events`) |
 | `GET /entities/dossier?firm=` | teczka podmiotu: ZIP z potwierdzonymi materiałami (kopia HTML, tekst, `details`, historia) |
 | `GET /settings/threshold` · `PUT /settings/threshold` | progi `flag` i `alert` per moduł ([KONTRAKT.md](KONTRAKT.md) §8) |
@@ -132,4 +133,4 @@ Typy: `apps/web/src/lib/realtime/events.ts`.
 
 ## Zmienne środowiskowe (`apps/web/.env.example`)
 
-`REALTIME_PORT`, `REALTIME_HOST`, `REALTIME_CORS_ORIGIN` (Socket.io), `WORKER_ENABLED`, `SCRAPE_CONCURRENCY`, `ANALYZE_CONCURRENCY` (worker), `CONTENT_STORE_DIR` (baza treści), `COLLECTOR_TOKEN` (endpointy dla maszyn), `UI_USER_NAME`, `UI_USER_ROLE`, `UI_USER_ID` (kto pracuje w dashboardzie, bez logowania).
+`REALTIME_PORT`, `REALTIME_HOST`, `REALTIME_CORS_ORIGIN` (Socket.io), `WORKER_ENABLED`, `SCRAPE_CONCURRENCY`, `ANALYZE_CONCURRENCY` (worker), `CONTENT_STORE_DIR` (baza treści), `COLLECTOR_TOKEN` (endpointy dla maszyn), `UI_USER_NAME`, `UI_USER_ROLE`, `UI_USER_ID` (kto pracuje w dashboardzie, bez logowania), `MEDIA_API_URL`, `MEDIA_CONCURRENCY` (serwis media).

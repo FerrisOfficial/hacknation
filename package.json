@@ -10,7 +10,7 @@
     "dev": "node scripts/env-init.mjs && turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "format": "biome check --write . && pnpm --filter @app/ml format",
+    "format": "biome check --write . && pnpm --filter @app/ml format && pnpm --filter @app/media format",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
