@@ -66,6 +66,7 @@ pnpm db:generate    # po zmianie packages/db/src/schema.ts
 pnpm db:migrate     # nakłada nowe migracje (np. po git pull)
 pnpm db:check       # nie łączy się z bazą? pokaże kod błędu i co poprawić w .env
 pnpm api:generate   # po zmianie endpointów w services/ml
+pnpm audit          # znane podatności w zależnościach npm (CI sprawdza też Pythona przez pip-audit)
 ```
 
 ## Praca w zespole

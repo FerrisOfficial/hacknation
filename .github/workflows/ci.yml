@@ -38,6 +38,29 @@ jobs:
             exit 1
           }
 
+  # Bezpieczny łańcuch dostaw (docs/ZADANIE.md): znane podatności w zależnościach npm i Pythona.
+  audit:
+    name: Audyt zależności (pnpm audit, pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      # Z pnpm-lock.yaml, bez instalacji. Blokuje high i critical; moderate i low tylko w logu.
+      - name: pnpm audit (npm)
+        run: pnpm audit --audit-level high
+
+      # Z uv.lock (wszystkie grupy, także dev): dokładne wersje z hashami, więc bez rozwiązywania przez pip.
+      - name: pip-audit (Python)
+        working-directory: services/ml
+        run: |
+          uv export --frozen --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit@2.10.1 --disable-pip --requirement "$RUNNER_TEMP/requirements.txt"
+
   docker:
     name: Docker Compose (cały stos)
     runs-on: ubuntu-latest
