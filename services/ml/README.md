@@ -23,3 +23,29 @@ Bezstanowe — zwracają JSON, zapis do bazy robi backend.
 | `GET /knf/entities?q=` | Wyszukiwarka podmiotów KNF (nazwa, numer, domena): rejestr i czy to aktualny wpis firmy inwestycyjnej. |
 
 Wszystkie kolektory używają `SCRAPER_PROXY_URL`, jeśli jest ustawiony.
+
+## Moduł 2: informacja o ryzyku
+
+`POST /analyze` (`module: "risk_disclosure"`) ocenia 13 reguł UKNF, które da się sprawdzić z tekstu, i zwraca dla każdej score oraz dosłowny cytat. Silnik wybiera `M2_ENGINE`:
+
+| `M2_ENGINE` | Jak działa | Czas / strona |
+|---|---|---|
+| `rules` (domyślnie) | frazy regex → P(naruszenie) reguły | ~0 s |
+| `hybrid` (zalecany) | regex wskazuje fragment i decyduje, czy reguła dotyczy; LLM odpowiada TAK/NIE na fragmencie, P(TAK) z logprobs | ~18 s (Bielik 11B, Mac M4) |
+| `llm` | LLM ocenia 13 reguł na całym tekście | ~28 s |
+
+Model: `OLLAMA_RISK_MODEL`, domyślnie `hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0` (ok. 12 GB, polski tokenizer APT4).
+
+**Mac (16 GB RAM).** Kontener nie widzi GPU Apple, więc Ollamę uruchom natywnie i użyj mniejszej wersji Q4_K_M (ok. 7 GB). SpeakLeash publikuje tylko Q8_0 i FP16, więc Q4_K_M robimy z Q8_0 — tokenizer zostaje w metadanych GGUF:
+
+```bash
+brew install ollama llama.cpp
+curl -LO https://huggingface.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF/resolve/main/Bielik-PL-11B-v3.0-Instruct.Q8_0.gguf
+llama-quantize --allow-requantize Bielik-PL-11B-v3.0-Instruct.Q8_0.gguf bielik-apt4-q4km.gguf Q4_K_M
+printf 'FROM ./bielik-apt4-q4km.gguf\nTEMPLATE """{{- range .Messages }}<|im_start|>{{ .Role }}\n{{ .Content }}<|im_end|>\n{{ end }}<|im_start|>assistant\n"""\nPARAMETER stop <|im_end|>\n' > Modelfile
+ollama create bielik-pl-11b-apt4:Q4_K_M -f Modelfile
+```
+
+W `.env`: `M2_ENGINE=hybrid`, `OLLAMA_RISK_MODEL=bielik-pl-11b-apt4:Q4_K_M`, `OLLAMA_URL=http://host.docker.internal:11434`.
+
+Porównanie silników i modeli oraz ewaluacja na etykietach: `scripts/compare_m2.py`, `scripts/compare_models.py`, `scripts/eval_m2.py`.

@@ -55,10 +55,16 @@ services:
   ml:
     build: services/ml
     environment:
-      OLLAMA_URL: http://ollama:11434
+      # Ollama na hoście zamiast w kontenerze (np. Mac z GPU Apple): http://host.docker.internal:11434
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
+      # Moduł 2: rules (regex, bez LLM), hybrid (regex + LLM — zalecany), llm (sam LLM).
+      M2_ENGINE: ${M2_ENGINE:-rules}
+      OLLAMA_RISK_MODEL: ${OLLAMA_RISK_MODEL:-hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0}
       SCRAPER_PROXY_URL: ${SCRAPER_PROXY_URL:-}
       YOUTUBE_DELAY_S: ${YOUTUBE_DELAY_S:-3}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -126,12 +132,20 @@ services:
       retries: 20
     restart: unless-stopped
 
-  # Jednorazowo pobiera model do wolumenu `ollama-models` (pierwszy start: kilka GB).
+  # Jednorazowo pobiera modele do wolumenu `ollama-models` (pierwszy start: kilka GB).
+  # Model Modułu 2 tylko przy M2_ENGINE innym niż `rules` (Bielik APT4 Q8_0: ok. 12 GB).
   ollama-pull:
     image: ollama/ollama:0.40.17
     environment:
       OLLAMA_HOST: http://ollama:11434
-    command: ["pull", "${OLLAMA_MODEL:-gemma4:e2b}"]
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
+      M2_ENGINE: ${M2_ENGINE:-rules}
+      OLLAMA_RISK_MODEL: ${OLLAMA_RISK_MODEL:-hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        ollama pull "$$OLLAMA_MODEL" &&
+        { [ "$$M2_ENGINE" = rules ] || ollama pull "$$OLLAMA_RISK_MODEL"; }
     depends_on:
       ollama:
         condition: service_healthy

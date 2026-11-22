@@ -34,6 +34,7 @@ Pierwszy start pobiera model `gemma4:e2b` do Ollamy (kilka GB). Kolejne starty u
 - Z kartą NVIDIA: `docker compose -f compose.yaml -f compose.gpu.yaml up --build`.
 - Bez Ollamy (szybciej, gdy nie potrzebujesz LLM): `docker compose up --build web`.
 - Od zera, z pustą bazą i bez modelu: `docker compose down -v`.
+- Moduł 2 z LLM (Bielik-PL-11B, polski tokenizer APT4): `M2_ENGINE=hybrid` w `.env` — `ollama-pull` dociągnie ok. 12 GB. Domyślnie `rules` (sam regex, bez LLM). Mac i mniejsza wersja modelu: [services/ml/README.md](services/ml/README.md#modu%C5%82-2-informacja-o-ryzyku).
 - Aplikacja działa bez logowania.
 
 ## Pierwsze uruchomienie (development)
