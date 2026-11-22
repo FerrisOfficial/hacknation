@@ -11,9 +11,11 @@ import {
   SlidersHorizontal,
   TriangleAlert,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { withBasePath } from "@/lib/base-path";
 import {
   sourceHasError,
   useEngine,
@@ -201,8 +203,16 @@ function Nav({ onToggle }: { onToggle: () => void }) {
       <div className={cn("flex items-start gap-2", collapsed ? "justify-center" : "px-2.5")}>
         {collapsed ? null : (
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-[15px] text-ink-900">InvestWatch</p>
-            <p className="text-ink-600 text-xs">UKNF · nadzór marketingu</p>
+            <Image
+              src={withBasePath("/ive-logo.svg")}
+              alt="IVE — Investor Vigilance Engine"
+              width={286}
+              height={84}
+              unoptimized
+              priority
+              className="h-auto w-full"
+            />
+            <p className="mt-1.5 text-ink-600 text-xs">UKNF · nadzór marketingu</p>
           </div>
         )}
         <button
