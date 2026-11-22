@@ -51,7 +51,7 @@ Tryb pełny potrzebuje internetu (YouTube, rejestr KNF). LLM liczy jedno zapytan
 |---|---|
 | GPU NVIDIA | `docker compose -f compose.yaml -f compose.gpu.yaml up --build` |
 | Ollama na hoście (Mac, GPU Apple) | `OLLAMA_URL=http://host.docker.internal:11434` w `.env` |
-| Zmiana trybu albo reset danych | `docker compose down -v`, potem start od nowa (zbiór demo trafia tylko do pustej bazy) |
+| Zmiana trybu albo reset danych | `docker compose down -v`, potem start od nowa. Tryb działa tylko przy pierwszym starcie na pustej bazie: baza z danymi zostaje bez zmian |
 
 ### Usługi
 
