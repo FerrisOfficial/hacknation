@@ -11,5 +11,5 @@ test("strona główna to Przegląd z nawigacją", async ({ page }) => {
     "aria-current",
     "page",
   );
-  await expect(page.getByRole("link", { name: /Kolejka/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /Naruszenia/ }).first()).toBeVisible();
 });

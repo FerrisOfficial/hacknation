@@ -14,10 +14,18 @@ export function fmtSigned(value: number, digits = 0): string {
   return abs;
 }
 
+// Numery modułów (M1–M3) są językiem zadania UKNF i demo, nie analityka: UI pokazuje rodzaj sprawy
+// (decyzja z 22.11, 05:37). Chip w wierszu: MODULE_SHORT; nagłówki i zakładki: MODULE_NAME.
 export const MODULE_SHORT: Record<AnalysisModule, string> = {
-  finfluencer: "M1",
-  risk_disclosure: "M2",
-  unauthorized_advisory: "M3",
+  finfluencer: "Reklama",
+  risk_disclosure: "Ryzyko",
+  unauthorized_advisory: "Doradztwo",
+};
+
+export const MODULE_NAME: Record<AnalysisModule, string> = {
+  finfluencer: "Reklamy osób trzecich",
+  risk_disclosure: "Informacja o ryzyku",
+  unauthorized_advisory: "Doradztwo bez zezwolenia",
 };
 
 export const MODULE_NUMBER: Record<AnalysisModule, number> = {
@@ -27,9 +35,9 @@ export const MODULE_NUMBER: Record<AnalysisModule, number> = {
 };
 
 export const MODULE_TITLE: Record<AnalysisModule, string> = {
-  finfluencer: "Reklamy firm inwestycyjnych publikowane przez osoby trzecie",
-  risk_disclosure: "Materiały firm bez wyraźnej informacji o ryzyku",
-  unauthorized_advisory: "Doradztwo bez zezwolenia KNF",
+  finfluencer: "Finfluencerzy reklamujący firmy",
+  risk_disclosure: "Materiały firm bez ostrzeżenia",
+  unauthorized_advisory: "Oferty podmiotów spoza KNF",
 };
 
 export const MODULE_BY_NUMBER: Record<string, AnalysisModule> = {
@@ -181,12 +189,10 @@ export function reviewText(review: {
 }): string {
   const label = STATUS_LABEL[review.status];
   if (!review.reviewed_by && !review.reviewed_at) return label;
-  const who = review.reviewed_by ? shortName(review.reviewed_by) : null;
+  // Bez nazwiska osoby: interfejs nie pokazuje, kto podjął decyzję (decyzja z 22.11).
   const when = review.reviewed_at ? fmtDateTime(review.reviewed_at) : null;
-  if (review.status === "in_review") {
-    return [label, [who, when ? `od ${when}` : null].filter(Boolean).join(" ")].join(", ");
-  }
-  return [label, [who, when].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
+  if (!when) return label;
+  return review.status === "in_review" ? `${label} od ${when}` : `${label} · ${when}`;
 }
 
 // Moduł 1 rozstrzyga „czy to reklama”, nie „czy to naruszenie” (R18): własne słowa statusów.

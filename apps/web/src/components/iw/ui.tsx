@@ -1,10 +1,11 @@
 "use client";
 
-import { ChevronDown, X } from "lucide-react";
+import type { AnalysisModule } from "@app/db";
+import { ChevronDown, HandCoins, Megaphone, Scale, X } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 import type { Reviewer, UiStatus } from "@/lib/client/contract-ui";
-import { fmtScore, initials, reviewText } from "@/lib/client/format";
+import { fmtScore, initials, MODULE_NAME, reviewText } from "@/lib/client/format";
 import { cn } from "@/lib/utils";
 import { Illustration, type IllustrationName, StatusGlyph } from "./icons";
 
@@ -109,7 +110,7 @@ export function Tip({
       <span
         role="tooltip"
         className={cn(
-          "pointer-events-none invisible absolute left-1/2 z-50 w-max max-w-[280px] -translate-x-1/2 rounded-md bg-ink-900 px-2 py-1.5 font-normal text-white text-xs leading-4 opacity-0 transition-opacity delay-0 duration-150",
+          "pointer-events-none invisible absolute left-1/2 z-50 w-max max-w-[320px] -translate-x-1/2 rounded-md bg-ink-900 px-2 py-1.5 font-normal text-white text-xs leading-4 opacity-0 transition-opacity delay-0 duration-150",
           "group-focus-within/tip:visible group-focus-within/tip:opacity-100 group-hover/tip:visible group-hover/tip:opacity-100 group-hover/tip:delay-[400ms]",
           side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5",
         )}
@@ -433,6 +434,28 @@ export function StatusTip({
   return (
     <Tip label={reviewText(review)}>
       <StatusGlyph status={review.status} title={reviewText(review)} />
+    </Tip>
+  );
+}
+
+// Rodzaj sprawy ikoną (audyt 22.11): megafon = reklama osoby trzeciej, waga = informacja
+// o ryzyku, monety w dłoni = doradztwo bez zezwolenia. Nazwa w dymku i dla czytnika ekranu.
+const KIND_ICON = {
+  finfluencer: Megaphone,
+  risk_disclosure: Scale,
+  unauthorized_advisory: HandCoins,
+};
+
+export function KindIcon({ module, className }: { module: AnalysisModule; className?: string }) {
+  const Icon = KIND_ICON[module];
+  return (
+    <Tip label={MODULE_NAME[module]}>
+      <Icon
+        role="img"
+        aria-label={MODULE_NAME[module]}
+        className={cn("size-4 shrink-0 text-ink-600", className)}
+        strokeWidth={1.5}
+      />
     </Tip>
   );
 }

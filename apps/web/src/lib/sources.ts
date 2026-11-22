@@ -40,6 +40,7 @@ export function sourceRow(input: SourceCreate): NewSource {
       name: input.name ?? search.name,
       active: input.active,
       intervalMinutes: input.intervalMinutes,
+      scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
       config: {
         kind: "youtube_search",
         query: input.query,
@@ -56,6 +57,7 @@ export function sourceRow(input: SourceCreate): NewSource {
     name: input.name ?? url.hostname.replace(/^www\./, "") + url.pathname.replace(/\/$/, ""),
     active: input.active,
     intervalMinutes: input.intervalMinutes,
+    scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
     config: { kind: "web_page" },
   };
 }

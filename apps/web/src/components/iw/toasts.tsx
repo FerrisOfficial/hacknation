@@ -2,7 +2,7 @@
 
 import { BellRing, Megaphone, Undo2, X } from "lucide-react";
 import { toast, useSonner } from "sonner";
-import { fmtScore, MODULE_SHORT } from "@/lib/client/format";
+import { fmtScore, MODULE_NAME } from "@/lib/client/format";
 import type { HighRiskIncidentEvent } from "@/lib/incidents/contract";
 
 // Toast decyzji i toast alertu (kontrakt UI): tło ink-900, biały tekst, znika po 10 s,
@@ -78,8 +78,8 @@ export function showAlertToast(event: HighRiskIncidentEvent, onOpen: () => void)
         <span className="min-w-0 flex-1">
           <span className="block font-medium text-sm">
             {ads
-              ? `Nowa reklama · pewność ${fmtScore(event.score)} · M1`
-              : `Wysokie ryzyko · ${fmtScore(event.score)} · ${MODULE_SHORT[event.module]}`}
+              ? `Nowa reklama osoby trzeciej · pewność ${fmtScore(event.score)}`
+              : `Wysokie ryzyko · ${fmtScore(event.score)} · ${MODULE_NAME[event.module].toLowerCase()}`}
           </span>
           <span className="block truncate text-[13px] text-white/80">
             {event.summary || event.url}

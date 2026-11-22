@@ -122,6 +122,7 @@ function exportCsv(items: UiListItem[]) {
 export function AdRegistry() {
   const [check, setCheck] = useState<Check>("bez-odrzuconych");
   const [range, setRange] = useState<Range>("30");
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const thresholds = useThresholds();
   const list = useIncidents({
     module: ["finfluencer"],
@@ -138,8 +139,8 @@ export function AdRegistry() {
   return (
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <PageHeader
-        title="Reklamy osób trzecich (M1)"
-        description="Rejestr reklam firm inwestycyjnych publikowanych przez finfluencerów i inne podmioty trzecie. Reklama sama w sobie nie jest naruszeniem; ta z sygnałem naruszenia trafia też do Kolejki."
+        title="Reklamy osób trzecich"
+        description="Rejestr reklam firm inwestycyjnych publikowanych przez finfluencerów i inne podmioty trzecie. Reklama sama w sobie nie jest naruszeniem; ta z sygnałem naruszenia trafia też do Naruszeń."
         actions={
           <Button
             variant="primary"
@@ -263,54 +264,75 @@ export function AdRegistry() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line-200">
-                    {group.items.map((item) => (
-                      <tr key={item.id} className="group hover:bg-surface-hover">
-                        <td className="py-2.5 pl-4 align-top">
-                          <Tip
-                            label={reviewText(item).replace(
-                              STATUS_LABEL[item.status],
-                              statusLabelFor(item.status, "finfluencer"),
-                            )}
-                          >
-                            <StatusGlyph status={item.status} />
-                          </Tip>
-                        </td>
-                        <td className="max-w-[520px] py-2.5 pr-3">
-                          <Link
-                            href={`/kolejka/${item.id}?modul=1`}
-                            className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-700"
-                          >
-                            <span
-                              className={cn(
-                                "block truncate font-medium",
-                                item.status === "dismissed" ? "text-ink-500" : "text-ink-900",
+                    {(expanded.has(group.key) ? group.items : group.items.slice(0, 3)).map(
+                      (item) => (
+                        <tr key={item.id} className="group hover:bg-surface-hover">
+                          <td className="py-2.5 pl-4 align-top">
+                            <Tip
+                              label={reviewText(item).replace(
+                                STATUS_LABEL[item.status],
+                                statusLabelFor(item.status, "finfluencer"),
                               )}
                             >
-                              {item.advertiser ?? hostOf(item.url)}
-                            </span>
-                            <span className="block truncate text-[13px] text-ink-600">
-                              {item.title ?? item.summary ?? hostOf(item.url)}
-                            </span>
-                          </Link>
-                        </td>
-                        <td className="py-2.5 pr-3 align-top">
-                          <PlatformLabel platform={item.platform} className="text-[13px]" />
-                        </td>
-                        <td className="tnum py-2.5 pr-3 align-top text-[13px] text-ink-700">
-                          {fmtDateTime(item.created_at)}
-                        </td>
-                        <td className="py-2.5 pr-4 align-top">
-                          <ScoreCell
-                            score={item.score}
-                            flag={threshold.flag}
-                            alert={threshold.alert}
-                            confidence
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                              <StatusGlyph status={item.status} />
+                            </Tip>
+                          </td>
+                          <td className="max-w-[520px] py-2.5 pr-3">
+                            <Link
+                              href={`/kolejka/${item.id}?modul=1`}
+                              className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-700"
+                            >
+                              <span
+                                className={cn(
+                                  "block truncate font-medium",
+                                  item.status === "dismissed" ? "text-ink-500" : "text-ink-900",
+                                )}
+                              >
+                                {item.advertiser ?? hostOf(item.url)}
+                              </span>
+                              <span className="block truncate text-[13px] text-ink-600">
+                                {item.title ?? item.summary ?? hostOf(item.url)}
+                              </span>
+                            </Link>
+                          </td>
+                          <td className="py-2.5 pr-3 align-top">
+                            <PlatformLabel platform={item.platform} className="text-[13px]" />
+                          </td>
+                          <td className="tnum py-2.5 pr-3 align-top text-[13px] text-ink-700">
+                            {fmtDateTime(item.created_at)}
+                          </td>
+                          <td className="py-2.5 pr-4 align-top">
+                            <ScoreCell
+                              score={item.score}
+                              flag={threshold.flag}
+                              alert={threshold.alert}
+                              confidence
+                            />
+                          </td>
+                        </tr>
+                      ),
+                    )}
                   </tbody>
                 </table>
+                {group.items.length > 3 && !expanded.has(group.key) ? (
+                  <div className="flex items-center gap-4 border-line-200 border-t px-4 py-2.5 text-[13px]">
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((previous) => new Set(previous).add(group.key))}
+                      className="font-medium text-ink-700 hover:text-ink-900 hover:underline"
+                    >
+                      Pokaż jeszcze {group.items.length - 3}
+                    </button>
+                    {first?.firm_name ? (
+                      <Link
+                        href={`/podmiot?nazwa=${encodeURIComponent(first.firm_name)}`}
+                        className="font-medium text-primary-700 hover:underline"
+                      >
+                        Wszystkie {group.items.length} reklamy tej firmy w widoku podmiotu →
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
               </Card>
             );
           })}

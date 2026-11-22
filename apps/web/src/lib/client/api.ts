@@ -30,6 +30,7 @@ async function request<T>(path: `/${string}`, init?: RequestInit): Promise<T> {
     }
     throw new Error(message);
   }
+  if (response.status === 204) return null as T;
   return (await response.json()) as T;
 }
 
@@ -174,6 +175,7 @@ export type SourceItem = {
     | { kind: "youtube_channel"; channelUrl: string; limit: number };
   intervalMinutes: number | null;
   lastScrapedAt: string | null;
+  scheduledAt: string | null;
   createdAt: string;
   materialsCount: number;
   lastJob: {
@@ -246,6 +248,34 @@ export function useRunSource() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.sources });
     },
+  });
+}
+
+export function useDeleteSource() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      request<null>(`/api/sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.sources }),
+  });
+}
+
+export function useEngine() {
+  return useQuery({
+    queryKey: ["engine"],
+    queryFn: () => request<{ paused: boolean }>("/api/settings/engine"),
+  });
+}
+
+export function useSetEngine() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (paused: boolean) =>
+      request<{ paused: boolean }>("/api/settings/engine", {
+        method: "PUT",
+        body: JSON.stringify({ paused }),
+      }),
+    onSuccess: (data) => client.setQueryData(["engine"], data),
   });
 }
 

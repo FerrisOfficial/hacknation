@@ -11,7 +11,7 @@ import {
   Fingerprint,
   Gauge,
   History,
-  RadioTower,
+  Link2,
   Scale,
   TriangleAlert,
   Video,
@@ -24,13 +24,13 @@ import { PlatformLabel, StatusGlyph } from "@/components/iw/icons";
 import { RegistryChip } from "@/components/iw/registry";
 import { showDecisionToast } from "@/components/iw/toasts";
 import {
-  Avatar,
   Button,
   Card,
   Chip,
   EmptyState,
   ErrorNote,
   Kbd,
+  KindIcon,
   OutlineChip,
   SectionTitle,
   Skeleton,
@@ -54,15 +54,14 @@ import {
   fmtScore,
   fmtTime,
   hostOf,
-  labelText,
-  MODULE_SHORT,
+  MODULE_NAME,
   plural,
   reviewText,
   STATUS_LABEL,
-  shortName,
   statusLabelFor,
 } from "@/lib/client/format";
 import { useHotkeys } from "@/lib/client/hotkeys";
+import { legalSummaries } from "@/lib/client/legal";
 import {
   buildQueue,
   entityName,
@@ -102,6 +101,12 @@ function detailTitle(detail: UiDetail): string {
     detail.material.author ??
     hostOf(detail.material.url)
   );
+}
+
+// „art. 44 ust. 2 lit. a rozporządzenia del. 2017/565” → „art. 44 ust. 2 lit. a”; pełna nazwa w dymku.
+function shortBasis(basis: string): string {
+  const cut = basis.search(/\s(rozporządzenia|ustawy|Rozporządzenie|Ustawa|dyrektywy)\b/);
+  return cut > 0 ? basis.slice(0, cut) : basis;
 }
 
 function fmtSeconds(seconds: number): string {
@@ -155,27 +160,30 @@ function MaterialText({
     return <p className="text-[13px] text-ink-600">Materiał nie ma zapisanej treści tekstowej.</p>;
   }
   return (
-    <p className="max-h-[420px] overflow-y-auto whitespace-pre-wrap text-ink-700 text-sm leading-[22px]">
-      {segments(text, flags).map((segment, index) =>
-        segment.rule ? (
-          <mark
+    <div className="relative min-h-0 flex-1">
+      <p className="absolute inset-0 overflow-y-auto whitespace-pre-wrap pr-1 text-ink-700 text-sm leading-[22px]">
+        {segments(text, flags).map((segment, index) =>
+          segment.rule ? (
+            <mark
+              // biome-ignore lint/suspicious/noArrayIndexKey: segmenty są stałe dla danego tekstu
+              key={index}
+              data-rule={segment.rule}
+              onMouseEnter={() => onActive(segment.rule ?? null)}
+              onMouseLeave={() => onActive(null)}
+              className={cn(
+                "rounded-sm bg-transparent font-semibold text-risk-700 underline decoration-[1.5px] underline-offset-2 transition-colors duration-150",
+                active === segment.rule && "bg-risk-50",
+              )}
+            >
+              {segment.text}
+            </mark>
+          ) : (
             // biome-ignore lint/suspicious/noArrayIndexKey: segmenty są stałe dla danego tekstu
-            key={index}
-            onMouseEnter={() => onActive(segment.rule ?? null)}
-            onMouseLeave={() => onActive(null)}
-            className={cn(
-              "rounded-sm bg-transparent font-semibold text-risk-700 underline decoration-[1.5px] underline-offset-2 transition-colors duration-150",
-              active === segment.rule && "bg-risk-50",
-            )}
-          >
-            {segment.text}
-          </mark>
-        ) : (
-          // biome-ignore lint/suspicious/noArrayIndexKey: segmenty są stałe dla danego tekstu
-          <span key={index}>{segment.text}</span>
-        ),
-      )}
-    </p>
+            <span key={index}>{segment.text}</span>
+          ),
+        )}
+      </p>
+    </div>
   );
 }
 
@@ -559,30 +567,27 @@ function WhyFlagged({
           Sygnał naruszenia: {escalationText(detail.details.entity)}.
         </p>
       ) : null}
-      <p className="mt-2 flex items-baseline gap-2">
-        <span
-          className={cn(
-            "tnum font-semibold text-[28px] leading-8",
-            high ? "text-risk-700" : "text-ink-900",
-          )}
-        >
-          {fmtScore(risk)}
-        </span>
-        <span className={cn("text-sm", high ? "text-risk-700" : "text-ink-600")}>
-          {ads ? "pewność, że to reklama" : `risk score · ${high ? "wysokie" : "średnie"}`}
-        </span>
-      </p>
-      {ads ? (
-        <p className="mt-1 mb-3 text-[13px] text-ink-600">
-          Reklama firmy inwestycyjnej publikowana przez osobę trzecią trafia do rejestru reklam. To
-          nie jest naruszenie samo w sobie.
+      <Tip
+        label={
+          ads
+            ? "Pewność, że to reklama firmy inwestycyjnej publikowana przez osobę trzecią. Sama reklama nie jest naruszeniem."
+            : `Wynik z ${aboveFlag} ${plural(aboveFlag, "naruszenia", "naruszeń", "naruszeń")} ponad próg flagi ${fmtScore(threshold.flag)}: im więcej wysokich, tym wyżej. Alert od ${fmtScore(threshold.alert)}.`
+        }
+      >
+        <p className="mt-2 mb-3 flex items-baseline gap-2">
+          <span
+            className={cn(
+              "tnum font-semibold text-[28px] leading-8",
+              high ? "text-risk-700" : "text-ink-900",
+            )}
+          >
+            {fmtScore(risk)}
+          </span>
+          <span className={cn("text-sm", high ? "text-risk-700" : "text-ink-600")}>
+            {ads ? "pewność, że to reklama" : high ? "wysokie" : "średnie"}
+          </span>
         </p>
-      ) : null}
-      <p className={cn("mt-1 mb-3 text-[13px] text-ink-600", ads && "hidden")}>
-        Z naruszeń ponad próg flagi {fmtScore(threshold.flag)}: {aboveFlag}{" "}
-        {plural(aboveFlag, "naruszenie", "naruszenia", "naruszeń")}. Im więcej wysokich, tym wyżej;
-        naruszenia poniżej progu się nie liczą (alert od {fmtScore(threshold.alert)}).
-      </p>
+      </Tip>
       {detail.details.error ? (
         <p className="mb-3 rounded-md bg-warning-100 px-3 py-2 text-[13px] text-warning-800">
           Analiza zgłosiła błąd: {detail.details.error}
@@ -595,12 +600,21 @@ function WhyFlagged({
         {violations.map((flag, index) => {
           const time = evidenceTime(flag);
           return (
+            // biome-ignore lint/a11y/useKeyWithClickEvents: skrót myszą; klawiaturą ten sam skok daje przycisk czasu w karcie
             <li
               key={flag.rule_id}
               onMouseEnter={() => onActive(flag.rule_id)}
               onMouseLeave={() => onActive(null)}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("button, a")) return;
+                if (time !== null) return onSeek(time);
+                document
+                  .querySelector(`mark[data-rule="${CSS.escape(flag.rule_id)}"]`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+              title={time !== null ? "Przewiń film do tego miejsca" : "Pokaż cytat w treści"}
               className={cn(
-                "rounded-md bg-surface-1 p-3 transition-colors duration-150",
+                "cursor-pointer rounded-md bg-surface-1 p-3 transition-colors duration-150 hover:ring-1 hover:ring-line-300",
                 active === flag.rule_id && "bg-risk-50",
                 ruleScore(flag) < threshold.flag && "opacity-60",
               )}
@@ -620,7 +634,19 @@ function WhyFlagged({
               {flag.reason ? <p className="mt-1 text-[13px] text-ink-700">{flag.reason}</p> : null}
               <div className="mt-2 flex flex-wrap gap-2">
                 <Tip
-                  label={flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}
+                  label={
+                    <span className="flex w-[300px] flex-col gap-1.5">
+                      <span className="font-medium">
+                        {flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}
+                        {flag.legal_basis ? `: ${flag.legal_basis}` : ""}
+                      </span>
+                      {legalSummaries(flag.legal_basis, flag.rule_id).map((text) => (
+                        <span key={text} className="text-white/85">
+                          {text}
+                        </span>
+                      ))}
+                    </span>
+                  }
                   className="max-w-full"
                 >
                   <OutlineChip className="h-auto min-h-6 py-1 text-left">
@@ -629,18 +655,18 @@ function WhyFlagged({
                       strokeWidth={1.5}
                       aria-hidden="true"
                     />
-                    {flag.legal_basis || "podstawa prawna do uzupełnienia"}
+                    {shortBasis(flag.legal_basis) || "podstawa prawna do uzupełnienia"}
                   </OutlineChip>
                 </Tip>
                 <Tip label="Wynik naruszenia, porównywany z progiem flagi i alertu">
                   <OutlineChip
                     className={cn(
-                      ruleScore(flag) >= threshold.alert && "border-risk-700 text-risk-700",
+                      !ads && ruleScore(flag) >= threshold.alert && "border-risk-700 text-risk-700",
                     )}
                   >
                     <Gauge className="size-3.5 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
                     <span className="tnum">{fmtScore(ruleScore(flag))}</span>
-                    {ruleScore(flag) >= threshold.alert
+                    {!ads && ruleScore(flag) >= threshold.alert
                       ? " · ponad alert"
                       : ruleScore(flag) >= threshold.flag
                         ? " · ponad próg"
@@ -756,6 +782,62 @@ function AdvisorySignals({ detail }: { detail: UiDetail }) {
   );
 }
 
+// Ten sam materiał w innym module (R19). Karta tylko wtedy, gdy API podało inną ocenę.
+function RelatedCard({ detail, suffix }: { detail: UiDetail; suffix: string }) {
+  const related = detail.related ?? [];
+  const entity = detail.details.entity;
+  const flagged = entity.in_register === false || entity.on_warning_list === true;
+  // Reklama firmy spoza rejestru: ocena doradztwa ma zawsze swoje miejsce w oknie, także zanim
+  // backend ją policzy (wtedy informacja, że jej jeszcze nie ma).
+  if (!related.length && !(flagged && detail.module === "finfluencer")) return null;
+  if (!related.length) {
+    return (
+      <Card className="p-4">
+        <p className="flex items-center gap-2 text-[13px] text-ink-700">
+          <Link2 className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
+          Ten sam materiał w innym module
+        </p>
+        <p className="mt-2 rounded-md bg-surface-1 px-3 py-2.5 text-[13px] text-ink-700">
+          Firma spoza rejestru KNF: ten materiał trzeba też ocenić jako doradztwo bez zezwolenia.
+          Ocena jeszcze nie spłynęła.
+        </p>
+      </Card>
+    );
+  }
+  return (
+    <Card className="p-4">
+      <p className="flex items-center gap-2 text-[13px] text-ink-700">
+        <Link2 className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
+        Ten sam materiał w innym module
+      </p>
+      <ul className="mt-2 flex flex-col gap-2">
+        {related.map((other) => (
+          <li key={other.id}>
+            <Link
+              href={`/kolejka/${other.id}${suffix}`}
+              className="flex items-center gap-3 rounded-md bg-surface-1 px-3 py-2.5 hover:bg-surface-hover"
+            >
+              <StatusGlyph status={other.status} />
+              <KindIcon module={other.module} />
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium text-ink-900 text-sm">
+                  {MODULE_NAME[other.module]}
+                </span>
+                {other.summary ? (
+                  <span className="block truncate text-[13px] text-ink-600">{other.summary}</span>
+                ) : null}
+              </span>
+              <span className="tnum font-semibold text-ink-900 text-sm">
+                {fmtScore(other.score)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function EntityCard({ detail, related }: { detail: UiDetail; related: string | null }) {
   const entity = detail.details.entity;
   const name = entity.firm_name ?? entity.advertiser;
@@ -774,6 +856,16 @@ function EntityCard({ detail, related }: { detail: UiDetail; related: string | n
         <SectionTitle>{name}</SectionTitle>
         <RegistryChip entity={entity} />
       </div>
+      {entity.in_register === false || entity.on_warning_list ? (
+        <p className="mt-2 flex items-start gap-1.5 font-medium text-[13px] text-warning-800">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+          {entity.on_warning_list
+            ? "firma z listy ostrzeżeń KNF"
+            : entity.firm_name
+              ? "firma spoza rejestru KNF: możliwa reklama usług bez zezwolenia"
+              : "spoza rejestru KNF: możliwe usługi inwestycyjne bez zezwolenia"}
+        </p>
+      ) : null}
       {facts.length ? <p className="mt-2 text-[13px] text-ink-600">{facts.join(" · ")}</p> : null}
       {related ? <p className="mt-1 text-[13px] text-ink-600">{related}</p> : null}
       {entity.firm_name ? (
@@ -836,18 +928,7 @@ function HistoryCard({ detail, threshold }: { detail: UiDetail; threshold: Modul
                 <span className="tnum w-10 shrink-0 font-medium text-ink-900">
                   {fmtTime(entry.at)}
                 </span>
-                {entry.actor ? (
-                  <Avatar reviewer={entry.actor} />
-                ) : (
-                  <RadioTower
-                    className="size-4 shrink-0 text-ink-600"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                )}
-                <span>
-                  {entry.actor ? shortName(entry.actor) : "system"} · {entry.action}
-                </span>
+                <span>{entry.action}</span>
               </p>
             </li>
           );
@@ -917,10 +998,12 @@ function DecisionBar({
             type="button"
             role="menuitem"
             onClick={() => onDecide(kind, reason.note)}
-            className="flex h-9 items-center justify-between gap-3 rounded-md px-3 text-left text-ink-900 text-sm hover:bg-surface-hover"
+            className="flex min-h-9 items-start justify-between gap-3 rounded-md px-3 py-2 text-left text-ink-900 text-sm leading-5 hover:bg-surface-hover"
           >
             {reason.label}
-            <Kbd>{index + 1}</Kbd>
+            <span className="mt-px shrink-0">
+              <Kbd>{index + 1}</Kbd>
+            </span>
           </button>
         ))}
       </span>
@@ -1091,6 +1174,8 @@ export function CaseWindow({ id }: { id: string }) {
   }
 
   const data = detail.data;
+  // Reklama otwarta z rejestru (?modul=1) wraca do rejestru, nie do Naruszeń.
+  const fromRegistry = data.module === "finfluencer" && params.module === "finfluencer";
   const threshold = thresholds.data[data.module];
   const groupName = entityName({
     firm_name: data.details.entity.firm_name,
@@ -1111,8 +1196,11 @@ export function CaseWindow({ id }: { id: string }) {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <div className="flex items-center justify-between text-[13px] text-ink-600">
         <nav aria-label="Ścieżka" className="flex items-center gap-2">
-          <Link href={`/kolejka${suffix}`} className="hover:text-ink-900 hover:underline">
-            Kolejka
+          <Link
+            href={fromRegistry ? "/reklamy" : `/kolejka${suffix}`}
+            className="hover:text-ink-900 hover:underline"
+          >
+            {fromRegistry ? "Reklamy" : "Naruszenia"}
           </Link>
           {groupName ? (
             <>
@@ -1153,9 +1241,7 @@ export function CaseWindow({ id }: { id: string }) {
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-semibold text-[22px] text-ink-900 leading-7">{detailTitle(data)}</h1>
-          <Chip>
-            {MODULE_SHORT[data.module]} · {labelText(data.label)}
-          </Chip>
+          <Chip>{MODULE_NAME[data.module]}</Chip>
           <PlatformLabel platform={data.material.platform} className="text-[13px]" />
           <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-700">
             <StatusGlyph status={data.status} />
@@ -1205,18 +1291,14 @@ export function CaseWindow({ id }: { id: string }) {
           {data.material.published_at ? (
             <span>opublikowano {fmtDateTime(data.material.published_at)}</span>
           ) : null}
-          <span>wykryto {fmtDateTime(data.created_at)}</span>
-          <span className="inline-flex items-center gap-1.5">
-            <Fingerprint className="size-4" strokeWidth={1.5} aria-hidden="true" />
-            kopia {fmtDateTime(data.material.scraped_at)}
-            {hash ? (
-              <Tip label={`SHA-256 ${hash}`}>
-                <span className="font-mono text-xs">
-                  · SHA-256 {hash.slice(0, 4)}…{hash.slice(-4)}
-                </span>
-              </Tip>
-            ) : null}
-          </span>
+          <Tip
+            label={`Kopia z dnia pobrania${hash ? ` · SHA-256 ${hash.slice(0, 12)}…` : ""} · oflagowano ${fmtDateTime(data.created_at)}`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Fingerprint className="size-4" strokeWidth={1.5} aria-hidden="true" />
+              kopia z {fmtDateTime(data.material.scraped_at)}
+            </span>
+          </Tip>
         </div>
       </div>
 
@@ -1230,7 +1312,9 @@ export function CaseWindow({ id }: { id: string }) {
         onDecide={decide}
       />
 
-      <div className="grid grid-cols-[minmax(0,1fr)_400px] items-start gap-4">
+      {/* Kolumny równej wysokości: treść materiału kończy się na linii ostatniej karty po prawej
+          i przewija się w środku. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_400px] items-stretch gap-4">
         <div className="flex min-w-0 flex-col gap-4">
           <CopyPanel
             key={data.id}
@@ -1240,7 +1324,7 @@ export function CaseWindow({ id }: { id: string }) {
             active={active}
             onActive={setActive}
           />
-          <Card className="p-4">
+          <Card className="flex min-h-[320px] flex-1 flex-col p-4">
             <p className="mb-2 font-medium text-ink-600 text-xs">
               {data.material.platform === "youtube" ? "Opis i transkrypcja" : "Treść materiału"} (z
               kopii)
@@ -1262,6 +1346,7 @@ export function CaseWindow({ id }: { id: string }) {
             onSeek={onSeek}
           />
           <AdvisorySignals detail={data} />
+          <RelatedCard detail={data} suffix={suffix} />
           <EntityCard detail={data} related={related} />
           <HistoryCard detail={data} threshold={threshold} />
         </div>

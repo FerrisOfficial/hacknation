@@ -3,7 +3,7 @@
 import type { AnalysisModule } from "@app/db";
 import { useEffect, useRef, useState } from "react";
 import { ANALYSIS_MODULES } from "@/lib/analysis/modules";
-import { MODULE_NUMBER, MODULE_SHORT } from "@/lib/client/format";
+import { MODULE_NAME, MODULE_SHORT } from "@/lib/client/format";
 import type { TrendPoint } from "@/lib/incidents/contract";
 
 // Linie rozróżnia wzór (ciągła, kreskowana, kropkowana), nie kolor: wykres jest czytelny
@@ -56,7 +56,8 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
   const x = (index: number) =>
     PAD.left + (points.length <= 1 ? innerW / 2 : (index / (points.length - 1)) * innerW);
   const y = (value: number) => PAD.top + innerH - (value / max) * innerH;
-  const ticks = [0, max / 2, max];
+  // Liczba materiałów jest całkowita: środkowa podziałka tylko, gdy wypada na liczbie całkowitej.
+  const ticks = Number.isInteger(max / 2) ? [0, max / 2, max] : [0, max];
   const labelEvery = Math.max(1, Math.ceil(points.length / 8));
   const last = points.at(-1);
   // Etykiety końców linii rozsuwamy o co najmniej 13 px, żeby się nie nakładały przy równych wartościach.
@@ -77,7 +78,7 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
         width={width}
         height={HEIGHT}
         role="img"
-        aria-label={`Oflagowane materiały w czasie: ${ANALYSIS_MODULES.map((module) => `moduł ${MODULE_NUMBER[module]} ostatnio ${last?.[module] ?? 0}`).join(", ")}`}
+        aria-label={`Oflagowane materiały w czasie: ${ANALYSIS_MODULES.map((module) => `${MODULE_NAME[module]} ostatnio ${last?.[module] ?? 0}`).join(", ")}`}
       >
         {ticks.map((tick) => (
           <g key={tick}>
@@ -147,7 +148,7 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
                 strokeDasharray={DASH[module]}
               />
             </svg>
-            Moduł {MODULE_NUMBER[module]}
+            {MODULE_NAME[module]}
           </li>
         ))}
       </ul>

@@ -7,11 +7,10 @@ import { toast } from "sonner";
 import { PlatformLabel, StatusGlyph } from "@/components/iw/icons";
 import { RegistryChip } from "@/components/iw/registry";
 import {
-  Avatar,
   Card,
-  Chip,
   EmptyState,
   ErrorNote,
+  KindIcon,
   PageHeader,
   ScoreCell,
   SectionTitle,
@@ -30,13 +29,12 @@ import {
   fmtDateTime,
   fmtDayMonth,
   hostOf,
-  MODULE_SHORT,
   plural,
   reviewText,
   STATUS_LABEL,
-  shortName,
 } from "@/lib/client/format";
 import { entityName, materialTitle } from "@/lib/client/queue";
+import { cn } from "@/lib/utils";
 
 function Timeline({ items }: { items: UiListItem[] }) {
   const sorted = [...items].sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -108,7 +106,7 @@ function MaterialCard({ item }: { item: UiListItem }) {
           <span className="truncate font-medium text-ink-900 text-sm">{materialTitle(item)}</span>
         </span>
         <span className="flex flex-wrap items-center gap-3">
-          <Chip>{MODULE_SHORT[item.module]}</Chip>
+          <KindIcon module={item.module} />
           <PlatformLabel platform={item.platform} className="text-[13px]" />
           {threshold ? (
             <ScoreCell
@@ -123,7 +121,6 @@ function MaterialCard({ item }: { item: UiListItem }) {
           oflagowano {fmtDateTime(item.created_at)} · {hostOf(item.url)}
         </span>
         <span className="flex items-center gap-2 text-[13px] text-ink-700">
-          {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
           {reviewText(item)}
           {item.review_note ? `: ${item.review_note}` : ""}
         </span>
@@ -132,32 +129,44 @@ function MaterialCard({ item }: { item: UiListItem }) {
   );
 }
 
+// Rejestr KNF jako lista etykieta–wartość: etykieta ink-600, wartość ink-900 500 (komentarz z 22.11).
 function Registry({ id }: { id: string }) {
   const detail = useIncident(id);
   const entity = detail.data?.details.entity;
   if (!entity) return <Skeleton className="h-24 w-full" />;
-  const facts = [
-    entity.in_register === null
-      ? "Rejestr KNF: nie sprawdzono"
-      : entity.in_register
-        ? `W rejestrze KNF${entity.knf_id ? ` (nr ${entity.knf_id})` : ""}`
-        : "Brak w rejestrze KNF",
-    entity.on_warning_list === null
-      ? null
-      : entity.on_warning_list
-        ? "Lista ostrzeżeń publicznych KNF: jest wpis"
-        : "Lista ostrzeżeń publicznych KNF: brak wpisu",
-    entity.nip ? `NIP ${entity.nip}` : null,
-    entity.domain ? `Domena ${entity.domain}` : null,
-  ].filter(Boolean);
+  const rows: [string, string | null][] = [
+    [
+      "Rejestr KNF",
+      entity.in_register === null ? "nie sprawdzono" : entity.in_register ? "Tak" : "Brak wpisu",
+    ],
+    ["Numer w rejestrze", entity.knf_id ? String(entity.knf_id) : null],
+    [
+      "Lista ostrzeżeń KNF",
+      entity.on_warning_list === null ? null : entity.on_warning_list ? "Jest wpis" : "Brak wpisu",
+    ],
+    ["NIP", entity.nip],
+    ["Domena", entity.domain],
+  ];
   return (
     <Card className="p-4">
       <SectionTitle>Rejestr KNF</SectionTitle>
-      <ul className="mt-2 flex flex-col gap-1 text-[13px] text-ink-700">
-        {facts.map((fact) => (
-          <li key={fact}>{fact}</li>
-        ))}
-      </ul>
+      <dl className="mt-3 grid grid-cols-[140px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-[13px]">
+        {rows
+          .filter((row): row is [string, string] => row[1] !== null)
+          .map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-ink-600">{label}</dt>
+              <dd
+                className={cn(
+                  "truncate font-medium text-ink-900",
+                  label === "Lista ostrzeżeń KNF" && value === "Jest wpis" && "text-risk-700",
+                )}
+              >
+                {value}
+              </dd>
+            </div>
+          ))}
+      </dl>
     </Card>
   );
 }
@@ -186,7 +195,7 @@ export function Entity() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <nav aria-label="Ścieżka" className="flex items-center gap-2 text-[13px] text-ink-600">
         <Link href="/kolejka" className="hover:text-ink-900 hover:underline">
-          Kolejka
+          Naruszenia
         </Link>
         <ChevronRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
         <span>{name || "Podmiot"}</span>
@@ -257,16 +266,28 @@ export function Entity() {
             </div>
             <div className="flex flex-col gap-4">
               <Card className="p-4">
-                <SectionTitle>Publikujący o tym podmiocie</SectionTitle>
-                <ul className="mt-2 flex flex-col gap-1 text-[13px] text-ink-700">
+                <SectionTitle>Reklamujący tę firmę</SectionTitle>
+                <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-[13px]">
                   {[...publishers.entries()]
                     .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
                     .map(([publisher, count]) => (
-                      <li key={publisher}>
-                        {publisher} · {count} {plural(count, "materiał", "materiały", "materiałów")}
-                      </li>
+                      <div key={publisher} className="contents">
+                        <dt className="truncate font-medium text-ink-900">{publisher}</dt>
+                        <dd className="tnum text-ink-600">
+                          {count} {plural(count, "materiał", "materiały", "materiałów")}
+                        </dd>
+                      </div>
                     ))}
-                </ul>
+                </dl>
+                {publishers.size > 3 ? (
+                  <Link
+                    href="/reklamy"
+                    className="mt-3 inline-block font-medium text-[13px] text-primary-700 hover:underline"
+                  >
+                    + {publishers.size - 3} innych w rejestrze Reklamy →
+                  </Link>
+                ) : null}
               </Card>
               {firstId ? <Registry id={firstId} /> : null}
               {decisions.length ? (
@@ -275,12 +296,11 @@ export function Entity() {
                   <ul className="mt-2 flex flex-col gap-2 text-[13px] text-ink-700">
                     {decisions.map((item) => (
                       <li key={item.id} className="flex items-start gap-2">
-                        {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
                         <span>
                           <span className="tnum">
                             {fmtDateTime(item.reviewed_at ?? item.created_at)}
                           </span>
-                          {item.reviewed_by ? ` · ${shortName(item.reviewed_by)}` : ""} ·{" "}
+                          {" · "}
                           {STATUS_LABEL[item.status]}
                           {item.review_note ? `: ${item.review_note}` : ""}
                         </span>

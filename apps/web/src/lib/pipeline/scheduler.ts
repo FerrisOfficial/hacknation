@@ -1,6 +1,7 @@
 import "server-only";
 import { and, type Db, eq, isNull, materials, or, scrapeJobs, sources, sql } from "@app/db";
 import { materialsLimit, schedulerBatch } from "@/lib/materials-limit";
+import { scrapePaused } from "./engine";
 import { enqueueScrape } from "./enqueue";
 
 // Harmonogram (mechanizm okresowej aktualizacji): co minutę cron pg-boss odpala tick, a tick
@@ -10,6 +11,8 @@ import { enqueueScrape } from "./enqueue";
 // rozłożenie startów rozkłada też kolejne terminy (każdy liczony od końca własnego zadania).
 
 export async function enqueueDueSources(db: Db): Promise<number> {
+  // Silnik wstrzymany przyciskiem w Źródłach: harmonogram nic nie kolejkuje.
+  if (await scrapePaused(db)) return 0;
   // Po osiągnięciu limitu materiałów harmonogram stoi (ręczne uruchomienie i API działają dalej).
   const limit = materialsLimit(process.env.MATERIALS_LIMIT);
   if (limit > 0) {
@@ -22,10 +25,17 @@ export async function enqueueDueSources(db: Db): Promise<number> {
     .where(
       and(
         eq(sources.active, true),
-        sql`${sources.intervalMinutes} is not null`,
         or(
-          isNull(sources.lastScrapedAt),
-          sql`${sources.lastScrapedAt} + make_interval(mins => ${sources.intervalMinutes}) <= now()`,
+          // Zaplanowane pobranie: raz, gdy nadejdzie jego chwila.
+          sql`${sources.scheduledAt} <= now() and (${sources.lastScrapedAt} is null or ${sources.lastScrapedAt} < ${sources.scheduledAt})`,
+          and(
+            sql`${sources.intervalMinutes} is not null`,
+            sql`(${sources.scheduledAt} is null or ${sources.scheduledAt} <= now())`,
+            or(
+              isNull(sources.lastScrapedAt),
+              sql`${sources.lastScrapedAt} + make_interval(mins => ${sources.intervalMinutes}) <= now()`,
+            ),
+          ),
         ),
         // Zadanie starsze niż godzina z „queued/running” to pozostałość po awarii workera
         // (pg-boss je wygasił) — nie blokuje harmonogramu na zawsze.

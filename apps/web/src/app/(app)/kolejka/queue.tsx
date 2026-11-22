@@ -4,6 +4,7 @@ import type { Platform } from "@app/db";
 import {
   ArrowDownUp,
   ArrowRight,
+  BellRing,
   Boxes,
   Calendar,
   ChevronDown,
@@ -11,9 +12,9 @@ import {
   Copy,
   Download,
   ExternalLink,
-  Gauge,
   RadioTower,
   Rows3,
+  TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -22,13 +23,12 @@ import { toast } from "sonner";
 import { PlatformLabel } from "@/components/iw/icons";
 import { RegistryChip } from "@/components/iw/registry";
 import {
-  Avatar,
   Button,
-  Chip,
   EmptyState,
   ErrorNote,
   FilterSelect,
   Kbd,
+  KindIcon,
   PageHeader,
   ScoreCell,
   Skeleton,
@@ -42,6 +42,7 @@ import type { UiListItem } from "@/lib/client/contract-ui";
 import {
   ACTIVE_PLATFORMS,
   fmtRelative,
+  MODULE_NAME,
   MODULE_SHORT,
   PLATFORM_LABEL,
   plural,
@@ -52,7 +53,6 @@ import {
   buildQueue,
   entityName,
   escalationText,
-  isEscalated,
   materialTitle,
   type QueueGroup,
   type QueueParams,
@@ -110,11 +110,21 @@ function Row({
             {materialTitle(item)}
           </span>
           <span className="block truncate text-[13px] text-ink-600">
-            {isEscalated(item) ? (
-              <span className="font-medium text-warning-800">{escalationText(item)} · </span>
+            {item.in_register === false || item.on_warning_list ? (
+              <Tip label={escalationText(item)}>
+                <span className="mr-1.5 inline-flex items-center gap-1 font-medium text-warning-800">
+                  <TriangleAlert className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                  {item.on_warning_list ? "lista ostrzeżeń KNF" : "spoza rejestru KNF"}
+                </span>
+              </Tip>
             ) : null}
-            {PLATFORM_LABEL[item.platform]} · wykryto {fmtRelative(item.created_at)}
-            {fresh ? " · alert na żywo" : ""}
+            {fresh ? (
+              <span className="mr-1.5 inline-flex items-center gap-1 font-medium text-risk-700">
+                <BellRing className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                alert
+              </span>
+            ) : null}
+            wykryto {fmtRelative(item.created_at)}
             {decided && (item.reviewed_by || item.reviewed_at)
               ? ` · ${reviewText(item)}${item.review_note ? `: ${item.review_note}` : ""}`
               : ""}
@@ -153,10 +163,17 @@ function Row({
         aria-hidden="true"
         className="flex shrink-0 items-center gap-4 self-stretch py-2 pr-4 pl-3"
       >
-        <span className="flex w-5 justify-center">
-          {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
-        </span>
-        <Chip>{MODULE_SHORT[item.module]}</Chip>
+        {item.related_modules?.map((other) => (
+          <Tip
+            key={other}
+            label={`Ten sam materiał ma też ocenę: ${MODULE_NAME[other].toLowerCase()}`}
+          >
+            <span className="inline-flex h-6 items-center rounded-full border border-line-300 px-2 font-medium text-ink-700 text-xs">
+              + {MODULE_SHORT[other].toLowerCase()}
+            </span>
+          </Tip>
+        ))}
+        <KindIcon module={item.module} />
         <PlatformLabel platform={item.platform} className="w-[104px] text-[13px]" />
         <ScoreCell
           score={item.risk_score ?? item.score}
@@ -169,18 +186,27 @@ function Row({
   );
 }
 
+// Ile materiałów grupy widać od razu. Resztę rozwija „Pokaż jeszcze” albo otwiera Widok podmiotu.
+const GROUP_LIMIT = 3;
+
 function Group({
   group,
   view,
+  total,
+  hidden,
+  onExpand,
   children,
 }: {
   group: QueueGroup;
   view: QueueView;
+  total: number;
+  hidden: number;
+  onExpand: () => void;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(true);
   if (group.key === "__wszystkie") return <ul className="flex flex-col">{children}</ul>;
-  const n = group.items.length;
+  const n = total;
   const count =
     view === "otwarte"
       ? `${n} ${plural(n, "otwarty", "otwarte", "otwartych")}`
@@ -209,6 +235,17 @@ function Group({
           {count} · {group.publishers}{" "}
           {plural(group.publishers, "publikujący", "publikujących", "publikujących")}
         </span>
+        {group.key !== "__bez_podmiotu" &&
+        (group.inRegister === false || group.items.some((item) => item.on_warning_list)) ? (
+          <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-medium text-[13px] text-warning-800">
+            <TriangleAlert className="size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+            {group.items.some((item) => item.on_warning_list)
+              ? "firma z listy ostrzeżeń KNF"
+              : group.hasFirm
+                ? "firma spoza rejestru KNF: możliwa reklama usług bez zezwolenia"
+                : "spoza rejestru KNF: możliwe usługi inwestycyjne bez zezwolenia"}
+          </span>
+        ) : null}
         {group.hasFirm ? (
           <Link
             href={`/podmiot?nazwa=${encodeURIComponent(group.name)}`}
@@ -220,6 +257,27 @@ function Group({
         ) : null}
       </div>
       {open ? <ul className="flex flex-col">{children}</ul> : null}
+      {open && hidden > 0 ? (
+        <div className="flex items-center gap-4 pl-11 text-[13px]">
+          <button
+            type="button"
+            onClick={onExpand}
+            className="inline-flex items-center gap-1 font-medium text-ink-700 hover:text-ink-900 hover:underline"
+          >
+            <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            Pokaż jeszcze {hidden}
+          </button>
+          {group.hasFirm ? (
+            <Link
+              href={`/podmiot?nazwa=${encodeURIComponent(group.name)}`}
+              className="inline-flex items-center gap-1 font-medium text-primary-700 hover:underline"
+            >
+              Wszystkie {total} w widoku podmiotu
+              <ArrowRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -246,7 +304,7 @@ function exportConfirmed(items: UiListItem[]) {
   ];
   const rows = items.map((item) => [
     entityName(item),
-    MODULE_SHORT[item.module],
+    MODULE_NAME[item.module],
     item.title ?? item.summary,
     PLATFORM_LABEL[item.platform],
     item.url,
@@ -292,8 +350,18 @@ export function Queue() {
   const { alertIds } = useRealtime();
   const [focus, setFocus] = useState(-1);
 
-  const groups = buildQueue(list.data?.items ?? [], params, thresholds.data);
-  const flat = groups.flatMap((group) => group.items);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const allGroups = buildQueue(list.data?.items ?? [], params, thresholds.data);
+  // Duże grupy pokazują GROUP_LIMIT materiałów; J/K chodzi tylko po widocznych wierszach.
+  const groups = allGroups.map((group) => {
+    const open = expanded.has(group.key) || group.key === "__wszystkie";
+    return {
+      group: open ? group : { ...group, items: group.items.slice(0, GROUP_LIMIT) },
+      total: group.items.length,
+      hidden: open ? 0 : Math.max(0, group.items.length - GROUP_LIMIT),
+    };
+  });
+  const flat = groups.flatMap(({ group }) => group.items);
   const suffix = queueSearch(params);
   const filtersActive =
     params.date !== "wszystko" ||
@@ -316,11 +384,9 @@ export function Queue() {
   });
 
   const moduleOptions: { value: QueueParams["module"]; label: string }[] = [
-    { value: "naruszenia", label: "naruszenia (M2, M3, M1 z sygnałem)" },
-    { value: "wszystkie", label: "wszystkie, z reklamami M1" },
-    { value: "finfluencer", label: "1" },
-    { value: "risk_disclosure", label: "2" },
-    { value: "unauthorized_advisory", label: "3" },
+    { value: "naruszenia", label: "wszystkie" },
+    { value: "risk_disclosure", label: "informacja o ryzyku" },
+    { value: "unauthorized_advisory", label: "doradztwo bez zezwolenia" },
   ];
   const platformOptions: { value: Platform | "wszystkie"; label: string }[] = [
     { value: "wszystkie", label: "wszystkie" },
@@ -331,8 +397,8 @@ export function Queue() {
   return (
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <PageHeader
-        title="Kolejka"
-        description="Potencjalne naruszenia. Reklamy osób trzecich bez sygnału naruszenia są w rejestrze Reklamy (M1)."
+        title="Naruszenia"
+        description="Potencjalne, do rozstrzygnięcia. Reklamy osób trzecich bez sygnału naruszenia są w rejestrze Reklamy."
         actions={
           <span className="flex items-center gap-2 text-[13px] text-ink-600">
             <Kbd>Enter</Kbd> otwórz <Kbd>J</Kbd> następny <Kbd>K</Kbd> poprzedni
@@ -341,7 +407,7 @@ export function Queue() {
       />
 
       <Tabs
-        label="Widok Kolejki"
+        label="Widok naruszeń"
         className="border-line-200 border-b"
         value={params.view}
         onChange={(view) => update({ view })}
@@ -375,19 +441,8 @@ export function Queue() {
           options={platformOptions}
         />
         <FilterSelect
-          icon={<Gauge className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
-          label="Ryzyko"
-          value={params.risk}
-          allValue="wszystkie"
-          onChange={(risk) => update({ risk })}
-          options={[
-            { value: "wszystkie", label: "wszystkie" },
-            { value: "wysokie", label: "wysokie" },
-          ]}
-        />
-        <FilterSelect
           icon={<Boxes className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
-          label="Moduł"
+          label="Rodzaj"
           value={params.module}
           allValue="naruszenia"
           onChange={(module) => update({ module })}
@@ -431,6 +486,20 @@ export function Queue() {
       ) : flat.length === 0 ? (
         filtersActive ? (
           <EmptyState illustration="archiwum" title="Nic nie pasuje do filtrów">
+            <span className="block">
+              {[
+                params.date !== "wszystko" ? `Data: ostatnie ${params.date} dni` : null,
+                params.platform !== "wszystkie"
+                  ? `Źródło: ${PLATFORM_LABEL[params.platform]}`
+                  : null,
+                params.risk !== "wszystkie" ? "Ryzyko: wysokie" : null,
+                params.module !== "naruszenia" && params.module !== "wszystkie"
+                  ? `Rodzaj: ${MODULE_NAME[params.module].toLowerCase()}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
             <Button
               className="mt-2"
               onClick={() =>
@@ -459,8 +528,15 @@ export function Queue() {
         )
       ) : (
         <div className="flex flex-col gap-3">
-          {groups.map((group) => (
-            <Group key={group.key} group={group} view={params.view}>
+          {groups.map(({ group, total, hidden }) => (
+            <Group
+              key={group.key}
+              group={group}
+              view={params.view}
+              total={total}
+              hidden={hidden}
+              onExpand={() => setExpanded((previous) => new Set(previous).add(group.key))}
+            >
               {group.items.map((item) => {
                 index += 1;
                 const position = index;
