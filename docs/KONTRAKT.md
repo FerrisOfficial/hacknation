@@ -65,7 +65,7 @@ Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym sam
 - model nie zwraca URL-i, pozycji znaków ani sekund filmu (wyjątek: `frame` wyżej)
 - błąd: `error` z opisem, `findings` puste
 - **M3 dodatkowo:** `subject` — `{ "name", "identifiers": [{ "kind": "NIP", "value" }], "emails", "phones" }`, dane podmiotu z treści oferty; `signals` — `{ "offer": 0.85, "personal": 0.85, … }`, score 0–1 każdej przesłanki (backend zapisuje je w `details.signals`, a kontakt w `details.contact`)
-- **M2 i M3 dodatkowo** (poza polami wyżej): `rule_scores` — `{ "3": { "p_violation": 0.99, "weight": 1.0, "score": 0.99 }, … }`, score każdej reguły = `weight × p_violation` (M2: reguły formalne 1 i 2 mają `weight` 0,3; M3: werdykt `M3.advisory` 1,0, przesłanki — ich waga z regresji względem oferty). **Tylko M2:** `risk_score` — jedna liczba 0–1 ze wszystkich reguł, **tylko do sortowania** (noisy-OR z zanikiem). W M2 próg porównujemy ze score'ami reguł, nigdy z `risk_score`; w M3 z `probability`
+- **M2 i M3 dodatkowo** (poza polami wyżej): `rule_scores` — `{ "3": { "p_violation": 0.99, "weight": 1.0, "score": 0.99 }, … }`, score każdej reguły = `weight × p_violation` (M2: reguły formalne 1 i 2 mają `weight` 0,3; M3: wszystkie reguły 1,0). **Tylko M2:** `risk_score` — jedna liczba 0–1 ze wszystkich reguł, **tylko do sortowania** (noisy-OR z zanikiem). W M2 próg porównujemy ze score'ami reguł, nigdy z `risk_score`; w M3 z `probability`
 
 ## 3. Backend: `analysis_results.details`
 

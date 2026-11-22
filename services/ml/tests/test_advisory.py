@@ -199,7 +199,7 @@ def test_analyze_endpoint_m3(monkeypatch: pytest.MonkeyPatch) -> None:
     scores = body["rule_scores"]
     assert scores[ADVISORY_RULE]["score"] == round(body["probability"], 3)
     assert scores["M3.offer"] == {"p_violation": 0.85, "weight": 1.0, "score": 0.85}
-    assert 0 < scores["M3.personal"]["weight"] < 1
+    assert {s["weight"] for s in scores.values()} == {1.0}
     assert scores["M3.claims"]["score"] == 0
 
 

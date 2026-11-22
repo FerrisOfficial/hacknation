@@ -390,15 +390,8 @@ WEIGHTS: dict[str, float] = {
     "claims": 0.5,
     "disclaimer": 0.6,
 }
-# Waga reguły w jej score (jak `risk.RULE_WEIGHTS` w M2): werdykt 1, przesłanka — jej waga
-# z regresji względem najsilniejszej (oferta = 1). Z tych score'ów backend liczy risk score.
-RULE_WEIGHTS: dict[str, float] = {
-    ADVISORY_RULE: 1.0,
-    **{
-        rule_id: round(WEIGHTS[name] / max(WEIGHTS.values()), 2)
-        for name, rule_id in SIGNAL_RULES.items()
-    },
-}
+# Waga reguły w jej score (jak `risk.RULE_WEIGHTS` w M2). Z tych score'ów backend liczy risk score.
+RULE_WEIGHTS: dict[str, float] = {ADVISORY_RULE: 1.0, **dict.fromkeys(SIGNAL_RULES.values(), 1.0)}
 # Usługi, o które pytamy LLM w wariancie `hybrid`. Kody z rejestru KNF („Zakres działalności”,
 # art. 69 ust. 2 UoIF): 5 — doradztwo inwestycyjne, 4 — zarządzanie portfelem. Backend porównuje
 # `service` z zakresem zezwolenia podmiotu.

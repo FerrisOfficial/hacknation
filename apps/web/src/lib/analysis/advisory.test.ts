@@ -131,7 +131,7 @@ describe("moduł 3: doradztwo i rejestr KNF", () => {
   it("risk score jak w M2: noisy-OR z zanikiem po score'ach reguł, werdykt = score wyniku", () => {
     const ruleScores = {
       "M3.advisory": { p_violation: 0.8, weight: 1, score: 0.8 },
-      "M3.recommendation": { p_violation: 0.85, weight: 0.7, score: 0.595 },
+      "M3.recommendation": { p_violation: 0.85, weight: 1, score: 0.85 },
     };
     const scoreOf = (result: ReturnType<typeof build>, ruleId: string) =>
       readIncidentDetails(result.details).flags.find((f) => f.rule_id === ruleId)?.score;
@@ -140,13 +140,13 @@ describe("moduł 3: doradztwo i rejestr KNF", () => {
     const flags = readIncidentDetails(unknown.details).flags;
     expect(scoreOf(unknown, "M3.advisory")).toBe(0.8);
     expect(scoreOf(unknown, "M3.license")).toBeNull();
-    // 1 − (1 − 0,8)·(1 − 0,595·½)
-    expect(riskScore(flags, 0.5, unknown.score)).toBeCloseTo(0.8595, 4);
-    expect(riskScore(flags, 0.7, unknown.score)).toBe(0.8);
+    // 1 − (1 − 0,85)·(1 − 0,8·½)
+    expect(riskScore(flags, 0.5, unknown.score)).toBeCloseTo(0.91, 4);
+    expect(riskScore(flags, 0.82, unknown.score)).toBeCloseTo(0.85, 4);
 
     const registered = build({ ...UNKNOWN, in_register: true }, { rule_scores: ruleScores });
     expect(scoreOf(registered, "M3.advisory")).toBe(registered.score);
-    expect(scoreOf(registered, "M3.recommendation")).toBe(0.119);
+    expect(scoreOf(registered, "M3.recommendation")).toBe(0.17);
 
     const warned = build({ ...UNKNOWN, on_warning_list: true }, { rule_scores: ruleScores });
     expect(scoreOf(warned, "M3.advisory")).toBe(warned.score);
