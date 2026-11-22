@@ -1,100 +1,101 @@
-# IVE — InvestWatch
+<p align="center">
+  <img src="docs/assets/ive-banner.png" alt="IVE, Investor Vigilance Engine: czuwamy nad inwestorami. HackNation 2026, zadanie UKNF #InvestWatch">
+</p>
 
-System monitoringu internetu dla UKNF (zadanie **#InvestWatch — na straży inwestorów!**, HackNation 2026). Sam wyszukuje i zbiera materiały o usługach inwestycyjnych, ocenia je trzema modułami analitycznymi (M1 na regułach, M2 i M3 na regułach z opcjonalnym LLM) i pokazuje analitykowi alerty z dowodami.
+# IVE: czuwamy nad inwestorami
 
-## Funkcjonalności
+Finfluencer poleca brokera. **Czy to reklama? Czy mówi o ryzyku? Czy może doradzać?**
+IVE sam zbiera takie materiały, ocenia je trzema modułami i daje analitykowi sprawę z dowodem. Decyduje człowiek.
 
-- **Silnik zbierania:** wyszukiwanie i kanały YouTube (opisy, transkrypcje, klatki filmów), strony WWW z linków pod filmami, rejestr i lista ostrzeżeń KNF. Harmonogram w kolejce pg-boss, deduplikacja po hashu treści, opcjonalny proxy i losowe przerwy między zapytaniami.
-- **M1 — finfluencerzy:** reklamy firm z rejestru KNF publikowane przez osoby trzecie. Kanał, w którym znaleziono reklamę, jest potem obserwowany na stałe.
-- **M2 — informacja o ryzyku:** 18 reguł UKNF (art. 44 rozp. 2017/565) dla materiałów firm z rejestru KNF. Każde naruszenie ma cytat albo klatkę filmu jako dowód. Reguły wizualne (rozmiar czcionki, kontrast, czas ekspozycji ostrzeżenia) liczone są z OCR klatek.
-- **M3 — nieautoryzowane doradztwo:** przesłanki doradztwa inwestycyjnego (art. 76 u.o.o.i.f.) u podmiotów bez zezwolenia KNF. Werdykt to jawny warunek z art. 76: oferta usługi i (rekomendacje instrumentów albo dopasowanie do klienta), każda przesłanka z cytatem. Risk score łączy reguły noisy-OR z zanikiem, jak w M2. W trybie `hybrid` werdykt wydaje LLM.
-- **Dashboard:** kolejka incydentów z filtrami (data, źródło, ryzyko, moduł), zmiana statusu, trend incydentów, teczka podmiotu, okno sprawy (film, klatki, kopia HTML), raporty, powiadomienia o wysokim ryzyku na żywo (Socket.io).
-- **Kalibracja:** próg ryzyka dla każdego modułu. Jego zmiana od razu przelicza FP/FN na decyzjach analityka.
+## Uruchom demo
 
-## Quick Start
-
-**Wymagania:** Docker z Compose v2 (Windows: Docker Desktop z WSL 2).
-
-| Tryb | Model | Sprzęt |
-|---|---|---|
-| `rules` (domyślny) | brak | bez GPU; tylko obrazy kontenerów |
-| `hybrid` | Bielik-PL-11B Q8_0, ok. 12 GB dysku | najlepiej GPU NVIDIA z VRAM na cały model, bez GPU działa na CPU (wolno); mniej pamięci: kwantyzacja Q4_K_M ok. 7 GB ([services/ml/README.md](services/ml/README.md)) |
+Potrzebujesz tylko Dockera z Compose v2 i internetu. Bez kont i kluczy API.
 
 ```bash
+git clone https://github.com/FerrisOfficial/hacknation.git
+cd hacknation
 cp .env.example .env
+```
+
+Potem wybierz jedną z dwóch opcji:
+
+### Opcja A: szybkie demo (polecamy)
+
+Reguły, bez modelu i GPU. Pierwszy build trwa kilka minut.
+
+```bash
+docker compose up --build web
+```
+
+### Opcja B: pełne demo z polskim LLM Bielik
+
+Ok. 12 GB do pobrania, najlepiej z GPU. W `.env` ustaw `M2_ENGINE=hybrid` i `M3_ENGINE=hybrid`, potem:
+
+```bash
 docker compose up --build
 ```
 
-Dashboard: http://localhost:3000/hacknation. Domyślnie M2 i M3 działają na regułach (`M2_ENGINE=rules`, `M3_ENGINE=rules`) i stos nie pobiera modelu.
+### Potem, w obu opcjach
 
-| Wariant | Komenda / ustawienie |
-|---|---|
-| Z LLM (Bielik-PL-11B, ok. 12 GB, pobierany raz do wolumenu) | `M2_ENGINE=hybrid`, `M3_ENGINE=hybrid` w `.env` |
-| GPU NVIDIA | `docker compose -f compose.yaml -f compose.gpu.yaml up --build` |
-| Bez Ollamy | `docker compose up --build web` |
-| Reset bazy i modelu | `docker compose down -v` |
-| Ollama na hoście (Mac, GPU Apple) | `OLLAMA_URL=http://host.docker.internal:11434` |
+**1. Otwórz dashboard:** http://localhost:3000/hacknation
 
-### Usługi
+**2. Daj mu coś do znalezienia.** Baza startuje pusta.
+Wejdź w **Źródła → Nowe źródło**, wybierz frazę YouTube (np. `kod polecający broker`) i zapisz. Materiały i wyniki pojawią się po pobraniu i analizie.
 
-| Usługa | Adres | Rola |
-|---|---|---|
-| `web` | :3000, :3001 (Socket.io) | Next.js: dashboard, API, kolejka i harmonogram (pg-boss), powiadomienia na żywo |
-| `ml` | :8000/docs | FastAPI: scraper, kolektory YouTube i KNF, moduły M2 i M3, OCR |
-| `media` | :8100 | FastAPI + ffmpeg: pobieranie filmów i wycinanie klatek |
-| `ollama` | :11434 | lokalny LLM dla trybu `hybrid` |
-| `db` | :5432 | PostgreSQL 17: metadane, wyniki, decyzje analityka |
-| `migrate`, `ollama-pull` | — | jednorazowo: migracje Drizzle, pobranie modelu |
+<details>
+<summary>Albo dodaj gotowy zestaw źródeł dla M1 i M3</summary>
 
-Wszystkie porty są wystawione tylko na `127.0.0.1`. Główne zmienne z opisami: [.env.example](.env.example).
-
-### Development (bez kontenerów aplikacji)
-
-Wymagania: Node 24, pnpm (`corepack enable`), [uv](https://docs.astral.sh/uv/), ffmpeg, Docker (baza).
+W `.env` ustaw `COLLECTOR_TOKEN=jury-demo`, uruchom stos ponownie, a potem w drugim terminalu:
 
 ```bash
-pnpm install         # tworzy brakujące .env z .env.example
-pnpm db:up           # Postgres + migracje
-pnpm dev             # web :3000, ml :8000, media :8100
-pnpm check           # lint + typy + testy (TS i Python)
+curl -X POST -H "Authorization: Bearer jury-demo" http://localhost:3000/hacknation/api/sources/m1
+curl -X POST -H "Authorization: Bearer jury-demo" http://localhost:3000/hacknation/api/sources/m3
 ```
 
-## Stack
+Harmonogram pobiera jedno źródło na minutę, żeby YouTube nie blokował zapytań.
+</details>
 
-| Warstwa | Technologie |
+## Co sprawdzić w 2 minuty
+
+1. **Źródła:** co, kiedy i z jakim skutkiem zostało pobrane.
+2. **Reklamy:** kto reklamuje którą firmę inwestycyjną, z eksportem CSV.
+3. **Naruszenia:** otwórz sprawę i zobacz cytat, regułę oraz przepis. `1` potwierdza, `2` to fałszywy alarm, `3` odkłada, decyzję można cofnąć.
+4. **Widok podmiotu:** historia firmy i teczka ZIP z potwierdzonych spraw.
+5. **Kalibracja:** przesuń próg i zobacz, co wypada. Precyzja i pełność liczą się z decyzji analityka.
+
+## Gdy coś nie działa
+
+| Objaw | Co zrobić |
 |---|---|
-| Frontend | Next.js 16 (App Router), React 19, Tailwind 4, shadcn/ui (Base UI), TanStack Query, React Hook Form + Zod |
-| Backend | Route handlery Next.js, pg-boss (kolejka i cron), Socket.io, Drizzle ORM |
-| AI / scraping | Python 3.14, FastAPI, pydantic, httpx, selectolax, Playwright, yt-dlp, RapidOCR (ONNX Runtime), Ollama + Bielik-PL-11B |
-| Dane | PostgreSQL 17 (metadane i treść), wolumen plików (kopie HTML, filmy, klatki) |
-| Kontrakt TS ↔ Python | OpenAPI → `openapi-typescript` + `openapi-fetch` ([docs/KONTRAKT.md](docs/KONTRAKT.md)) |
-| Jakość | Biome, Ruff, Pyright, Vitest, pytest, Playwright, GitHub Actions |
+| Pusty dashboard | dodaj źródło (krok 2) |
+| „YouTube ogranicza zapytania” | odczekaj i kliknij „Ponów” w Źródłach |
+| Zajęty port | zwolnij 3000, 3001, 5432, 8000 i 8100 |
+| Start od zera | `docker compose down -v` (kasuje dane) |
 
-## Struktura
+## Stan na hackathon
 
-```
-apps/web/          Next.js: UI (src/app/(app)), API (src/app/api), pipeline i kolejka (src/lib)
-packages/db/       schemat Drizzle (src/schema.ts) i migracje SQL (drizzle/)
-packages/api-ml/   klient TS serwisu ML generowany z OpenAPI
-services/ml/       FastAPI: scraper, kolektory, M2 (risk*.py), M3 (advisory.py), KNF (knf.py)
-services/media/    FastAPI + ffmpeg: filmy i klatki
-docs/              wymagania (ZADANIE.md), kontrakt API, materiały UKNF
-compose.yaml       cały stos on-premise (+ compose.gpu.yaml)
-```
+- Kolektory: **YouTube i WWW**. TikTok, Instagram i Facebook są w planie.
+- Pobieranie wideo w kontenerze wymaga poprawki ścieżki ffmpeg, więc reguły oparte na klatkach nie dają jeszcze wyników. Analiza opisów, napisów i stron tego nie potrzebuje.
+- Progi i wagi wymagają kalibracji na danych UKNF.
+- Ekrany w prezentacji i filmie pokazują interfejs na danych przykładowych.
 
-## Wymagania techniczne UKNF
+## Zespół
 
-| Wymaganie | Jak spełniamy |
-|---|---|
-| Lekkie, rozdzielone serwisy | Frontend z backendem (`web`), AI (`ml`), media (`media`), LLM (`ollama`) i baza (`db`) to osobne kontenery. `web` woła `ml` przez klient generowany z OpenAPI, a `media` przez HTTP z walidacją Zod. Przeglądarka nie woła serwisów AI bezpośrednio. |
-| Docker Compose, on-premise | Cały stos startuje jedną komendą `docker compose up --build`. Obrazy mają przypięte wersje. CI w każdym PR buduje stos bez Ollamy (db, migrate, ml, media, web) i sprawdza, czy odpowiada. |
-| Tylko open source, bez płatnych API | Model Bielik działa lokalnie w Ollamie, OCR lokalnie w ONNX Runtime, baza to Postgres. Nie ma kluczy do zewnętrznych usług. Bez LLM system działa na regułach. |
-| Bezpieczny łańcuch dostaw | CI uruchamia `pnpm audit --audit-level high` i `pip-audit` (ml, media), a lockfile'y są wymuszane (`--frozen-lockfile`, `uv sync --locked`). Sekrety trzymamy tylko w `.env` (poza gitem i obrazami), a porty wystawiamy tylko na localhost. |
-| README minimalne | Ten plik: Quick Start, wymagania sprzętowe, konfiguracja usług. |
+**Maciej Stempniak, Mikołaj Karapka, Franciszek Przeliorz.** Trzy osoby, trzy agenty AI, jedno repo: [jak pracowaliśmy](docs/PROCES-AI.md).
+
+## Jak to działa (dla ciekawych)
+
+**M1** wykrywa reklamy finfluencerów, **M2** złą informację o ryzyku, **M3** doradztwo bez zezwolenia. Jeden materiał może dostać wynik z każdego.
+
+- [Algorytmy M1 i M3, pipeline i architektura](docs/BACKEND.md)
+- [M2: silniki, reguły i konfiguracja LLM](services/ml/README.md)
+- [18 kryteriów informacji o ryzyku od UKNF](docs/materialy-uknf/kryteria-informacji-o-ryzyku.md)
+- [Analiza klatek wideo](docs/KLATKI.md)
+- [Kontrakt API](docs/KONTRAKT.md) i [wymagania zadania](docs/ZADANIE.md)
 
 ## Licencja
 
-Kod projektu: [MIT](LICENSE).
+Kod projektu: MIT.
 
 ### Licencje zależności
 
@@ -121,9 +122,3 @@ Wszystkie zależności są open source. Kod projektu linkuje tylko biblioteki na
 | Ruff, Pyright, Vitest, pytest | MIT |
 | Biome | MIT lub Apache 2.0 |
 
-## Dokumentacja
-
-- [docs/ZADANIE.md](docs/ZADANIE.md): wymagania i kryteria oceny
-- [docs/KONTRAKT.md](docs/KONTRAKT.md): API dashboardu, zdarzenia Socket.io, wyjście modeli
-- [services/ml/README.md](services/ml/README.md): konfiguracja LLM
-- [CLAUDE.md](CLAUDE.md), [docs/PROCES-AI.md](docs/PROCES-AI.md): zasady pracy zespołu i agentów AI
