@@ -5,19 +5,26 @@ import {
   type Db,
   desc,
   eq,
+  incidentEvents,
   materials,
   type ReviewStatus,
+  reviewers,
   sql,
 } from "@app/db";
 import type { Thresholds } from "@/lib/analysis/modules";
 import { getContent } from "@/lib/content-store";
 import {
+  type HistoryEntry,
   type IncidentDetail,
   type IncidentList,
   type IncidentListItem,
+  type Review,
+  type Reviewer,
   readIncidentDetails,
 } from "@/lib/incidents/contract";
+import { statusAction, withDetection } from "@/lib/incidents/history";
 import { thresholdSql } from "@/lib/pipeline/thresholds";
+import { currentReviewer } from "@/lib/reviewer";
 import type { IncidentsQuery } from "@/lib/schemas";
 import { resultConditions } from "./results";
 
@@ -27,6 +34,37 @@ import { resultConditions } from "./results";
 
 // Priorytet do sortowania: risk_score z ML, a bez niego (M1, M3, starsze wyniki) score.
 const prioritySql = sql<number>`coalesce(${analysisResults.riskScore}, ${analysisResults.score})`;
+
+const reviewColumns = {
+  status: analysisResults.status,
+  reviewedAt: analysisResults.reviewedAt,
+  reviewNote: analysisResults.reviewNote,
+  reviewerId: reviewers.id,
+  reviewerName: reviewers.name,
+  reviewerRole: reviewers.role,
+};
+
+type ReviewRow = {
+  status: ReviewStatus;
+  reviewedAt: Date | null;
+  reviewNote: string | null;
+  reviewerId: string | null;
+  reviewerName: string | null;
+  reviewerRole: string | null;
+};
+
+function reviewerOf(id: string | null, name: string | null, role: string | null): Reviewer | null {
+  return id && name ? { id, name, role } : null;
+}
+
+function readReview(row: ReviewRow): Review {
+  return {
+    status: row.status,
+    reviewed_by: reviewerOf(row.reviewerId, row.reviewerName, row.reviewerRole),
+    reviewed_at: row.reviewedAt?.toISOString() ?? null,
+    review_note: row.reviewNote,
+  };
+}
 
 export async function listIncidentItems(
   db: Db,
@@ -57,13 +95,15 @@ export async function listIncidentItems(
         priority: prioritySql,
         label: analysisResults.label,
         details: analysisResults.details,
-        status: analysisResults.status,
         createdAt: analysisResults.createdAt,
         platform: materials.platform,
         url: materials.url,
+        title: materials.title,
+        ...reviewColumns,
       })
       .from(analysisResults)
       .innerJoin(materials, eq(materials.id, analysisResults.materialId))
+      .leftJoin(reviewers, eq(reviewers.id, analysisResults.reviewedBy))
       .where(where)
       .orderBy(
         ...(query.sort === "date"
@@ -95,17 +135,40 @@ export async function listIncidentItems(
         platform: row.platform,
         url: row.url,
         created_at: row.createdAt.toISOString(),
-        status: row.status,
+        title: row.title,
+        in_register: details.entity.in_register,
+        ...readReview(row),
       };
     }),
     total: total?.value ?? 0,
   };
 }
 
+// SHA-256 zapisanej kopii (R4): obiekt w bazie treści jest adresowany SHA-256 surowego HTML-a,
+// kopia w kolumnie raw_html liczona na miejscu, a bez kopii — skrót tekstu materiału.
+const contentHashSql = sql<string>`coalesce(
+  case when ${materials.contentRef} like 'sha256:%' then substr(${materials.contentRef}, 8) end,
+  encode(sha256(convert_to(${materials.rawHtml}, 'UTF8')), 'hex'),
+  ${materials.contentHash}
+)`;
+
+// Długość filmu z metadanych YouTube (`metadata.duration_s`), bez czytania całego jsonb (napisy).
+const durationSql = sql<
+  number | null
+>`case when jsonb_typeof(${materials.metadata}->'duration_s') = 'number'
+  then (${materials.metadata}->>'duration_s')::float8 end`;
+
 export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDetail | null> {
   const [row] = await db
     .select({
-      result: analysisResults,
+      id: analysisResults.id,
+      module: analysisResults.module,
+      score: analysisResults.score,
+      riskScore: analysisResults.riskScore,
+      label: analysisResults.label,
+      details: analysisResults.details,
+      createdAt: analysisResults.createdAt,
+      ...reviewColumns,
       material: {
         url: materials.url,
         platform: materials.platform,
@@ -115,21 +178,26 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
         publishedAt: materials.publishedAt,
         scrapedAt: materials.scrapedAt,
         hasSnapshot: sql<boolean>`(${materials.contentRef} is not null or ${materials.rawHtml} is not null)`,
+        durationS: durationSql,
+        contentHash: contentHashSql,
       },
     })
     .from(analysisResults)
     .innerJoin(materials, eq(materials.id, analysisResults.materialId))
+    .leftJoin(reviewers, eq(reviewers.id, analysisResults.reviewedBy))
     .where(eq(analysisResults.id, id));
   if (!row) return null;
-  const { result, material } = row;
+  const { material } = row;
+  const score = roundScore(row.score);
+  const createdAt = row.createdAt.toISOString();
   return {
-    id: result.id,
-    module: result.module,
-    score: roundScore(result.score),
-    risk_score: roundScore(result.riskScore ?? result.score),
-    label: result.label,
-    status: result.status,
-    created_at: result.createdAt.toISOString(),
+    id: row.id,
+    module: row.module,
+    score,
+    risk_score: roundScore(row.riskScore ?? row.score),
+    label: row.label,
+    created_at: createdAt,
+    ...readReview(row),
     material: {
       url: material.url,
       platform: material.platform,
@@ -139,9 +207,36 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
       published_at: material.publishedAt?.toISOString() ?? null,
       scraped_at: material.scrapedAt.toISOString(),
       has_snapshot: material.hasSnapshot,
+      duration_s: material.durationS === null ? null : Number(material.durationS),
+      content_hash: material.contentHash,
     },
-    details: readIncidentDetails(result.details),
+    details: readIncidentDetails(row.details),
+    history: withDetection(await incidentEventsOf(db, id), { at: createdAt, score }),
   };
+}
+
+async function incidentEventsOf(db: Db, resultId: string) {
+  const rows = await db
+    .select({
+      kind: incidentEvents.kind,
+      at: incidentEvents.at,
+      action: incidentEvents.action,
+      status: incidentEvents.status,
+      actorId: reviewers.id,
+      actorName: reviewers.name,
+      actorRole: reviewers.role,
+    })
+    .from(incidentEvents)
+    .leftJoin(reviewers, eq(reviewers.id, incidentEvents.actorId))
+    .where(eq(incidentEvents.resultId, resultId))
+    .orderBy(desc(incidentEvents.at));
+  return rows.map((row): HistoryEntry & { kind: typeof row.kind } => ({
+    kind: row.kind,
+    at: row.at.toISOString(),
+    actor: reviewerOf(row.actorId, row.actorName, row.actorRole),
+    action: row.action,
+    status: row.status,
+  }));
 }
 
 // Surowy HTML materiału z dnia scrapingu (baza treści albo kolumna raw_html). null = brak.
@@ -155,23 +250,62 @@ export async function getIncidentSnapshot(db: Db, id: string): Promise<string | 
   return row.contentRef ? await getContent(row.contentRef) : row.rawHtml;
 }
 
-// Zmiana statusu przez analityka. confirmed/dismissed to prawda bazowa panelu kalibracji.
-export async function updateIncidentStatus(db: Db, id: string, status: ReviewStatus) {
-  const decided = status === "confirmed" || status === "dismissed";
-  const [updated] = await db
-    .update(analysisResults)
-    .set({ status, reviewedAt: decided ? new Date() : null })
-    .where(eq(analysisResults.id, id))
-    .returning({
-      id: analysisResults.id,
-      materialId: analysisResults.materialId,
-      module: analysisResults.module,
-      status: analysisResults.status,
-    });
-  return updated ?? null;
+// Zmiana statusu przez analityka (§6). Zapisuje autora i czas (R16) — także przy automatycznym
+// `in_review` po otwarciu sprawy — oraz zdarzenie w historii, gdy status albo powód się zmienił.
+// `new` (cofnięcie decyzji) czyści autora. confirmed/dismissed to prawda bazowa kalibracji.
+export async function updateIncidentStatus(
+  db: Db,
+  id: string,
+  change: { status: ReviewStatus; note: string | null },
+) {
+  const reviewer = currentReviewer();
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ status: analysisResults.status, note: analysisResults.reviewNote })
+      .from(analysisResults)
+      .where(eq(analysisResults.id, id))
+      .for("update");
+    if (!current) return null;
+
+    await tx
+      .insert(reviewers)
+      .values(reviewer)
+      .onConflictDoUpdate({
+        target: reviewers.id,
+        set: { name: reviewer.name, role: reviewer.role, updatedAt: sql`now()` },
+      });
+
+    const reset = change.status === "new";
+    const [updated] = await tx
+      .update(analysisResults)
+      .set({
+        status: change.status,
+        reviewNote: change.note,
+        reviewedBy: reset ? null : reviewer.id,
+        reviewedAt: reset ? null : new Date(),
+      })
+      .where(eq(analysisResults.id, id))
+      .returning({
+        id: analysisResults.id,
+        materialId: analysisResults.materialId,
+        module: analysisResults.module,
+        status: analysisResults.status,
+      });
+
+    if (updated && (current.status !== change.status || current.note !== change.note)) {
+      await tx.insert(incidentEvents).values({
+        resultId: id,
+        kind: "status",
+        actorId: reviewer.id,
+        action: statusAction(change.status, change.note),
+        status: change.status,
+      });
+    }
+    return updated ?? null;
+  });
 }
 
 // `real` (float4) wraca jako 0.8000000119 — do API oddajemy 4 miejsca po przecinku.
-function roundScore(score: number): number {
+export function roundScore(score: number): number {
   return Math.round(score * 10_000) / 10_000;
 }

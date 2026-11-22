@@ -69,10 +69,22 @@ export type SourceUpdateInput = z.infer<typeof sourceUpdateSchema>;
 
 // ─── Wyniki, alerty, kalibracja ─────────────────────────────────────────────────────────────
 
-// PATCH /api/incidents/:id (docs/KONTRAKT.md §6).
-export const incidentUpdateSchema = z.object({ status: z.enum(REVIEW_STATUSES) });
+// PATCH /api/incidents/:id (docs/KONTRAKT.md §6). `review_note`: powód przy Odłóż / Fałszywy
+// alarm; brak albo pusty = bez powodu (poprzedni powód znika razem z poprzednią decyzją).
+export const incidentUpdateSchema = z.object({
+  status: z.enum(REVIEW_STATUSES),
+  review_note: z
+    .string()
+    .trim()
+    .max(500, "Powód: maksymalnie 500 znaków")
+    .nullish()
+    .transform((note) => note || null),
+});
 
 export type IncidentUpdateInput = z.infer<typeof incidentUpdateSchema>;
+
+// GET /api/entities/dossier?firm= — nazwa podmiotu jak w liście incydentów (firm_name/advertiser).
+export const dossierQuerySchema = z.object({ firm: z.string().trim().min(1).max(300) });
 
 // Setne części — tak samo dokładnie liczy histogram w panelu kalibracji.
 const thresholdValue = z

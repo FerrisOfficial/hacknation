@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { predictInputSchema, youtubeCollectInputSchema } from "./schemas";
+import { incidentUpdateSchema, predictInputSchema, youtubeCollectInputSchema } from "./schemas";
 
 describe("predictInputSchema", () => {
   it("przycina białe znaki i przepuszcza poprawny tekst", () => {
@@ -25,5 +25,30 @@ describe("youtubeCollectInputSchema", () => {
     for (const body of [{ query: " " }, { query: "XTB", limit: 0 }, { query: "XTB", limit: 51 }]) {
       expect(youtubeCollectInputSchema.safeParse(body).success).toBe(false);
     }
+  });
+});
+
+describe("incidentUpdateSchema", () => {
+  it("przyjmuje status Odłożony z powodem", () => {
+    expect(
+      incidentUpdateSchema.parse({ status: "postponed", review_note: " dowód niepełny " }),
+    ).toEqual({ status: "postponed", review_note: "dowód niepełny" });
+  });
+
+  it("brak, null albo pusty powód = bez powodu", () => {
+    for (const body of [
+      { status: "confirmed" },
+      { status: "confirmed", review_note: null },
+      { status: "confirmed", review_note: "  " },
+    ]) {
+      expect(incidentUpdateSchema.parse(body)).toEqual({ status: "confirmed", review_note: null });
+    }
+  });
+
+  it("odrzuca nieznany status i za długi powód", () => {
+    expect(incidentUpdateSchema.safeParse({ status: "archived" }).success).toBe(false);
+    expect(
+      incidentUpdateSchema.safeParse({ status: "dismissed", review_note: "x".repeat(501) }).success,
+    ).toBe(false);
   });
 });

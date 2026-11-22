@@ -10,13 +10,14 @@ import {
   inArray,
   lte,
   materials,
+  type ReviewStatus,
   type SQL,
   scrapeJobs,
   sources,
   sql,
 } from "@app/db";
 import type { ScoreBucket } from "@/lib/analysis/calibration";
-import { ANALYSIS_MODULES, type Thresholds } from "@/lib/analysis/modules";
+import { ANALYSIS_MODULES, type Thresholds, UNDECIDED_STATUSES } from "@/lib/analysis/modules";
 import { highRiskSql, riskLevelSql, thresholdSql } from "@/lib/pipeline/thresholds";
 import type { TrendQuery } from "@/lib/schemas";
 
@@ -147,7 +148,7 @@ export async function summary(db: Db, thresholds: Thresholds) {
         flagged: 0,
         risk: { low: 0, medium: 0, high: 0 },
         // Statusy tylko flagowanych — to kolejka pracy analityka.
-        status: { new: 0, in_review: 0, confirmed: 0, dismissed: 0 },
+        status: { new: 0, in_review: 0, postponed: 0, confirmed: 0, dismissed: 0 },
       },
     ]),
   ) as Record<
@@ -157,7 +158,7 @@ export async function summary(db: Db, thresholds: Thresholds) {
       total: number;
       flagged: number;
       risk: Record<"low" | "medium" | "high", number>;
-      status: Record<"new" | "in_review" | "confirmed" | "dismissed", number>;
+      status: Record<ReviewStatus, number>;
     }
   >;
   for (const row of resultRows) {
@@ -193,7 +194,8 @@ export async function scoreHistogram(db: Db, module: AnalysisModule): Promise<Sc
       bucket,
       positive: sql<number>`count(*) filter (where ${analysisResults.status} = 'confirmed')::int`,
       negative: sql<number>`count(*) filter (where ${analysisResults.status} = 'dismissed')::int`,
-      unlabeled: sql<number>`count(*) filter (where ${analysisResults.status} in ('new', 'in_review'))::int`,
+      // Odłożony = bez decyzji, tak jak nowy i w trakcie.
+      unlabeled: sql<number>`count(*) filter (where ${inArray(analysisResults.status, [...UNDECIDED_STATUSES])})::int`,
     })
     .from(analysisResults)
     .where(eq(analysisResults.module, module))
