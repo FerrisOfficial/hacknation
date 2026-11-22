@@ -6,7 +6,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "postinstall": "node scripts/env-init.mjs",
+    "postinstall": "node scripts/env-init.mjs && node scripts/git-hooks/install.mjs",
     "dev": "node scripts/env-init.mjs && turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
@@ -14,6 +14,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
+    "test:hooks": "node --test \".claude/hooks/*.test.mjs\"",
     "check": "turbo run lint typecheck test",
     "env:init": "node scripts/env-init.mjs",
     "db:up": "node scripts/env-init.mjs && docker compose up --detach --wait db && pnpm --filter @app/db migrate",

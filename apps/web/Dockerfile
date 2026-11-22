@@ -9,8 +9,10 @@ WORKDIR /repo
 # Najpierw same manifesty: warstwa z zależnościami przebudowuje się tylko po zmianie paczek.
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-# postinstall (scripts/env-init.mjs) nic tu nie tworzy — wzorów .env.example jeszcze nie ma w obrazie.
+# postinstall nic tu nie tworzy: wzorów .env.example jeszcze nie ma w obrazie, a git hooki (scripts/git-hooks)
+# pomijają katalog bez repozytorium gita.
 COPY scripts/env-init.mjs scripts/
+COPY scripts/git-hooks/ scripts/git-hooks/
 COPY apps/web/package.json apps/web/
 COPY packages/db/package.json packages/db/
 COPY packages/api-ml/package.json packages/api-ml/

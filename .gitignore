@@ -42,3 +42,8 @@ __pycache__/
 *.log
 .DS_Store
 Thumbs.db
+
+# Claude Code: ustawienia osobiste i lokalny stan hooków (wspólne są w .claude/settings.json)
+.claude/settings.local.json
+.claude/state/
+.claude/scheduled_tasks.lock
