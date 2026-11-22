@@ -24,7 +24,8 @@ function NavItem({
   meta?: string;
 }) {
   const pathname = usePathname();
-  const active = pathname === href || pathname.startsWith(`${href}/`);
+  // "/" (Przegląd) tylko dokładnie — inaczej byłby aktywny na każdej podstronie.
+  const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
   return (
     <Link
       href={href}
@@ -114,7 +115,7 @@ function Nav() {
       </div>
       <div className="mt-6 flex flex-col gap-0.5">
         <NavItem
-          href="/przeglad"
+          href="/"
           label="Przegląd"
           icon={<LayoutDashboard className="size-4" strokeWidth={1.5} />}
         />
