@@ -268,3 +268,36 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - **`incident.high_risk`** leci raz, gdy wynik przekroczy `alert` (nowy albo wcześniej poniżej). Ponowna analiza już wysokiego wyniku nie wysyła go drugi raz. Socket.io wysyła tylko pola z punktu 10, bez `type`.
 - **Typy TS** odpowiedzi i zdarzeń dla UI: `apps/web/src/lib/incidents/contract.ts` (`IncidentList`, `IncidentDetail`, `Trend`, `Calibration`, `HighRiskIncidentEvent`), progi: `ThresholdSettings` w `apps/web/src/lib/analysis/modules.ts`.
 - **Zgodność wstecz:** `details` w starym kształcie (`explanation`, `entity.name`, `entity.registered`, `advertiser`) jest czytany jako `summary`, `firm_name`, `in_register`, `advertiser`. Pipeline zapisuje już kształt z punktu 3 — szczegóły (skąd backend bierze każde pole, wzór na `score`) w [BACKEND.md](BACKEND.md#kontrakt-z-serwisem-ml-post-analyze).
+
+## Zmiany dla UI (mockup hi-fi, PR `feat/ui-mockup`)
+
+Frontend jest już zrobiony według ekranów hi-fi z Figmy; backend dostosowuje się do niego. Typy UI: `apps/web/src/lib/client/contract-ui.ts`. Każde pole niżej jest dla UI opcjonalne: bez niego ekran działa, ale pokazuje mniej.
+W tej wersji zbieramy tylko **YouTube i strony WWW**; Instagram, Facebook, TikTok zostają w enumie, ale UI nie pokazuje ich w filtrach.
+
+**Status „Odłożony”**
+- [ ] `review_status` dostaje wartość `postponed` (migracja). Słownik `status` w tym pliku: `new | in_review | postponed | confirmed | dismissed`.
+- [ ] `PATCH /api/incidents/:id` przyjmuje `{ "status": "...", "review_note": "string" }` (`review_note` opcjonalne; UI wysyła je przy Odłóż: „dowód niepełny”, „czekam na nowe materiały podmiotu”, „do konsultacji”).
+- [ ] Kalibracja traktuje `postponed` jak brak decyzji (nie liczy do TP/FP/FN/TN).
+
+**Autor i czas decyzji (R16)**
+- [ ] `GET /api/me` → `{ "id": "string", "name": "Marta Kowalska", "role": "analityczka" }`. Bez logowania: stały użytkownik z env (np. `UI_USER_NAME`, `UI_USER_ROLE`).
+- [ ] `PATCH` zapisuje `reviewed_by` (użytkownik z `/api/me`) i `reviewed_at` (kolumny już są w `analysis_results`), także przy automatycznym `in_review` po otwarciu materiału.
+- [ ] §4 i §5: każdy incydent ma `reviewed_by: { id, name, role } | null`, `reviewed_at: string | null`, `review_note: string | null`.
+- [ ] §5: `history: [{ "at": "ISO", "actor": { id, name, role } | null, "action": "oflagowano 0,84 przy progu 0,55", "status": "confirmed" | null }]` — zdarzenia materiału od najnowszego: oflagowanie, alert, każda zmiana statusu z autorem. `actor = null` = system.
+
+**Lista incydentów (§4)**
+- [ ] `title: string | null` (`materials.title`): tytuł wiersza w Kolejce. Bez niego UI składa tytuł z `advertiser` i `summary`.
+- [ ] `in_register: boolean | null` (z `details.entity`): chip „w rejestrze KNF” w nagłówku grupy.
+
+**Wideo i dowód (§5)**
+- [ ] `material.has_video: boolean`, `material.duration_s: number | null`. Pobrany film YouTube **zostaje na dysku** po wycięciu klatek (zmiana względem [KLATKI.md](KLATKI.md), krok 5), bo Okno sprawy odtwarza go od oflagowanej sekundy.
+- [ ] `GET /api/incidents/:id/video` → `video/mp4` z obsługą `Range` (przewijanie w `<video>`). 404, gdy filmu nie ma.
+- [ ] `evidence.frame` i `GET /api/incidents/:id/frames/:file` jak w §3 i §5. UI pokazuje klatkę z ramką `box` i przewija film do `timestamp_s`.
+- [ ] `material.content_hash: string | null` (SHA-256 kopii, R4) — wyświetlany przy „kopia …”.
+
+**Teczka podmiotu (Z7)**
+- [ ] `GET /api/entities/dossier?firm=<firm_name>` → `application/zip` (`Content-Disposition: attachment`): potwierdzone materiały podmiotu z kopią HTML lub filmem, klatkami dowodów, `details` i historią decyzji.
+
+**Bez zmian kontraktu, ale ważne dla UI**
+- Zmiana progu `flag` od razu zmienia listę incydentów (obecne zachowanie). Ekran Kalibracji tak to opisuje.
+- Socket.io: `result` po każdej zmianie statusu, żeby inne przeglądarki odświeżyły Kolejkę.

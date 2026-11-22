@@ -1,10 +1,11 @@
 "use client";
 
-import type { AnalysisModule, Platform, ReviewStatus, ScrapeJobStatus } from "@app/db";
+import type { AnalysisModule, Platform, ScrapeJobStatus } from "@app/db";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ModuleThreshold, ThresholdSettings } from "@/lib/analysis/modules";
 import { withBasePath } from "@/lib/base-path";
-import type { Calibration, IncidentDetail, IncidentList, Trend } from "@/lib/incidents/contract";
+import type { Calibration, Trend } from "@/lib/incidents/contract";
+import type { Me, UiDetail, UiList, UiStatus } from "./contract-ui";
 
 // Klient REST dla dashboardu: docs/KONTRAKT.md §4–§9 oraz /api/sources (poza kontraktem, bez zmian).
 // Przeglądarka woła tylko route handlery Next.js, nigdy FastAPI.
@@ -32,7 +33,7 @@ async function request<T>(path: `/${string}`, init?: RequestInit): Promise<T> {
 export type IncidentFilters = {
   module?: AnalysisModule[];
   platform?: Platform[];
-  status?: ReviewStatus[];
+  status?: UiStatus[];
   from?: string;
   to?: string;
   min_score?: number;
@@ -59,12 +60,38 @@ export const keys = {
   calibration: (module: AnalysisModule, threshold: number) =>
     ["calibration", module, threshold] as const,
   sources: ["sources"] as const,
+  me: ["me"] as const,
 };
+
+// GET /api/me (zmiana kontraktu dla UI). Bez endpointu nawigacja nie pokazuje użytkownika.
+export function useMe() {
+  return useQuery({
+    queryKey: keys.me,
+    queryFn: () => request<Me>("/api/me"),
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function videoUrl(id: string): string {
+  return withBasePath(`/api/incidents/${encodeURIComponent(id)}/video`);
+}
+
+export function frameUrl(id: string, file: string): string {
+  return withBasePath(
+    `/api/incidents/${encodeURIComponent(id)}/frames/${encodeURIComponent(file)}`,
+  );
+}
+
+// Teczka podmiotu (Z7): potwierdzone materiały z kopiami, dowodami i historią decyzji w ZIP.
+export function dossierUrl(firm: string): string {
+  return withBasePath(`/api/entities/dossier?firm=${encodeURIComponent(firm)}`);
+}
 
 export function useIncidents(filters: IncidentFilters, enabled = true) {
   return useQuery({
     queryKey: keys.incidents(filters),
-    queryFn: () => request<IncidentList>(incidentsPath(filters)),
+    queryFn: () => request<UiList>(incidentsPath(filters)),
     enabled,
     staleTime: 15_000,
   });
@@ -73,7 +100,7 @@ export function useIncidents(filters: IncidentFilters, enabled = true) {
 export function useIncident(id: string, enabled = true) {
   return useQuery({
     queryKey: keys.incident(id),
-    queryFn: () => request<IncidentDetail>(`/api/incidents/${encodeURIComponent(id)}`),
+    queryFn: () => request<UiDetail>(`/api/incidents/${encodeURIComponent(id)}`),
     enabled: enabled && id.length > 0,
   });
 }
@@ -150,10 +177,10 @@ export function invalidateIncidents(client: QueryClient) {
 export function useSetStatus() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: ReviewStatus }) =>
-      request<IncidentDetail>(`/api/incidents/${encodeURIComponent(id)}`, {
+    mutationFn: ({ id, status, note }: { id: string; status: UiStatus; note?: string }) =>
+      request<UiDetail>(`/api/incidents/${encodeURIComponent(id)}`, {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(note ? { status, review_note: note } : { status }),
       }),
     onSuccess: (detail) => {
       client.setQueryData(keys.incident(detail.id), detail);

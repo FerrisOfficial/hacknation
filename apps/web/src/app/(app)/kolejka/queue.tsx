@@ -16,8 +16,10 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { PlatformLabel, StatusGlyph } from "@/components/iw/icons";
+import { PlatformLabel } from "@/components/iw/icons";
+import { RegistryChip } from "@/components/iw/registry";
 import {
+  Avatar,
   Chip,
   EmptyState,
   ErrorNote,
@@ -26,17 +28,20 @@ import {
   PageHeader,
   ScoreCell,
   Skeleton,
+  StatusTip,
   Tabs,
   Tip,
 } from "@/components/iw/ui";
-import { PLATFORMS, type ThresholdSettings } from "@/lib/analysis/modules";
+import type { ThresholdSettings } from "@/lib/analysis/modules";
 import { useIncidents, useThresholds } from "@/lib/client/api";
+import type { UiListItem } from "@/lib/client/contract-ui";
 import {
+  ACTIVE_PLATFORMS,
   fmtRelative,
   MODULE_SHORT,
   PLATFORM_LABEL,
   plural,
-  STATUS_LABEL,
+  reviewText,
 } from "@/lib/client/format";
 import { useHotkeys } from "@/lib/client/hotkeys";
 import {
@@ -50,7 +55,6 @@ import {
   readQueueParams,
 } from "@/lib/client/queue";
 import { useRealtime } from "@/lib/client/realtime";
-import type { IncidentListItem } from "@/lib/incidents/contract";
 import { cn } from "@/lib/utils";
 
 function Row({
@@ -61,7 +65,7 @@ function Row({
   fresh,
   onFocus,
 }: {
-  item: IncidentListItem;
+  item: UiListItem;
   thresholds: ThresholdSettings;
   href: string;
   focused: boolean;
@@ -72,7 +76,8 @@ function Row({
   useEffect(() => {
     if (focused) ref.current?.focus({ preventScroll: false });
   }, [focused]);
-  const muted = item.status === "dismissed";
+  const muted = item.status === "dismissed" || item.status === "postponed";
+  const decided = item.status !== "new";
   const threshold = thresholds[item.module];
   return (
     <li
@@ -87,9 +92,7 @@ function Row({
         onFocus={onFocus}
         className="flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-md py-2 pr-2 pl-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-700 focus-visible:ring-inset"
       >
-        <Tip label={STATUS_LABEL[item.status]}>
-          <StatusGlyph status={item.status} />
-        </Tip>
+        <StatusTip review={item} />
         <span className="min-w-0 flex-1">
           <span
             className={cn(
@@ -102,6 +105,9 @@ function Row({
           <span className="block truncate text-[13px] text-ink-600">
             {PLATFORM_LABEL[item.platform]} · wykryto {fmtRelative(item.created_at)}
             {fresh ? " · alert na żywo" : ""}
+            {decided && (item.reviewed_by || item.reviewed_at)
+              ? ` · ${reviewText(item)}${item.review_note ? `: ${item.review_note}` : ""}`
+              : ""}
           </span>
         </span>
       </Link>
@@ -137,6 +143,9 @@ function Row({
         aria-hidden="true"
         className="flex shrink-0 items-center gap-4 self-stretch py-2 pr-4 pl-3"
       >
+        <span className="flex w-5 justify-center">
+          {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
+        </span>
         <Chip>{MODULE_SHORT[item.module]}</Chip>
         <PlatformLabel platform={item.platform} className="w-[104px] text-[13px]" />
         <ScoreCell score={item.score} flag={threshold.flag} alert={threshold.alert} />
@@ -177,6 +186,9 @@ function Group({
           )}
         </button>
         <h2 className="font-semibold text-ink-900 text-sm">{group.name}</h2>
+        <RegistryChip
+          entity={{ in_register: group.inRegister, knf_id: null, on_warning_list: null }}
+        />
         <span className="text-[13px] text-ink-600">
           {count} · {group.publishers}{" "}
           {plural(group.publishers, "publikujący", "publikujących", "publikujących")}
@@ -198,10 +210,12 @@ function Group({
 
 function useViewCounts(params: QueueParams) {
   const open = useIncidents({ ...queueFilters(params, "otwarte"), page_size: 1 });
+  const postponed = useIncidents({ ...queueFilters(params, "odlozone"), page_size: 1 });
   const confirmed = useIncidents({ ...queueFilters(params, "potwierdzone"), page_size: 1 });
   const dismissed = useIncidents({ ...queueFilters(params, "falszywe"), page_size: 1 });
   return {
     otwarte: open.data?.total,
+    odlozone: postponed.data?.total,
     potwierdzone: confirmed.data?.total,
     falszywe: dismissed.data?.total,
   };
@@ -244,7 +258,7 @@ export function Queue() {
   ];
   const platformOptions: { value: Platform | "wszystkie"; label: string }[] = [
     { value: "wszystkie", label: "wszystkie" },
-    ...PLATFORMS.map((platform) => ({ value: platform, label: PLATFORM_LABEL[platform] })),
+    ...ACTIVE_PLATFORMS.map((platform) => ({ value: platform, label: PLATFORM_LABEL[platform] })),
   ];
 
   let index = -1;
@@ -267,6 +281,7 @@ export function Queue() {
         onChange={(view) => update({ view })}
         tabs={[
           { value: "otwarte", label: "Otwarte", count: counts.otwarte },
+          { value: "odlozone", label: "Odłożone", count: counts.odlozone },
           { value: "potwierdzone", label: "Potwierdzone", count: counts.potwierdzone },
           { value: "falszywe", label: "Fałszywe alarmy", count: counts.falszywe },
         ]}

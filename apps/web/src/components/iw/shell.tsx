@@ -4,10 +4,11 @@ import { Inbox, LayoutDashboard, RadioTower, SlidersHorizontal, TriangleAlert } 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { sourceHasError, useIncidents, useSources } from "@/lib/client/api";
+import { sourceHasError, useIncidents, useMe, useSources } from "@/lib/client/api";
 import { fmtTime, plural } from "@/lib/client/format";
 import { RealtimeProvider, useRealtime } from "@/lib/client/realtime";
 import { cn } from "@/lib/utils";
+import { Avatar } from "./ui";
 
 export const OPEN_STATUSES = ["new", "in_review"] as const;
 
@@ -84,6 +85,20 @@ function LivePanel() {
   );
 }
 
+function CurrentUser() {
+  const me = useMe();
+  if (!me.data) return null;
+  return (
+    <p className="flex items-center gap-2 px-1 text-[13px] text-ink-700">
+      <Avatar reviewer={me.data} />
+      <span className="truncate">
+        {me.data.name}
+        {me.data.role ? <span className="text-ink-600"> · {me.data.role}</span> : null}
+      </span>
+    </p>
+  );
+}
+
 function Nav() {
   const open = useIncidents({ status: [...OPEN_STATUSES], page_size: 1 });
   const sources = useSources();
@@ -121,8 +136,9 @@ function Nav() {
           meta={failed ? `${failed} ${plural(failed, "błąd", "błędy", "błędów")}` : undefined}
         />
       </div>
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-3">
         <LivePanel />
+        <CurrentUser />
       </div>
     </nav>
   );

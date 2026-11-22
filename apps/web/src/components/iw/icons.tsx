@@ -1,6 +1,6 @@
 "use client";
 
-import type { Platform, ReviewStatus } from "@app/db";
+import type { Platform } from "@app/db";
 import {
   Circle,
   CircleCheck,
@@ -12,14 +12,16 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { withBasePath } from "@/lib/base-path";
+import type { UiStatus } from "@/lib/client/contract-ui";
 import { PLATFORM_LABEL, STATUS_LABEL } from "@/lib/client/format";
 import { cn } from "@/lib/utils";
 
 // Glif statusu: kształt niesie znaczenie, kolor tylko dla stanu wymagającego uwagi (kontrakt UI,
 // decyzja z 22.11). Nowy ink-600, W trakcie warning-700, Potwierdzony ink-900, Fałszywy alarm ink-400.
-const STATUS_ICON: Record<ReviewStatus, { icon: LucideIcon; color: string }> = {
+const STATUS_ICON: Record<UiStatus, { icon: LucideIcon; color: string }> = {
   new: { icon: Circle, color: "text-ink-600" },
   in_review: { icon: Contrast, color: "text-warning-700" },
+  postponed: { icon: CircleDashed, color: "text-ink-400" },
   confirmed: { icon: CircleCheck, color: "text-ink-900" },
   dismissed: { icon: CircleSlash, color: "text-ink-400" },
 };
@@ -29,7 +31,7 @@ export function StatusGlyph({
   className,
   title,
 }: {
-  status: ReviewStatus;
+  status: UiStatus;
   className?: string;
   title?: string;
 }) {
@@ -43,9 +45,6 @@ export function StatusGlyph({
     />
   );
 }
-
-// Glif „Odłożony” zostaje w zestawie na czas, gdy kontrakt API dostanie ten status.
-export const PostponedGlyph = CircleDashed;
 
 // Znaki platform: Simple Icons (CC0), monochromatyczne, 14 px. Tylko do identyfikacji źródła.
 const BRAND_PATHS: Partial<Record<Platform, string>> = {

@@ -1,11 +1,13 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { RegistryChip } from "@/app/(app)/kolejka/[id]/case-window";
+import { toast } from "sonner";
 import { PlatformLabel, StatusGlyph } from "@/components/iw/icons";
+import { RegistryChip } from "@/components/iw/registry";
 import {
+  Avatar,
   Card,
   Chip,
   EmptyState,
@@ -16,19 +18,27 @@ import {
   Skeleton,
   Tip,
 } from "@/components/iw/ui";
-import { useIncident, useIncidents, useThresholds } from "@/lib/client/api";
+import {
+  dossierUrl,
+  useIncident,
+  useIncidents,
+  useSetStatus,
+  useThresholds,
+} from "@/lib/client/api";
+import type { UiListItem } from "@/lib/client/contract-ui";
 import {
   fmtDateTime,
   fmtDayMonth,
   hostOf,
   MODULE_SHORT,
   plural,
+  reviewText,
   STATUS_LABEL,
+  shortName,
 } from "@/lib/client/format";
 import { entityName, materialTitle } from "@/lib/client/queue";
-import type { IncidentListItem } from "@/lib/incidents/contract";
 
-function Timeline({ items }: { items: IncidentListItem[] }) {
+function Timeline({ items }: { items: UiListItem[] }) {
   const sorted = [...items].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const first = sorted[0];
   const last = sorted.at(-1);
@@ -65,11 +75,30 @@ function Timeline({ items }: { items: IncidentListItem[] }) {
   );
 }
 
-function MaterialCard({ item }: { item: IncidentListItem }) {
+function MaterialCard({ item }: { item: UiListItem }) {
   const thresholds = useThresholds();
+  const setStatus = useSetStatus();
   const threshold = thresholds.data?.[item.module];
   return (
-    <li>
+    <li className="group relative">
+      {item.status === "confirmed" ? (
+        <button
+          type="button"
+          disabled={setStatus.isPending}
+          onClick={() =>
+            setStatus.mutate(
+              { id: item.id, status: "postponed", note: "dowód niepełny" },
+              {
+                onSuccess: () => toast.success("Odłożono: dowód niepełny"),
+                onError: (error) => toast.error(error.message),
+              },
+            )
+          }
+          className="absolute top-3 right-3 z-10 h-8 rounded-md border border-ink-400 bg-surface-0 px-3 font-medium text-ink-900 text-xs opacity-0 transition-opacity duration-150 hover:bg-surface-hover focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          Odłóż: dowód niepełny
+        </button>
+      ) : null}
       <Link
         href={`/kolejka/${item.id}`}
         className="flex flex-col gap-1.5 rounded-lg border border-line-200 p-4 hover:bg-surface-hover"
@@ -86,8 +115,12 @@ function MaterialCard({ item }: { item: IncidentListItem }) {
           ) : null}
         </span>
         <span className="truncate text-[13px] text-ink-600">
-          {STATUS_LABEL[item.status]} · oflagowano {fmtDateTime(item.created_at)} ·{" "}
-          {hostOf(item.url)}
+          oflagowano {fmtDateTime(item.created_at)} · {hostOf(item.url)}
+        </span>
+        <span className="flex items-center gap-2 text-[13px] text-ink-700">
+          {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
+          {reviewText(item)}
+          {item.review_note ? `: ${item.review_note}` : ""}
         </span>
       </Link>
     </li>
@@ -132,6 +165,10 @@ export function Entity() {
   const confirmed = items.filter((item) => item.status === "confirmed");
   const open = items.filter((item) => item.status === "new" || item.status === "in_review");
   const dismissed = items.filter((item) => item.status === "dismissed");
+  const postponed = items.filter((item) => item.status === "postponed");
+  const decisions = items
+    .filter((item) => item.status !== "new" && item.reviewed_at)
+    .sort((a, b) => (b.reviewed_at ?? "").localeCompare(a.reviewed_at ?? ""));
   const publishers = new Map<string, number>();
   for (const item of items) {
     const key = item.advertiser ?? hostOf(item.url);
@@ -150,6 +187,18 @@ export function Entity() {
         <span>{name || "Podmiot"}</span>
       </nav>
       <PageHeader
+        actions={
+          confirmed.length ? (
+            <a
+              href={dossierUrl(name)}
+              download
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-700 px-3.5 font-medium text-sm text-white transition-colors duration-150 hover:bg-primary-800 active:bg-primary-900"
+            >
+              <Download className="size-4" strokeWidth={1.5} aria-hidden="true" />
+              Eksportuj teczkę ({confirmed.length})
+            </a>
+          ) : undefined
+        }
         title={
           <span className="flex flex-wrap items-center gap-3">
             {name || "Podmiot"}
@@ -160,7 +209,7 @@ export function Entity() {
         }
         description={
           list.data
-            ? `Teczka: ${confirmed.length} ${plural(confirmed.length, "potwierdzony materiał", "potwierdzone materiały", "potwierdzonych materiałów")} · ${open.length} ${plural(open.length, "otwarty", "otwarte", "otwartych")} · ${dismissed.length} ${plural(dismissed.length, "fałszywy alarm", "fałszywe alarmy", "fałszywych alarmów")}`
+            ? `Teczka: ${confirmed.length} ${plural(confirmed.length, "potwierdzony materiał", "potwierdzone materiały", "potwierdzonych materiałów")} · ${open.length} ${plural(open.length, "otwarty", "otwarte", "otwartych")} · ${postponed.length} ${plural(postponed.length, "odłożony", "odłożone", "odłożonych")} · ${dismissed.length} ${plural(dismissed.length, "fałszywy alarm", "fałszywe alarmy", "fałszywych alarmów")}`
             : undefined
         }
       />
@@ -179,6 +228,7 @@ export function Entity() {
               {[
                 { title: "Potwierdzone materiały", list: confirmed },
                 { title: "Otwarte", list: open },
+                { title: "Odłożone", list: postponed },
                 { title: "Fałszywe alarmy", list: dismissed },
               ]
                 .filter((section) => section.list.length)
@@ -209,6 +259,26 @@ export function Entity() {
                 </ul>
               </Card>
               {firstId ? <Registry id={firstId} /> : null}
+              {decisions.length ? (
+                <Card className="p-4">
+                  <SectionTitle>Historia decyzji</SectionTitle>
+                  <ul className="mt-2 flex flex-col gap-2 text-[13px] text-ink-700">
+                    {decisions.map((item) => (
+                      <li key={item.id} className="flex items-start gap-2">
+                        {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
+                        <span>
+                          <span className="tnum">
+                            {fmtDateTime(item.reviewed_at ?? item.created_at)}
+                          </span>
+                          {item.reviewed_by ? ` · ${shortName(item.reviewed_by)}` : ""} ·{" "}
+                          {STATUS_LABEL[item.status]}
+                          {item.review_note ? `: ${item.review_note}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              ) : null}
             </div>
           </div>
         </>

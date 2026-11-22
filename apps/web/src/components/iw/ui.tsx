@@ -3,9 +3,10 @@
 import { ChevronDown, X } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
-import { fmtScore } from "@/lib/client/format";
+import type { Reviewer, UiStatus } from "@/lib/client/contract-ui";
+import { fmtScore, initials, reviewText } from "@/lib/client/format";
 import { cn } from "@/lib/utils";
-import { Illustration, type IllustrationName } from "./icons";
+import { Illustration, type IllustrationName, StatusGlyph } from "./icons";
 
 // Komponenty z kontraktu UI („Komponenty i stany”). Stan czytelny bez koloru, przejścia 150 ms.
 
@@ -393,5 +394,33 @@ export function ErrorNote({ error }: { error: unknown }) {
     <p className="rounded-md border border-line-300 bg-surface-1 px-3 py-2 text-[13px] text-ink-700">
       Nie udało się pobrać danych: {error instanceof Error ? error.message : "nieznany błąd"}.
     </p>
+  );
+}
+
+// Awatar: 20 px, inicjały 9/600, tło line-200, zawsze obok imienia (R16).
+export function Avatar({ reviewer, size = 20 }: { reviewer: Reviewer; size?: number }) {
+  return (
+    <Tip label={reviewer.role ? `${reviewer.name} · ${reviewer.role}` : reviewer.name}>
+      <span
+        aria-hidden="true"
+        className="inline-flex shrink-0 items-center justify-center rounded-full bg-line-200 font-semibold text-[9px] text-ink-700"
+        style={{ width: size, height: size }}
+      >
+        {initials(reviewer.name)}
+      </span>
+    </Tip>
+  );
+}
+
+// Glif statusu z tooltipem: status, autor i czas (decyzja z 22.11, R6, R14, R16).
+export function StatusTip({
+  review,
+}: {
+  review: { status: UiStatus; reviewed_by?: Reviewer | null; reviewed_at?: string | null };
+}) {
+  return (
+    <Tip label={reviewText(review)}>
+      <StatusGlyph status={review.status} title={reviewText(review)} />
+    </Tip>
   );
 }

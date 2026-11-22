@@ -1,6 +1,6 @@
 "use client";
 
-import type { AnalysisModule, ReviewStatus } from "@app/db";
+import type { AnalysisModule } from "@app/db";
 import { ArrowRight, RefreshCw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +27,7 @@ import {
   useThresholds,
   useTrend,
 } from "@/lib/client/api";
+import type { UiStatus } from "@/lib/client/contract-ui";
 import {
   daysAgoIso,
   fmtScore,
@@ -151,14 +152,15 @@ function ModuleCard({
   );
 }
 
-const STATUS_VIEW: Record<ReviewStatus, string> = {
+const STATUS_VIEW: Record<UiStatus, string> = {
   new: "otwarte",
   in_review: "otwarte",
+  postponed: "odlozone",
   confirmed: "potwierdzone",
   dismissed: "falszywe",
 };
 
-function StatusLink({ status, from }: { status: ReviewStatus; from: string }) {
+function StatusLink({ status, from }: { status: UiStatus; from: string }) {
   const query = useIncidents({ status: [status], from, page_size: 1 });
   return (
     <Link
@@ -216,7 +218,7 @@ export function Overview() {
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <span className="text-[13px] text-ink-600">Ostatnie 7 dni:</span>
-        {(["new", "in_review", "confirmed", "dismissed"] as const).map((status) => (
+        {(["new", "in_review", "postponed", "confirmed", "dismissed"] as const).map((status) => (
           <StatusLink key={status} status={status} from={weekFrom} />
         ))}
       </div>

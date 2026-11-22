@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Illustration, StatusGlyph } from "@/components/iw/icons";
+import { Illustration } from "@/components/iw/icons";
 import {
   Button,
   Card,
@@ -14,6 +14,7 @@ import {
   PageHeader,
   SectionTitle,
   Skeleton,
+  StatusTip,
   Tabs,
   Tip,
 } from "@/components/iw/ui";
@@ -25,6 +26,7 @@ import {
   fmtSigned,
   MODULE_NUMBER,
   plural,
+  reviewText,
   STATUS_LABEL,
 } from "@/lib/client/format";
 import { materialTitle } from "@/lib/client/queue";
@@ -266,15 +268,16 @@ function DropList({
                 href={`/kolejka/${item.id}`}
                 className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-surface-hover"
               >
-                <Tip label={STATUS_LABEL[item.status]}>
-                  <StatusGlyph status={item.status} />
-                </Tip>
+                <StatusTip review={item} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium text-ink-900 text-sm">
                     {materialTitle(item)}
                   </span>
                   <span className="block text-[13px] text-ink-600">
-                    {STATUS_LABEL[item.status]} · {fmtDateTime(item.created_at)}
+                    {item.status === "new" || item.status === "in_review"
+                      ? `${STATUS_LABEL[item.status]}, bez decyzji · zostaje w Kolejce`
+                      : reviewText(item)}
+                    {" · "}oflagowano {fmtDateTime(item.created_at)}
                   </span>
                 </span>
                 <Chip>{impact}</Chip>

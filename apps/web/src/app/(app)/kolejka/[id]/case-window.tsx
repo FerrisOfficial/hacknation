@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReviewStatus } from "@app/db";
 import {
   ArrowRight,
   Braces,
@@ -21,8 +20,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PlatformLabel, StatusGlyph } from "@/components/iw/icons";
+import { RegistryChip } from "@/components/iw/registry";
 import { showDecisionToast } from "@/components/iw/toasts";
 import {
+  Avatar,
   Button,
   Card,
   Chip,
@@ -36,7 +37,15 @@ import {
 } from "@/components/iw/ui";
 import type { ModuleThreshold } from "@/lib/analysis/modules";
 import { withBasePath } from "@/lib/base-path";
-import { useIncident, useIncidents, useSetStatus, useThresholds } from "@/lib/client/api";
+import {
+  frameUrl,
+  useIncident,
+  useIncidents,
+  useSetStatus,
+  useThresholds,
+  videoUrl,
+} from "@/lib/client/api";
+import type { HistoryEntry, UiDetail, UiFlag, UiStatus } from "@/lib/client/contract-ui";
 import {
   fmtDateTime,
   fmtDayHeader,
@@ -46,7 +55,9 @@ import {
   labelText,
   MODULE_SHORT,
   plural,
+  reviewText,
   STATUS_LABEL,
+  shortName,
 } from "@/lib/client/format";
 import { useHotkeys } from "@/lib/client/hotkeys";
 import {
@@ -56,19 +67,23 @@ import {
   queueSearch,
   readQueueParams,
 } from "@/lib/client/queue";
-import type { Flag, IncidentDetail, IncidentEntity } from "@/lib/incidents/contract";
 import { cn } from "@/lib/utils";
 
 // Ostatnia decyzja w tej karcie przeglądarki. Poza komponentem, bo po decyzji Okno sprawy
 // przechodzi do następnego materiału, a Ctrl+Z i „Cofnij” w toaście mają nadal działać (R5).
-let lastDecision: { id: string; previous: ReviewStatus } | null = null;
+let lastDecision: { id: string; previous: UiStatus; note: string | null } | null = null;
 
-const DECISION_TEXT: Partial<Record<ReviewStatus, string>> = {
+type Decision = "confirmed" | "dismissed" | "postponed";
+
+const DECISION_TEXT: Record<Decision, string> = {
   confirmed: "Potwierdzono naruszenie",
   dismissed: "Oznaczono jako fałszywy alarm",
+  postponed: "Odłożono",
 };
 
-function detailTitle(detail: IncidentDetail): string {
+const POSTPONE_REASONS = ["dowód niepełny", "czekam na nowe materiały podmiotu", "do konsultacji"];
+
+function detailTitle(detail: UiDetail): string {
   return (
     detail.material.title ??
     detail.details.entity.advertiser ??
@@ -82,20 +97,25 @@ function fmtSeconds(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+function evidenceTime(flag: UiFlag): number | null {
+  return flag.evidence?.frame?.ts ?? flag.evidence?.timestamp_s ?? null;
+}
+
 // ─── Treść z podkreślonymi fragmentami (R3) ─────────────────────────────────────────────────
 
 type Segment = { text: string; rule?: string };
 
-function segments(text: string, flags: Flag[]): Segment[] {
-  const ranges = flags
-    .filter((flag) => flag.result === "violation" && flag.evidence)
-    .map((flag) => ({
-      start: flag.evidence?.start ?? 0,
-      end: flag.evidence?.end ?? 0,
-      rule: flag.rule_id,
-    }))
-    .filter((range) => range.end > range.start && range.end <= text.length)
-    .sort((a, b) => a.start - b.start);
+function segments(text: string, flags: UiFlag[]): Segment[] {
+  const ranges: { start: number; end: number; rule: string }[] = [];
+  for (const flag of flags) {
+    const evidence = flag.evidence;
+    // Dowód z klatki nie ma pozycji w tekście (docs/KONTRAKT.md §3): nie podświetlamy.
+    if (flag.result !== "violation" || !evidence || evidence.frame) continue;
+    if (evidence.start === null || evidence.end === null) continue;
+    if (evidence.end <= evidence.start || evidence.end > text.length) continue;
+    ranges.push({ start: evidence.start, end: evidence.end, rule: flag.rule_id });
+  }
+  ranges.sort((a, b) => a.start - b.start);
   const result: Segment[] = [];
   let cursor = 0;
   for (const range of ranges) {
@@ -115,7 +135,7 @@ function MaterialText({
   onActive,
 }: {
   text: string;
-  flags: Flag[];
+  flags: UiFlag[];
   active: string | null;
   onActive: (rule: string | null) => void;
 }) {
@@ -151,14 +171,186 @@ function MaterialText({
 
 type Layer = "wideo" | "html" | "dane";
 
-function CopyPanel({ detail }: { detail: IncidentDetail }) {
+// Klatka z ramką cytatu: `box` to ułamki 0–1 szerokości i wysokości klatki.
+function FrameShot({
+  id,
+  flag,
+  active,
+  onSeek,
+  onActive,
+}: {
+  id: string;
+  flag: UiFlag;
+  active: boolean;
+  onSeek: (seconds: number) => void;
+  onActive: (rule: string | null) => void;
+}) {
+  const frame = flag.evidence?.frame;
+  if (!frame) return null;
+  const [x0, y0, x1, y1] = frame.box;
+  const time = evidenceTime(flag);
+  return (
+    <button
+      type="button"
+      onClick={() => (time !== null ? onSeek(time) : undefined)}
+      onMouseEnter={() => onActive(flag.rule_id)}
+      onMouseLeave={() => onActive(null)}
+      className={cn(
+        "flex w-[220px] shrink-0 flex-col gap-1 rounded-md border p-1 text-left transition-colors duration-150",
+        active ? "border-risk-700 bg-risk-50" : "border-line-200 hover:bg-surface-hover",
+      )}
+    >
+      <span className="relative block overflow-hidden rounded bg-ink-900">
+        {/* biome-ignore lint/performance/noImgElement: klatka z API, rozmiar nieznany z góry */}
+        <img
+          src={frameUrl(id, frame.file)}
+          alt={`Klatka z ${fmtSeconds(time ?? 0)}`}
+          className="block w-full"
+        />
+        <span
+          aria-hidden="true"
+          className="absolute rounded-sm border-2 border-risk-700"
+          style={{
+            left: `${x0 * 100}%`,
+            top: `${y0 * 100}%`,
+            width: `${(x1 - x0) * 100}%`,
+            height: `${(y1 - y0) * 100}%`,
+          }}
+        />
+      </span>
+      <span className="px-1 text-ink-700 text-xs">
+        <span className="tnum font-medium text-ink-900">{fmtSeconds(time ?? 0)}</span> · reguła{" "}
+        {flag.rule_id}
+      </span>
+    </button>
+  );
+}
+
+function VideoPanel({
+  detail,
+  seek,
+  onSeek,
+  active,
+  onActive,
+}: {
+  detail: UiDetail;
+  seek: { t: number; n: number } | null;
+  onSeek: (seconds: number) => void;
+  active: string | null;
+  onActive: (rule: string | null) => void;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const violations = detail.details.flags.filter(
+    (flag) => flag.result === "violation" && evidenceTime(flag) !== null,
+  );
+  const first = violations.map(evidenceTime).find((value) => value !== null) ?? null;
+  const frames = violations.filter((flag) => flag.evidence?.frame);
+
+  useEffect(() => {
+    const video = ref.current;
+    if (video && seek) {
+      video.currentTime = seek.t;
+      void video.play().catch(() => undefined);
+    }
+  }, [seek]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {detail.material.has_video ? (
+        // biome-ignore lint/a11y/useMediaCaption: transkrypcja jest w karcie pod filmem
+        <video
+          ref={ref}
+          controls
+          preload="metadata"
+          src={videoUrl(detail.id)}
+          // Film startuje od sekundy oflagowanego fragmentu.
+          onLoadedMetadata={(event) => {
+            if (first !== null && !seek) event.currentTarget.currentTime = first;
+          }}
+          className="aspect-video w-full rounded-md bg-ink-900"
+        />
+      ) : (
+        <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-md bg-surface-1 px-6 py-8 text-center">
+          <span className="flex size-10 items-center justify-center rounded-full border border-line-300 bg-surface-0">
+            <Video className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
+          </span>
+          <p className="max-w-md text-[13px] text-ink-600">
+            Film nie jest jeszcze pobrany. Transkrypcja jest niżej, a oryginał otworzysz w YouTube.
+          </p>
+          <a
+            href={`${detail.material.url}${first !== null ? `&t=${Math.floor(first)}s` : ""}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 font-medium text-[13px] text-primary-700 hover:underline"
+          >
+            Otwórz w YouTube{first !== null ? ` od ${fmtSeconds(first)}` : ""}
+            <ExternalLink className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+          </a>
+        </div>
+      )}
+      {violations.length ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] text-ink-600">Oflagowane momenty:</span>
+          {violations.map((flag) => {
+            const time = evidenceTime(flag) ?? 0;
+            return (
+              <button
+                key={flag.rule_id}
+                type="button"
+                onClick={() => onSeek(time)}
+                onMouseEnter={() => onActive(flag.rule_id)}
+                onMouseLeave={() => onActive(null)}
+                className={cn(
+                  "tnum inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 font-medium text-xs transition-colors duration-150",
+                  active === flag.rule_id
+                    ? "border-risk-700 bg-risk-50 text-risk-700"
+                    : "border-ink-400 text-ink-700 hover:bg-surface-hover",
+                )}
+              >
+                {fmtSeconds(time)}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      {frames.length ? (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {frames.map((flag) => (
+            <FrameShot
+              key={flag.rule_id}
+              id={detail.id}
+              flag={flag}
+              active={active === flag.rule_id}
+              onSeek={onSeek}
+              onActive={onActive}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CopyPanel({
+  detail,
+  seek,
+  onSeek,
+  active,
+  onActive,
+}: {
+  detail: UiDetail;
+  seek: { t: number; n: number } | null;
+  onSeek: (seconds: number) => void;
+  active: string | null;
+  onActive: (rule: string | null) => void;
+}) {
   const isVideo = detail.material.platform === "youtube";
   const [layer, setLayer] = useState<Layer>(
     isVideo ? "wideo" : detail.material.has_snapshot ? "html" : "dane",
   );
-  const timestamps = detail.details.flags
-    .map((flag) => flag.evidence)
-    .filter((evidence) => evidence?.timestamp_s !== null && evidence?.timestamp_s !== undefined);
+  useEffect(() => {
+    if (seek && isVideo) setLayer("wideo");
+  }, [seek, isVideo]);
 
   const tabs: { value: Layer; label: string; icon: ReactNode; disabled?: string }[] = [];
   if (isVideo) {
@@ -192,43 +384,13 @@ function CopyPanel({ detail }: { detail: IncidentDetail }) {
       </div>
       <div className="p-3">
         {layer === "wideo" ? (
-          <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-md bg-surface-1 px-6 py-8 text-center">
-            <span className="flex size-10 items-center justify-center rounded-full border border-line-300 bg-surface-0">
-              <Video className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
-            </span>
-            <p className="max-w-md text-[13px] text-ink-600">
-              Film nie jest osadzany, bo system działa bez usług zewnętrznych. Transkrypcja jest
-              niżej, a fragmenty otwierają oryginał we właściwej sekundzie.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {timestamps.length ? (
-                timestamps.map((evidence) =>
-                  evidence ? (
-                    <a
-                      key={evidence.link}
-                      href={evidence.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 font-medium text-[13px] text-primary-700 hover:underline"
-                    >
-                      Otwórz od {fmtSeconds(evidence.timestamp_s ?? 0)}
-                      <ExternalLink className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-                    </a>
-                  ) : null,
-                )
-              ) : (
-                <a
-                  href={detail.material.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 font-medium text-[13px] text-primary-700 hover:underline"
-                >
-                  Otwórz oryginał
-                  <ExternalLink className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-                </a>
-              )}
-            </div>
-          </div>
+          <VideoPanel
+            detail={detail}
+            seek={seek}
+            onSeek={onSeek}
+            active={active}
+            onActive={onActive}
+          />
         ) : null}
         {layer === "html" && detail.material.has_snapshot ? (
           <iframe
@@ -267,11 +429,13 @@ function WhyFlagged({
   threshold,
   active,
   onActive,
+  onSeek,
 }: {
-  detail: IncidentDetail;
+  detail: UiDetail;
   threshold: ModuleThreshold;
   active: string | null;
   onActive: (rule: string | null) => void;
+  onSeek: (seconds: number) => void;
 }) {
   const [showOk, setShowOk] = useState(false);
   const high = detail.score >= threshold.alert;
@@ -328,60 +492,67 @@ function WhyFlagged({
         <p className="mb-3 text-[13px] text-ink-700">{detail.details.summary}</p>
       ) : null}
       <ol className="flex flex-col gap-2">
-        {violations.map((flag, index) => (
-          <li
-            key={flag.rule_id}
-            onMouseEnter={() => onActive(flag.rule_id)}
-            onMouseLeave={() => onActive(null)}
-            className={cn(
-              "rounded-md bg-surface-1 p-3 transition-colors duration-150",
-              active === flag.rule_id && "bg-risk-50",
-            )}
-          >
-            <p className="font-medium text-ink-900 text-sm">
-              {index + 1}.{" "}
-              {flag.evidence
-                ? `„${flag.evidence.quote}”`
-                : flag.rule_name || `Reguła ${flag.rule_id}`}
-            </p>
-            {flag.evidence && flag.rule_name ? (
-              <p className="mt-0.5 text-[13px] text-ink-600">{flag.rule_name}</p>
-            ) : null}
-            {flag.reason ? <p className="mt-1 text-[13px] text-ink-700">{flag.reason}</p> : null}
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Tip
-                label={flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}
-                className="max-w-full"
-              >
-                <OutlineChip className="h-auto min-h-6 py-1 text-left">
-                  <Scale
-                    className="size-3.5 shrink-0 text-ink-600"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                  {flag.legal_basis || "podstawa prawna do uzupełnienia"}
-                </OutlineChip>
-              </Tip>
-              <Tip label="Pewność modelu dla tej reguły">
-                <OutlineChip>
-                  <Gauge className="size-3.5 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
-                  <span className="tnum">{fmtScore(flag.confidence)}</span>
-                </OutlineChip>
-              </Tip>
-              {flag.evidence?.timestamp_s !== null && flag.evidence?.timestamp_s !== undefined ? (
-                <a
-                  href={flag.evidence.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex h-6 items-center gap-1 font-medium text-primary-700 text-xs hover:underline"
-                >
-                  {fmtSeconds(flag.evidence.timestamp_s)}
-                  <ExternalLink className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-                </a>
+        {violations.map((flag, index) => {
+          const time = evidenceTime(flag);
+          return (
+            <li
+              key={flag.rule_id}
+              onMouseEnter={() => onActive(flag.rule_id)}
+              onMouseLeave={() => onActive(null)}
+              className={cn(
+                "rounded-md bg-surface-1 p-3 transition-colors duration-150",
+                active === flag.rule_id && "bg-risk-50",
+              )}
+            >
+              <p className="font-medium text-ink-900 text-sm">
+                {index + 1}.{" "}
+                {flag.evidence
+                  ? `„${flag.evidence.quote}”`
+                  : flag.rule_name || `Reguła ${flag.rule_id}`}
+              </p>
+              {flag.evidence && flag.rule_name ? (
+                <p className="mt-0.5 text-[13px] text-ink-600">
+                  {flag.rule_name}
+                  {flag.evidence.frame ? " · tekst z klatki filmu" : ""}
+                </p>
               ) : null}
-            </div>
-          </li>
-        ))}
+              {flag.reason ? <p className="mt-1 text-[13px] text-ink-700">{flag.reason}</p> : null}
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Tip
+                  label={flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}
+                  className="max-w-full"
+                >
+                  <OutlineChip className="h-auto min-h-6 py-1 text-left">
+                    <Scale
+                      className="size-3.5 shrink-0 text-ink-600"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                    {flag.legal_basis || "podstawa prawna do uzupełnienia"}
+                  </OutlineChip>
+                </Tip>
+                <Tip label="Pewność modelu dla tej reguły">
+                  <OutlineChip>
+                    <Gauge className="size-3.5 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
+                    <span className="tnum">{fmtScore(flag.confidence)}</span>
+                  </OutlineChip>
+                </Tip>
+                {time !== null && detail.material.platform === "youtube" ? (
+                  <Tip label="Przewiń film do tego momentu">
+                    <button
+                      type="button"
+                      onClick={() => onSeek(time)}
+                      className="inline-flex h-6 items-center gap-1 rounded-full border border-line-300 px-2.5 font-medium text-primary-700 text-xs hover:bg-primary-50"
+                    >
+                      <Video className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                      <span className="tnum">{fmtSeconds(time)}</span>
+                    </button>
+                  </Tip>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
       </ol>
       {violations.length === 0 ? (
         <p className="text-[13px] text-ink-600">Model nie wskazał naruszonej reguły.</p>
@@ -417,31 +588,7 @@ function WhyFlagged({
   );
 }
 
-export function RegistryChip({ entity }: { entity: IncidentEntity }) {
-  if (entity.in_register === null && !entity.on_warning_list) return null;
-  return (
-    <span className="flex flex-wrap gap-2">
-      {entity.in_register !== null ? (
-        <Tip
-          label={
-            entity.in_register
-              ? `Firma jest w rejestrze podmiotów nadzorowanych przez KNF${entity.knf_id ? ` (nr ${entity.knf_id})` : ""}.`
-              : "Firmy nie ma w rejestrze KNF. Może nie mieć zezwolenia na usługi inwestycyjne w Polsce."
-          }
-        >
-          <OutlineChip>{entity.in_register ? "w rejestrze KNF" : "spoza rejestru KNF"}</OutlineChip>
-        </Tip>
-      ) : null}
-      {entity.on_warning_list ? (
-        <Tip label="Firma jest na liście ostrzeżeń publicznych KNF.">
-          <OutlineChip className="border-risk-700 text-risk-700">lista ostrzeżeń KNF</OutlineChip>
-        </Tip>
-      ) : null}
-    </span>
-  );
-}
-
-function EntityCard({ detail }: { detail: IncidentDetail }) {
+function EntityCard({ detail, related }: { detail: UiDetail; related: string | null }) {
   const entity = detail.details.entity;
   const name = entity.firm_name ?? entity.advertiser;
   if (!name) return null;
@@ -457,6 +604,7 @@ function EntityCard({ detail }: { detail: IncidentDetail }) {
         <RegistryChip entity={entity} />
       </div>
       {facts.length ? <p className="mt-2 text-[13px] text-ink-600">{facts.join(" · ")}</p> : null}
+      {related ? <p className="mt-1 text-[13px] text-ink-600">{related}</p> : null}
       {entity.firm_name ? (
         <Link
           href={`/podmiot?nazwa=${encodeURIComponent(entity.firm_name)}`}
@@ -470,35 +618,142 @@ function EntityCard({ detail }: { detail: IncidentDetail }) {
   );
 }
 
-// Historia: data jako nagłówek grupy, godzina w stałej kolumnie (decyzja z 22.11). Kontrakt API
-// nie ma jeszcze autora i czasu decyzji (R16), więc pokazujemy tylko wpis systemu i obecny status.
-function HistoryCard({
-  detail,
-  threshold,
-}: {
-  detail: IncidentDetail;
-  threshold: ModuleThreshold;
-}) {
+// Historia: data jako nagłówek grupy, godzina w stałej kolumnie cyframi tabelarycznymi
+// (decyzja z 22.11). Pełna historia przychodzi z API (`history`); bez niej składamy ją
+// z oflagowania i ostatniej decyzji.
+function historyOf(detail: UiDetail, threshold: ModuleThreshold): HistoryEntry[] {
+  if (detail.history?.length) {
+    return [...detail.history].sort((a, b) => b.at.localeCompare(a.at));
+  }
+  const entries: HistoryEntry[] = [];
+  if (detail.status !== "new") {
+    entries.push({
+      at: detail.reviewed_at ?? detail.created_at,
+      actor: detail.reviewed_by ?? null,
+      action: detail.review_note
+        ? `${STATUS_LABEL[detail.status]}: ${detail.review_note}`
+        : STATUS_LABEL[detail.status],
+      status: detail.status,
+    });
+  }
+  entries.push({
+    at: detail.created_at,
+    actor: null,
+    action: `oflagowano ${fmtScore(detail.score)} przy progu ${fmtScore(threshold.flag)}`,
+  });
+  return entries;
+}
+
+function HistoryCard({ detail, threshold }: { detail: UiDetail; threshold: ModuleThreshold }) {
+  const entries = historyOf(detail, threshold);
+  let lastDay = "";
   return (
     <Card className="p-4">
       <p className="flex items-center gap-2 text-[13px] text-ink-700">
         <History className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
         Historia
       </p>
-      <p className="mt-2 text-ink-600 text-xs">{fmtDayHeader(detail.created_at)}</p>
-      <p className="mt-1 flex items-center gap-3 text-[13px] text-ink-700">
-        <span className="tnum w-10 font-medium text-ink-900">{fmtTime(detail.created_at)}</span>
-        <RadioTower className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
-        system · oflagowano {fmtScore(detail.score)} (próg flagi {fmtScore(threshold.flag)})
-      </p>
-      {detail.status !== "new" ? (
-        <p className="mt-2 flex items-center gap-3 text-[13px] text-ink-700">
-          <span className="w-10" />
-          <StatusGlyph status={detail.status} />
-          obecny status: {STATUS_LABEL[detail.status]}
-        </p>
-      ) : null}
+      <ul className="mt-1 flex flex-col">
+        {entries.map((entry) => {
+          const day = fmtDayHeader(entry.at);
+          const header = day !== lastDay ? day : null;
+          lastDay = day;
+          return (
+            <li key={`${entry.at}-${entry.action}`}>
+              {header ? <p className="mt-2 text-ink-600 text-xs">{header}</p> : null}
+              <p className="mt-1 flex items-center gap-3 text-[13px] text-ink-700">
+                <span className="tnum w-10 shrink-0 font-medium text-ink-900">
+                  {fmtTime(entry.at)}
+                </span>
+                {entry.actor ? (
+                  <Avatar reviewer={entry.actor} />
+                ) : (
+                  <RadioTower
+                    className="size-4 shrink-0 text-ink-600"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                )}
+                <span>
+                  {entry.actor ? shortName(entry.actor) : "system"} · {entry.action}
+                </span>
+              </p>
+            </li>
+          );
+        })}
+      </ul>
     </Card>
+  );
+}
+
+// ─── Pasek decyzji ──────────────────────────────────────────────────────────────────────────
+
+function DecisionBar({
+  status,
+  pending,
+  postponeOpen,
+  setPostponeOpen,
+  onDecide,
+}: {
+  status: UiStatus;
+  pending: boolean;
+  postponeOpen: boolean;
+  setPostponeOpen: (open: boolean) => void;
+  onDecide: (decision: Decision, note?: string) => void;
+}) {
+  return (
+    <div className="relative flex flex-wrap items-center gap-3 rounded-lg bg-surface-1 px-3 py-2.5">
+      <Button
+        variant="primary"
+        shortcut="1"
+        aria-pressed={status === "confirmed"}
+        disabled={pending}
+        onClick={() => onDecide("confirmed")}
+      >
+        Potwierdź naruszenie
+      </Button>
+      <Button
+        shortcut="2"
+        aria-pressed={status === "dismissed"}
+        disabled={pending}
+        onClick={() => onDecide("dismissed")}
+      >
+        Fałszywy alarm
+      </Button>
+      <span className="relative">
+        <Button
+          shortcut="3"
+          aria-pressed={status === "postponed"}
+          aria-expanded={postponeOpen}
+          disabled={pending}
+          onClick={() => setPostponeOpen(!postponeOpen)}
+        >
+          Odłóż
+        </Button>
+        {postponeOpen ? (
+          <span
+            role="menu"
+            className="absolute top-full left-0 z-40 mt-1 flex w-72 flex-col rounded-lg border border-line-200 bg-surface-0 p-1 shadow-lg"
+          >
+            {POSTPONE_REASONS.map((reason, index) => (
+              <button
+                key={reason}
+                type="button"
+                role="menuitem"
+                onClick={() => onDecide("postponed", reason)}
+                className="flex h-9 items-center justify-between rounded-md px-3 text-left text-ink-900 text-sm hover:bg-surface-hover"
+              >
+                {reason}
+                <span className="text-ink-600 text-xs">Shift+{index + 1}</span>
+              </button>
+            ))}
+          </span>
+        ) : null}
+      </span>
+      <p className="ml-auto text-[13px] text-ink-600">
+        Decyzja dotyczy tylko tego materiału. Potem toast z Cofnij i następny.
+      </p>
+    </div>
   );
 }
 
@@ -514,6 +769,8 @@ export function CaseWindow({ id }: { id: string }) {
   const list = useIncidents(queueFilters(params));
   const setStatus = useSetStatus();
   const [active, setActive] = useState<string | null>(null);
+  const [seek, setSeek] = useState<{ t: number; n: number } | null>(null);
+  const [postponeOpen, setPostponeOpen] = useState(false);
   const opened = useRef<string | null>(null);
 
   const flat = buildQueue(list.data?.items ?? [], params, thresholds.data).flatMap(
@@ -531,6 +788,10 @@ export function CaseWindow({ id }: { id: string }) {
     }
   }, [detail.data?.status, id, setStatus]);
 
+  function onSeek(seconds: number) {
+    setSeek((current) => ({ t: seconds, n: (current?.n ?? 0) + 1 }));
+  }
+
   function go(target: { id: string } | undefined) {
     if (target) router.push(`/kolejka/${target.id}${suffix}`);
   }
@@ -540,7 +801,11 @@ export function CaseWindow({ id }: { id: string }) {
     if (!decision) return;
     lastDecision = null;
     setStatus
-      .mutateAsync({ id: decision.id, status: decision.previous })
+      .mutateAsync({
+        id: decision.id,
+        status: decision.previous,
+        note: decision.note ?? undefined,
+      })
       .then(() => {
         toast.success("Cofnięto decyzję");
         router.push(`/kolejka/${decision.id}${suffix}`);
@@ -548,18 +813,23 @@ export function CaseWindow({ id }: { id: string }) {
       .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Błąd"));
   }
 
-  function decide(status: "confirmed" | "dismissed") {
+  function decide(status: Decision, note?: string) {
     const current = detail.data;
     if (!current || setStatus.isPending) return;
+    setPostponeOpen(false);
     const target = next ?? previous;
     setStatus
-      .mutateAsync({ id, status })
+      .mutateAsync({ id, status, note })
       .then(() => {
         lastDecision = {
           id,
           previous: current.status === "new" ? "in_review" : current.status,
+          note: current.review_note ?? null,
         };
-        showDecisionToast(`${DECISION_TEXT[status]}: ${detailTitle(current)}`, undo);
+        showDecisionToast(
+          `${DECISION_TEXT[status]}${note ? ` (${note})` : ""}: ${detailTitle(current)}`,
+          undo,
+        );
         if (target && target.id !== id) go(target);
         else router.push(`/kolejka${suffix}`);
       })
@@ -569,9 +839,13 @@ export function CaseWindow({ id }: { id: string }) {
   useHotkeys({
     "1": () => decide("confirmed"),
     "2": () => decide("dismissed"),
+    "3": () => setPostponeOpen(!postponeOpen),
+    "!": () => decide("postponed", POSTPONE_REASONS[0]),
+    "@": () => decide("postponed", POSTPONE_REASONS[1]),
+    "#": () => decide("postponed", POSTPONE_REASONS[2]),
     j: () => go(next),
     k: () => go(previous),
-    Escape: () => router.push(`/kolejka${suffix}`),
+    Escape: () => (postponeOpen ? setPostponeOpen(false) : router.push(`/kolejka${suffix}`)),
     "ctrl+z": undo,
   });
 
@@ -595,6 +869,14 @@ export function CaseWindow({ id }: { id: string }) {
   });
   const inGroup = flat.filter((item) => entityName(item) === groupName);
   const groupIndex = inGroup.findIndex((item) => item.id === id);
+  const sameAuthor = data.details.entity.advertiser
+    ? (list.data?.items ?? []).filter((item) => item.advertiser === data.details.entity.advertiser)
+    : [];
+  const related =
+    sameAuthor.length > 1
+      ? `${data.details.entity.advertiser}: ${sameAuthor.length} ${plural(sameAuthor.length, "otwarty materiał", "otwarte materiały", "otwartych materiałów")}`
+      : null;
+  const hash = data.material.content_hash;
 
   return (
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
@@ -648,7 +930,7 @@ export function CaseWindow({ id }: { id: string }) {
           <PlatformLabel platform={data.material.platform} className="text-[13px]" />
           <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-700">
             <StatusGlyph status={data.status} />
-            {STATUS_LABEL[data.status]}
+            {reviewText(data)}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-ink-600">
@@ -691,43 +973,39 @@ export function CaseWindow({ id }: { id: string }) {
           {data.material.published_at ? (
             <span>opublikowano {fmtDateTime(data.material.published_at)}</span>
           ) : null}
-          <span>pobrano {fmtDateTime(data.material.scraped_at)}</span>
-          <span>oflagowano {fmtDateTime(data.created_at)}</span>
-          {data.material.has_snapshot ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Fingerprint className="size-4" strokeWidth={1.5} aria-hidden="true" />
-              kopia {fmtDateTime(data.material.scraped_at)}
-            </span>
-          ) : null}
+          <span>wykryto {fmtDateTime(data.created_at)}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <Fingerprint className="size-4" strokeWidth={1.5} aria-hidden="true" />
+            kopia {fmtDateTime(data.material.scraped_at)}
+            {hash ? (
+              <Tip label={`SHA-256 ${hash}`}>
+                <span className="font-mono text-xs">
+                  · SHA-256 {hash.slice(0, 4)}…{hash.slice(-4)}
+                </span>
+              </Tip>
+            ) : null}
+          </span>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-1 px-3 py-2.5">
-        <Button
-          variant="primary"
-          shortcut="1"
-          aria-pressed={data.status === "confirmed"}
-          disabled={setStatus.isPending}
-          onClick={() => decide("confirmed")}
-        >
-          Potwierdź naruszenie
-        </Button>
-        <Button
-          shortcut="2"
-          aria-pressed={data.status === "dismissed"}
-          disabled={setStatus.isPending}
-          onClick={() => decide("dismissed")}
-        >
-          Fałszywy alarm
-        </Button>
-        <p className="ml-auto text-[13px] text-ink-600">
-          Decyzja dotyczy tylko tego materiału. Potem toast z Cofnij i następny.
-        </p>
-      </div>
+      <DecisionBar
+        status={data.status}
+        pending={setStatus.isPending}
+        postponeOpen={postponeOpen}
+        setPostponeOpen={setPostponeOpen}
+        onDecide={decide}
+      />
 
       <div className="grid grid-cols-[minmax(0,1fr)_400px] items-start gap-4">
         <div className="flex min-w-0 flex-col gap-4">
-          <CopyPanel key={data.id} detail={data} />
+          <CopyPanel
+            key={data.id}
+            detail={data}
+            seek={seek}
+            onSeek={onSeek}
+            active={active}
+            onActive={setActive}
+          />
           <Card className="p-4">
             <p className="mb-2 font-medium text-ink-600 text-xs">
               {data.material.platform === "youtube" ? "Opis i transkrypcja" : "Treść materiału"} (z
@@ -742,8 +1020,14 @@ export function CaseWindow({ id }: { id: string }) {
           </Card>
         </div>
         <div className="flex flex-col gap-4">
-          <WhyFlagged detail={data} threshold={threshold} active={active} onActive={setActive} />
-          <EntityCard detail={data} />
+          <WhyFlagged
+            detail={data}
+            threshold={threshold}
+            active={active}
+            onActive={setActive}
+            onSeek={onSeek}
+          />
+          <EntityCard detail={data} related={related} />
           <HistoryCard detail={data} threshold={threshold} />
         </div>
       </div>

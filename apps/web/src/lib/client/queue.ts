@@ -1,18 +1,19 @@
-import type { AnalysisModule, Platform, ReviewStatus } from "@app/db";
+import type { AnalysisModule, Platform } from "@app/db";
 import { PLATFORMS, type ThresholdSettings } from "@/lib/analysis/modules";
-import type { IncidentListItem } from "@/lib/incidents/contract";
 import type { IncidentFilters } from "./api";
+import type { UiListItem, UiStatus } from "./contract-ui";
 import { daysAgoIso, hostOf, MODULE_BY_NUMBER } from "./format";
 
 // Stan Kolejki w adresie (?widok=&data=&platforma=&ryzyko=&modul=). Okno sprawy dostaje te same
 // parametry, więc J/K przechodzi po tej samej liście co Kolejka.
 
-export type QueueView = "otwarte" | "potwierdzone" | "falszywe";
+export type QueueView = "otwarte" | "odlozone" | "potwierdzone" | "falszywe";
 export type QueueDate = "7" | "30" | "wszystko";
 export type QueueRisk = "wszystkie" | "wysokie";
 
-export const VIEW_STATUSES: Record<QueueView, ReviewStatus[]> = {
+export const VIEW_STATUSES: Record<QueueView, UiStatus[]> = {
   otwarte: ["new", "in_review"],
+  odlozone: ["postponed"],
   potwierdzone: ["confirmed"],
   falszywe: ["dismissed"],
 };
@@ -34,7 +35,7 @@ export function readQueueParams(params: Readable): QueueParams {
   const risk = params.get("ryzyko");
   const module = MODULE_BY_NUMBER[params.get("modul") ?? ""];
   return {
-    view: view === "potwierdzone" || view === "falszywe" ? view : "otwarte",
+    view: view === "potwierdzone" || view === "falszywe" || view === "odlozone" ? view : "otwarte",
     date: date === "7" || date === "30" ? date : "wszystko",
     platform: PLATFORMS.find((value) => value === platform) ?? "wszystkie",
     risk: risk === "wysokie" ? "wysokie" : "wszystkie",
@@ -56,25 +57,25 @@ export type QueueGroup = {
   key: string;
   name: string;
   hasFirm: boolean;
-  items: IncidentListItem[];
+  inRegister: boolean | null;
+  items: UiListItem[];
   maxScore: number;
   publishers: number;
 };
 
-export function entityName(
-  item: Pick<IncidentListItem, "firm_name" | "advertiser">,
-): string | null {
+export function entityName(item: Pick<UiListItem, "firm_name" | "advertiser">): string | null {
   return item.firm_name ?? item.advertiser ?? null;
 }
 
-export function materialTitle(item: Pick<IncidentListItem, "advertiser" | "url" | "summary">) {
+export function materialTitle(item: Pick<UiListItem, "advertiser" | "url" | "summary" | "title">) {
+  if (item.title) return item.advertiser ? `${item.advertiser}: „${item.title}”` : item.title;
   const who = item.advertiser ?? hostOf(item.url);
   return item.summary ? `${who}: „${item.summary}”` : who;
 }
 
 // Pogrupowane po podmiocie, najwyższe ryzyko na górze (R1). Ryzyko „wysokie” = score ≥ próg alertu.
 export function buildQueue(
-  items: IncidentListItem[],
+  items: UiListItem[],
   params: QueueParams,
   thresholds: ThresholdSettings | undefined,
 ): QueueGroup[] {
@@ -90,6 +91,7 @@ export function buildQueue(
       key,
       name: name ?? "Bez rozpoznanego podmiotu",
       hasFirm: Boolean(item.firm_name),
+      inRegister: item.in_register ?? null,
       items: [],
       maxScore: 0,
       publishers: 0,

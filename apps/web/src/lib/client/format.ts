@@ -1,4 +1,5 @@
-import type { AnalysisModule, Platform, ReviewStatus } from "@app/db";
+import type { AnalysisModule, Platform } from "@app/db";
+import type { Reviewer, UiStatus } from "./contract-ui";
 
 // Teksty i formaty wspólne dla ekranów. Liczby po polsku: przecinek dziesiętny („0,84”).
 
@@ -37,9 +38,10 @@ export const MODULE_BY_NUMBER: Record<string, AnalysisModule> = {
   "3": "unauthorized_advisory",
 };
 
-export const STATUS_LABEL: Record<ReviewStatus, string> = {
+export const STATUS_LABEL: Record<UiStatus, string> = {
   new: "Nowy",
   in_review: "W trakcie",
+  postponed: "Odłożony",
   confirmed: "Potwierdzony",
   dismissed: "Fałszywy alarm",
 };
@@ -54,6 +56,9 @@ export const PLATFORM_LABEL: Record<Platform, string> = {
   linkedin: "LinkedIn",
   telegram: "Telegram",
 };
+
+// Platformy zbierane w tej wersji (YouTube i strony WWW). Pozostałe zostają w enumie bazy.
+export const ACTIVE_PLATFORMS = ["youtube", "web"] as const satisfies readonly Platform[];
 
 // Etykiety z wyjścia modelu i z modułu 1 (docs/KONTRAKT.md §2).
 const LABELS: Record<string, string> = {
@@ -151,4 +156,34 @@ export function plural(n: number, one: string, few: string, many: string): strin
   const lastTwo = n % 100;
   if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return few;
   return many;
+}
+
+export function initials(name: string): string {
+  const parts = name
+    .replace(/[^\p{L}\s]/gu, " ")
+    .trim()
+    .split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+
+// „Marta K.” z „Marta Kowalska”; krótsze imiona zostają bez zmian.
+export function shortName(reviewer: Reviewer): string {
+  const [first, last] = reviewer.name.trim().split(/\s+/);
+  return last ? `${first} ${last[0]}.` : reviewer.name;
+}
+
+// Tekst decyzji do tooltipa i metadanych: „W trakcie, Marta K. od 09:02”.
+export function reviewText(review: {
+  status: UiStatus;
+  reviewed_by?: Reviewer | null;
+  reviewed_at?: string | null;
+}): string {
+  const label = STATUS_LABEL[review.status];
+  if (!review.reviewed_by && !review.reviewed_at) return label;
+  const who = review.reviewed_by ? shortName(review.reviewed_by) : null;
+  const when = review.reviewed_at ? fmtDateTime(review.reviewed_at) : null;
+  if (review.status === "in_review") {
+    return [label, [who, when ? `od ${when}` : null].filter(Boolean).join(" ")].join(", ");
+  }
+  return [label, [who, when].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
 }
