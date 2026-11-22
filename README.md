@@ -4,7 +4,16 @@ System monitoringu internetu dla UKNF (HackNation 2026, zadanie **#InvestWatch �
 
 ## Uruchomienie
 
-Wymagany jest tylko Docker z Compose v2. Dashboard: **http://localhost:3000/hacknation**
+Wymagany jest tylko Docker z Compose v2 (np. Docker Desktop, uruchomiony).
+
+```bash
+git clone https://github.com/FerrisOfficial/hacknation.git
+cd hacknation
+cp .env.example .env              # Windows PowerShell: copy .env.example .env
+docker compose up --build web     # tryb szybki; pierwszy start buduje obrazy, kilkanaście minut
+```
+
+Po starcie otwórz **http://localhost:3000/hacknation**. Zatrzymanie: `Ctrl+C`, a potem `docker compose down` (dane zostają) albo `docker compose down -v` (czyści bazę).
 
 | | **Tryb szybki** (zalecany do oceny) | **Tryb pełny** |
 |---|---|---|
