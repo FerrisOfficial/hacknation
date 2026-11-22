@@ -1,4 +1,4 @@
-import type { ReviewStatus } from "@app/db";
+import type { AnalysisModule, ReviewStatus } from "@app/db";
 import type {
   Evidence,
   Flag,
@@ -32,7 +32,18 @@ export type UiListItem = Omit<IncidentListItem, "status"> &
     // Tytuł materiału (materials.title) i rejestr KNF w liście: nagłówek grupy i tytuł wiersza.
     title?: string | null;
     in_register?: boolean | null;
+    // Inne moduły, w których ten sam materiał ma ocenę (chip „+ reklama” w wierszu).
+    related_modules?: AnalysisModule[];
   };
+
+// Ten sam materiał oceniony w innym module (R19). Pole przychodzi z API; bez niego UI nic nie pokazuje.
+export type RelatedAssessment = {
+  id: string;
+  module: AnalysisModule;
+  score: number;
+  status: UiStatus;
+  summary: string;
+};
 
 export type UiList = { items: UiListItem[]; total: number };
 
@@ -65,6 +76,7 @@ export type UiDetail = Omit<IncidentDetail, "status" | "details" | "material"> &
     };
     details: Omit<IncidentDetails, "flags"> & { flags: UiFlag[] };
     history?: HistoryEntry[];
+    related?: RelatedAssessment[];
   };
 
 // GET /api/me: kto pracuje w tej przeglądarce (awatar w nawigacji, autor decyzji).

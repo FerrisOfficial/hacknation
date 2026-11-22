@@ -45,6 +45,7 @@ import {
   ACTIVE_PLATFORMS,
   fmtRelative,
   MODULE_NAME,
+  MODULE_SHORT,
   PLATFORM_LABEL,
   plural,
   reviewText,
@@ -168,6 +169,16 @@ function Row({
         <span className="flex w-5 justify-center">
           {item.reviewed_by ? <Avatar reviewer={item.reviewed_by} /> : null}
         </span>
+        {item.related_modules?.map((other) => (
+          <Tip
+            key={other}
+            label={`Ten sam materiał ma też ocenę: ${MODULE_NAME[other].toLowerCase()}`}
+          >
+            <span className="inline-flex h-6 items-center rounded-full border border-line-300 px-2 font-medium text-ink-700 text-xs">
+              + {MODULE_SHORT[other].toLowerCase()}
+            </span>
+          </Tip>
+        ))}
         <KindIcon module={item.module} />
         <PlatformLabel platform={item.platform} className="w-[104px] text-[13px]" />
         <ScoreCell
