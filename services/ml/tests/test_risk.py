@@ -211,3 +211,21 @@ def test_calibration_spreads_scores_but_keeps_order_and_midpoint() -> None:
     assert calibrate(0.01) > 0.01
     assert calibrate(0.9999) > calibrate(0.99) > calibrate(0.7) > calibrate(0.3)
     assert calibrate(0.99) == pytest.approx(1 / (1 + (0.01 / 0.99) ** 0.5))
+
+
+def test_gain_claim_with_distant_object_and_return_rates() -> None:
+    text = "Inwestuj globalnie i zyskaj możliwość osiągnięcia ponadprzeciętnych zysków.\nSprawdź"
+    assert results(text)["3"] == "violation"
+    returns = "Stopa zwrotu za 1 rok na dzień 2026-11-19\nFundusz Akcji 30,93%"
+    assert results(returns)["3"] == "violation"
+    assert results("Zyskaj pełną kontrolę nad inwestycjami.")["3"] == "n/a"
+
+
+def test_rule_10_ignores_warning_when_detecting_page_language() -> None:
+    warning = (
+        "CFDs are complex instruments and come with a high risk of losing money rapidly due to "
+        "leverage. 74% of retail investor accounts lose money when trading CFDs with this provider. "
+        "You should consider whether you can afford to take the high risk of losing your money."
+    )
+    text = f"{warning}\nHandluj na rynkach globalnych.\nOtwórz konto w kilka minut."
+    assert results(text)["10"] == "violation"

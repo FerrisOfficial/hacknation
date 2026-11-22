@@ -67,10 +67,15 @@ _FEATURES: dict[str, list[tuple[re.Pattern[str], float]]] = {
     "gain_claim": [
         (_p(r"gwarant\w*\s+(?:zysk|zwrot|dochód|oprocentowani)\w*"), 0.95),
         (_p(r"\d+(?:[.,]\d+)?\s?%[^.\n]{0,40}(?:zysk|zwrot|rocznie|w skali roku|p\.\s?a\.|miesięcznie)"), 0.9),
-        (_p(r"(?:zysk|zwrot|zarobi|zarabia|dochód|stopa zwrotu)\w*[^.\n]{0,30}\d+(?:[.,]\d+)?\s?%"), 0.9),
-        (_p(r"\b(?:zarabiaj|zarób|zarobisz|zarobić|pomnóż|podwój|zyskaj|zyskasz)\b"), 0.8),
+        (_p(r"(?:zysk|zwrot|zarobi|zarabia|dochód|stopa zwrotu)\w*[^.\n]{0,50}\d+(?:[.,]\d+)?\s?%"), 0.9),
+        (_p(r"\b(?:zarabiaj|zarób|zarobisz|zarobić|pomnóż|podwój)\b"), 0.8),
+        # „Zyskaj dostęp / kontrolę / pewność siebie” to nie obietnica zysku — tylko z kwotą lub zyskiem.
+        (_p(r"\bzyska(?:j|sz|cie)\b[^.\n]{0,80}(?:\d|\bzł\b|PLN|odset|zysk|dochod|zwrot|premi|bonus)"), 0.8),
+        # Prezentacja stóp zwrotu („Stopa zwrotu za 1 rok: 30,93%”) to też informacja o zysku.
+        (_p(r"\bstop\w+\s+zwrotu\s+za\b"), 0.8),
         (_p(r"\bbez ryzyka\b|\bwoln\w+ od ryzyka\b|\bpewn\w+ zysk\w*"), 0.9),
-        (_p(r"\b(?:zysk\w*|stop\w+ zwrotu|rentowność|dochod\w*|oprocentowani\w*)\b"), 0.35),
+        # Samo słowo („Zyski nie są gwarantowane”, „ESG w służbie zysków”) jest poniżej progu „dotyczy”.
+        (_p(r"\b(?:zysk\w*|stop\w+ zwrotu|rentowność|dochod\w*|oprocentowani\w*)\b"), 0.25),
     ],
     "risk_warning": [
         (_p(r"\d+(?:[.,]\d+)?\s?%\s+rachunków\s+inwestorów\s+detalicznych\s+traci\s+pieniądze"), 0.99),
@@ -97,6 +102,8 @@ _FEATURES: dict[str, list[tuple[re.Pattern[str], float]]] = {
         (_p(r"[+-]?\d+(?:[.,]\d+)?\s?%[^.\n]{0,50}(?:w|za)\s+(?:roku\s+)?(?:19|20)\d{2}"), 0.85),
         (_p(r"(?:w\s+ciągu|przez|w)\s+ostatni\w+\s+\d+\s+(?:lat|latach|miesięcy|miesiącach)"), 0.7),
         (_p(r"\bod\s+początku\s+roku\b|\bYTD\b|\bpast\s+performance\b"), 0.7),
+        (_p(r"\bstop\w+\s+zwrotu\s+za\s+(?:\d+|ostatni\w*|jeden)\s*(?:\w+\s+)?(?:rok|lata|lat|miesi\w+|m-c)"), 0.85),
+        (_p(r"\bza\s+ostatni\w*\s+(?:\d+\s+)?(?:rok|lata|lat|miesi\w+)"), 0.7),
     ],
     "hist_period_source": [
         (_p(r"\bźródło\s*:|\bwedług\s+danych|\bna\s+podstawie\s+danych|\bdane\s+za\s+okres"), 0.85),
@@ -214,8 +221,30 @@ def split_paragraphs(text: str) -> list[str]:
     return [line.strip() for line in text.split("\n") if line.strip()]
 
 
+# Krótka linia bez kwoty ani procentu to zwykle nagłówek, przycisk albo zapowiedź artykułu
+# („Ulgi podatkowe”, „Prognozy inwestycyjne 2026 POBIERZ”). Takie linie nie mogą same wskazywać
+# reguły — twierdzenie, jeśli jest, stoi w akapicie pod nimi.
+_HEADING_MAX_WORDS = 6
+# Kwota, procent, wykrzyknik albo czasownik w trybie rozkazującym = twierdzenie, nie nagłówek
+# („Inwestuj bez podatku Belki w IKE.” jest krótkie, ale to obietnica).
+_HEADING_CLAIM = re.compile(
+    r"\d+(?:[.,]\d+)?\s?%|\bzł\b|PLN|!|\b(?:inwestuj|zarabiaj|zarób|zyskaj|oszczędzaj|obniż|odlicz|płać|"
+    r"pomnóż|otwórz|odbierz)\b",
+    _F,
+)
+_HEADING_SENSITIVE = frozenset(
+    {"gain_claim", "forecast", "tax_reference", "comparison", "historical_results"}
+)
+_HEADING_CAP = 0.25  # poniżej APPLICABLE_MIN
+
+
+def _is_heading(text: str) -> bool:
+    return len(text.split()) <= _HEADING_MAX_WORDS and not _HEADING_CLAIM.search(text)
+
+
 def _score_paragraph(index: int, text: str) -> Paragraph:
     paragraph = Paragraph(text=text)
+    heading = _is_heading(text)
     for name, patterns in _FEATURES.items():
         best: Hit | None = None
         exclude = _EXCLUDE.get(name)
@@ -229,6 +258,8 @@ def _score_paragraph(index: int, text: str) -> Paragraph:
                 if exclude is None or not exclude.search(window):
                     best = Hit(weight, index, match.start(), match.end())
                     break
+        if heading and best is not None and name in _HEADING_SENSITIVE:
+            best = Hit(min(best.score, _HEADING_CAP), best.paragraph, best.start, best.end)
         paragraph.features[name] = best
     return paragraph
 
@@ -362,7 +393,10 @@ def _evaluate(
             )  # fmt: skip
         case "10":
             warning = best("risk_warning")
-            main_lang = _language(text)
+            # Język przekazu bez akapitów z ostrzeżeniem — długie ostrzeżenie po angielsku
+            # przeważałoby nad krótszym polskim tekstem strony.
+            message = "\n".join(p.text for p in paragraphs if p.features["risk_warning"] is None)
+            main_lang = _language(message or text)
             warn_lang = _language(paragraphs[warning.paragraph].text) if warning else None
             mismatch = main_lang is not None and warn_lang is not None and main_lang != warn_lang
             return _decide(

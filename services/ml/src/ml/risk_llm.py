@@ -255,6 +255,12 @@ def analyze_risk_disclosure_llm(
 
 # --- Wariant łączony: regex decyduje, czy reguła dotyczy; Bielik ocenia naruszenie -------------
 
+# Reguły rozstrzygane bez LLM, wynikiem regexa. W ewaluacji na 47 stronach LLM dawał w nich same
+# fałszywe alarmy (0 trafień, 15 fałszywych): 10 — mylił „cała strona po angielsku” z „ostrzeżenie
+# w innym języku”, 17 i 18 — „podlegamy nadzorowi KNF” z sugerowaniem aprobaty i bezpieczeństwa
+# (także z przykładami w prompcie), 9 — oceniał jako niezrozumiałe teksty, które nie są ostrzeżeniem.
+REGEX_ONLY_RULES = frozenset({"9", "10", "17", "18"})
+
 # Reguły oceniane na całym tekście (dotyczą materiału jako całości, nie konkretnego miejsca).
 _GLOBAL_RULES = frozenset({"1", "2"})
 WINDOW_RADIUS = 2  # akapity przed i po znalezionym miejscu
@@ -271,10 +277,43 @@ def _window(text: str, quote: str | None) -> str:
     return _clip(text)
 
 
+# Krótkie przykłady dla reguł, w których model najczęściej się mylił (ewaluacja na 50 stronach):
+# „zyskaj dostęp” brane za obietnicę zysku, nagłówki brane za prognozy i ulgi.
+# Przykłady nie są cytatami z ocenianych stron.
+RULE_EXAMPLES: dict[str, list[tuple[str, str]]] = {
+    "3": [
+        ("Zyskaj pełną kontrolę nad swoimi inwestycjami.", "NIE"),
+        ("Zyski nie są gwarantowane — możesz stracić część kapitału.", "NIE"),
+        ("W tym przewodniku wyjaśniamy, jak działają obligacje.", "NIE"),
+        ("Zarabiaj do 8% rocznie. Inwestowanie wiąże się z ryzykiem utraty kapitału.", "NIE"),
+        ("Zarabiaj do 8% rocznie — otwórz konto już dziś!", "TAK"),
+        ("Pomnóż swoje oszczędności dzięki naszym funduszom akcyjnym.", "TAK"),
+    ],
+    "15": [
+        ("Pobierz raport: Perspektywy rynkowe na 2027 rok", "NIE"),
+        ("Limit wpłat ustalany jest na podstawie prognozowanego wynagrodzenia.", "NIE"),
+        ("W przyszłym roku nasz fundusz przyniesie co najmniej 12%.", "TAK"),
+    ],
+    "16": [
+        ("Przeczytaj artykuł: jak rozliczyć IKZE w zeznaniu rocznym", "NIE"),
+        (
+            "Wpłaty na IKZE odliczysz od dochodu. Skutki podatkowe zależą od Twojej sytuacji "
+            "i mogą się zmienić.",
+            "NIE",
+        ),
+        ("Inwestuj bez podatku od zysków kapitałowych!", "TAK"),
+        ("Co roku zmniejszaj swój podatek dzięki naszemu kontu emerytalnemu.", "TAK"),
+    ],
+}
+
+
 def _binary_question(rule_id: str) -> str:
+    examples = RULE_EXAMPLES.get(rule_id, [])
+    shown = "".join(f"- „{text}” → {answer}\n" for text, answer in examples)
     return (
         f"Reguła {rule_id}: {RULE_TEXT[rule_id]}\n"
-        "Czy tekst narusza tę regułę? Odpowiedz jednym słowem: TAK (narusza) albo NIE (spełnia)."
+        + (f"Przykłady:\n{shown}" if shown else "")
+        + "Czy tekst narusza tę regułę? Odpowiedz jednym słowem: TAK (narusza) albo NIE (spełnia)."
     )
 
 
@@ -316,6 +355,8 @@ def analyze_risk_disclosure_hybrid(
     warning = by_rule.get("10") or analyze_risk_disclosure(text, ["10"]).findings[0]
 
     def applicable(rule_id: str) -> bool:
+        if rule_id in REGEX_ONLY_RULES:
+            return False
         if rule_id == "9":
             return warning.result != "n/a"
         finding = by_rule[rule_id]
