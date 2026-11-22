@@ -113,6 +113,15 @@ function CurrentUser() {
   );
 }
 
+function NavGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="mt-5 flex flex-col gap-0.5" role="group" aria-label={label}>
+      <p className="px-2.5 pb-1 font-medium text-ink-500 text-xs">{label}</p>
+      {children}
+    </div>
+  );
+}
+
 function Nav() {
   const open = useViolationCount({ status: [...OPEN_STATUSES] });
   const ads = useIncidents({ module: ["finfluencer"], status: ["new"], page_size: 1 });
@@ -127,12 +136,15 @@ function Nav() {
         <p className="font-semibold text-[15px] text-ink-900">InvestWatch</p>
         <p className="text-ink-600 text-xs">UKNF · nadzór marketingu</p>
       </div>
+      {/* Nawigacja w grupach: start dnia, praca z wykryciami, ustawienia systemu. */}
       <div className="mt-6 flex flex-col gap-0.5">
         <NavItem
           href="/"
           label="Przegląd"
           icon={<LayoutDashboard className="size-4" strokeWidth={1.5} />}
         />
+      </div>
+      <NavGroup label="Wykrycia">
         <NavItem
           href="/kolejka"
           label="Naruszenia"
@@ -145,18 +157,20 @@ function Nav() {
           icon={<Megaphone className="size-4" strokeWidth={1.5} />}
           meta={ads.data?.total ? String(ads.data.total) : undefined}
         />
-        <NavItem
-          href="/kalibracja"
-          label="Kalibracja"
-          icon={<SlidersHorizontal className="size-4" strokeWidth={1.5} />}
-        />
+      </NavGroup>
+      <NavGroup label="System">
         <NavItem
           href="/zrodla"
           label="Źródła"
           icon={<RadioTower className="size-4" strokeWidth={1.5} />}
           meta={failed ? `${failed} ${plural(failed, "błąd", "błędy", "błędów")}` : undefined}
         />
-      </div>
+        <NavItem
+          href="/kalibracja"
+          label="Kalibracja"
+          icon={<SlidersHorizontal className="size-4" strokeWidth={1.5} />}
+        />
+      </NavGroup>
       <div className="mt-auto flex flex-col gap-3">
         <LivePanel />
         <CurrentUser />
