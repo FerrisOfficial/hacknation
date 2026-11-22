@@ -267,7 +267,7 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 **AI (`services/ml`)**
 - [x] `POST /analyze` zwraca kształt z punktu 2: `findings[]` per reguła (`result`, `confidence`, `quote`, `reason`) oraz `label`, `probability`, `summary` — M2 (13 reguł tekstowych, #25), z `rule_scores` i `risk_score`.
 - [x] `pnpm api:generate` w tym samym PR.
-- [ ] `POST /media/frames`: pobranie filmu z YouTube i wycięcie klatek (osobna warstwa, bez OCR), plan w [KLATKI.md](KLATKI.md).
+- [x] Pobranie filmu z YouTube i wycięcie klatek: osobny serwis `services/media` (`POST /videos`, bez OCR), plan w [KLATKI.md](KLATKI.md). Klatki i `manifest.json` na wolumenie `media`, podmontowanym do `ml` pod `MEDIA_DIR` (tylko odczyt).
 - [x] M2 w `POST /analyze`: reguły 4, 5, 6, 13 z klatek filmu (OCR + pomiary pikseli, bez LLM), `findings[]` z `frame` (punkty 1–2). Klatki z `${MEDIA_DIR}/<material_id>/`, opis w [KLATKI.md](KLATKI.md).
 
 **Backend (`apps/web`)**
@@ -282,9 +282,9 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - [x] Zdarzenie Socket.io `incident.high_risk` (punkt 10), wysyłane, gdy `score ≥ alert` modułu. Typy w `apps/web/src/lib/realtime/events.ts`.
 - [x] Usunięte stare ścieżki: `GET/PUT /thresholds`, `PATCH /results/:id`, zdarzenie `alert`.
 - [x] Aktualizacja [BACKEND.md](BACKEND.md).
-- [ ] Kolejka `extract-frames` → `POST /media/frames`; reguły 4, 5, 6, 13 w `rules` M2 dla filmów z klatkami (punkt 1).
+- [x] Kolejka `download-video` → `POST /videos` serwisu media; po sukcesie manifest w `metadata.frames` i ponowna analiza z regułami 4, 5, 6, 13 w `rules` M2 (punkt 1). Film zamawia analiza (YouTube z incydentem) albo otwarcie sprawy; ręcznie `POST /api/materials/:id/video`.
 - [ ] Dowód z klatki: `evidence.frame`, `start`/`end` = `null`, `timestamp_s` = `frame.ts` (punkt 3); typy w `lib/analysis/contract.ts` i `lib/incidents/contract.ts`.
-- [ ] `GET /api/incidents/:id/frames/:file` (punkt 5).
+- [x] `GET /api/incidents/:id/frames/:file` (punkt 5).
 
 **UI**
 - [ ] Szczegół incydentu: przy `evidence.frame` ≠ `null` obraz klatki z zaznaczoną ramką `box` zamiast podświetlenia w `material.text`.
@@ -323,9 +323,10 @@ W tej wersji zbieramy tylko **YouTube i strony WWW**; Instagram, Facebook, TikTo
 - [x] `in_register: boolean | null` (z `details.entity`): chip „w rejestrze KNF” w nagłówku grupy.
 
 **Wideo i dowód (§5)**
-- [ ] `material.has_video: boolean` — czeka na pobieranie filmów ([KLATKI.md](KLATKI.md)); do tego czasu pola nie ma i UI nie pokazuje odtwarzacza. `material.duration_s: number | null` — jest (metadane YouTube). Pobrany film YouTube **zostaje na dysku** po wycięciu klatek (zmiana względem [KLATKI.md](KLATKI.md), krok 5), bo Okno sprawy odtwarza go od oflagowanej sekundy.
-- [ ] `GET /api/incidents/:id/video` → `video/mp4` z obsługą `Range` (przewijanie w `<video>`). 404, gdy filmu nie ma.
-- [ ] `evidence.frame` i `GET /api/incidents/:id/frames/:file` jak w §3 i §5. UI pokazuje klatkę z ramką `box` i przewija film do `timestamp_s`.
+- [x] `material.has_video: boolean` (`metadata.frames.status = "done"`), `material.duration_s: number | null` (metadane YouTube). Pobrany film YouTube **zostaje na dysku** po wycięciu klatek (zmiana względem [KLATKI.md](KLATKI.md), krok 5), bo Okno sprawy odtwarza go od oflagowanej sekundy.
+- [x] `GET /api/incidents/:id/video` → `video/mp4` z obsługą `Range` (przewijanie w `<video>`). 404, gdy filmu nie ma.
+- [x] `GET /api/incidents/:id/frames/:file` (§5): klatka z serwisu media.
+- [ ] `evidence.frame` (§3): czeka na reguły wizualne w M2 (OCR klatek). UI pokazuje wtedy klatkę z ramką `box` i przewija film do `timestamp_s`.
 - [x] `material.content_hash: string | null` (SHA-256 kopii, R4) — wyświetlany przy „kopia …”.
 
 **Teczka podmiotu (Z7)**

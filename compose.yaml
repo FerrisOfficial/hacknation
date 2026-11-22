@@ -60,14 +60,18 @@ services:
       # Moduł 2: rules (regex, bez LLM), hybrid (regex + LLM — zalecany), llm (sam LLM).
       M2_ENGINE: ${M2_ENGINE:-rules}
       OLLAMA_RISK_MODEL: ${OLLAMA_RISK_MODEL:-hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0}
-      # Klatki filmów dla reguł wizualnych M2 (4, 5, 6, 13): <MEDIA_DIR>/<material_id>/manifest.json + PNG.
-      MEDIA_DIR: /data/media
       SCRAPER_PROXY_URL: ${SCRAPER_PROXY_URL:-}
       YOUTUBE_DELAY_S: ${YOUTUBE_DELAY_S:-3}
+      # Klatki filmów od serwisu `media` (reguły wizualne M2, docs/KLATKI.md) — tylko odczyt.
+      MEDIA_DIR: /data/media
+    volumes:
+      - media:/data/media:ro
+    # `media` montuje wolumen pierwszy, więc katalog należy do jego użytkownika (zapis klatek).
+    depends_on:
+      media:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - media:/data/media
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -81,6 +85,28 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Pobieranie filmów z YouTube i wycinanie klatek (yt-dlp + ffmpeg). Woła go tylko backend.
+  media:
+    build: services/media
+    environment:
+      MEDIA_DIR: /data/media
+      MEDIA_MAX_DURATION_S: ${MEDIA_MAX_DURATION_S:-1200}
+      SCRAPER_PROXY_URL: ${SCRAPER_PROXY_URL:-}
+    volumes:
+      - media:/data/media
+    ports:
+      - "127.0.0.1:8100:8100"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   web:
     build:
       context: .
@@ -89,6 +115,9 @@ services:
     environment:
       DATABASE_URL: *database-url
       ML_API_URL: http://ml:8000
+      MEDIA_API_URL: http://media:8100
+      # Ile filmów pobiera worker naraz (YouTube blokuje HTTP 429 przy większym tempie).
+      MEDIA_CONCURRENCY: ${MEDIA_CONCURRENCY:-1}
       COLLECTOR_TOKEN: ${COLLECTOR_TOKEN:-}
       # Socket.io (powiadomienia w czasie rzeczywistym) na osobnym porcie — patrz src/lib/realtime.
       REALTIME_PORT: "3001"
@@ -113,6 +142,8 @@ services:
       migrate:
         condition: service_completed_successfully
       ml:
+        condition: service_healthy
+      media:
         condition: service_healthy
     healthcheck:
       test:

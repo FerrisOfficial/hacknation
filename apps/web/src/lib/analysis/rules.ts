@@ -127,10 +127,19 @@ export function moduleRules(module: AnalysisModule): Rule[] {
 }
 
 // `rules` w wejściu modelu (§1): reguły modułu, które da się ocenić z tekstu.
-export function requestedRuleIds(module: AnalysisModule): string[] {
-  return moduleRules(module)
+// Reguły wizualne M2 oceniane z klatek filmu (docs/KLATKI.md). Wysyłamy je, gdy serwis media
+// pobrał film i wyciął klatki (`metadata.frames.status = "done"`) — docs/KONTRAKT.md §1.
+export const FRAME_RULE_IDS = ["4", "5", "6", "13"] as const;
+
+export function requestedRuleIds(
+  module: AnalysisModule,
+  options: { frames?: boolean } = {},
+): string[] {
+  const ids = moduleRules(module)
     .filter((r) => r.textual)
     .map((r) => r.id);
+  if (options.frames && module === "risk_disclosure") ids.push(...FRAME_RULE_IDS);
+  return [...new Set(ids)];
 }
 
 export function findRule(module: AnalysisModule, ruleId: string): Rule | undefined {

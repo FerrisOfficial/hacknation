@@ -32,7 +32,11 @@ export async function upsertMaterials(db: Writer, rows: NewMaterial[]): Promise<
         language: excluded(materials.language),
         publishedAt: excluded(materials.publishedAt),
         scrapedAt: excluded(materials.scrapedAt),
-        metadata: excluded(materials.metadata),
+        // Nowe metadane ze scrapera, ale stan pobranego filmu (`frames`, serwis media) zostaje —
+        // inaczej każde ponowne zebranie kanału kasowałoby film i klatki z bazy.
+        metadata: sql`case when ${materials.metadata} ? 'frames'
+          then ${excluded(materials.metadata)} || jsonb_build_object('frames', ${materials.metadata}->'frames')
+          else ${excluded(materials.metadata)} end`,
       },
     })
     .returning({
