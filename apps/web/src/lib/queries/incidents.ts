@@ -135,6 +135,7 @@ export async function listIncidentItems(
         created_at: row.createdAt.toISOString(),
         title: row.title,
         in_register: details.entity.in_register,
+        on_warning_list: details.entity.on_warning_list,
         ...readReview(row),
       };
     }),

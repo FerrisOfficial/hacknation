@@ -1,10 +1,23 @@
 "use client";
 
-import { Inbox, LayoutDashboard, RadioTower, SlidersHorizontal, TriangleAlert } from "lucide-react";
+import {
+  Inbox,
+  LayoutDashboard,
+  Megaphone,
+  RadioTower,
+  SlidersHorizontal,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { sourceHasError, useIncidents, useMe, useSources } from "@/lib/client/api";
+import {
+  sourceHasError,
+  useIncidents,
+  useMe,
+  useSources,
+  useViolationCount,
+} from "@/lib/client/api";
 import { fmtTime, plural } from "@/lib/client/format";
 import { RealtimeProvider, useRealtime } from "@/lib/client/realtime";
 import { cn } from "@/lib/utils";
@@ -101,7 +114,8 @@ function CurrentUser() {
 }
 
 function Nav() {
-  const open = useIncidents({ status: [...OPEN_STATUSES], page_size: 1 });
+  const open = useViolationCount({ status: [...OPEN_STATUSES] });
+  const ads = useIncidents({ module: ["finfluencer"], status: ["new"], page_size: 1 });
   const sources = useSources();
   const failed = (sources.data?.items ?? []).filter(sourceHasError).length;
   return (
@@ -123,7 +137,13 @@ function Nav() {
           href="/kolejka"
           label="Kolejka"
           icon={<Inbox className="size-4" strokeWidth={1.5} />}
-          meta={open.data ? String(open.data.total) : undefined}
+          meta={open !== undefined ? String(open) : undefined}
+        />
+        <NavItem
+          href="/reklamy"
+          label="Reklamy"
+          icon={<Megaphone className="size-4" strokeWidth={1.5} />}
+          meta={ads.data?.total ? String(ads.data.total) : undefined}
         />
         <NavItem
           href="/kalibracja"
