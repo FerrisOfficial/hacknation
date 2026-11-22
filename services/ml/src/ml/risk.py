@@ -15,7 +15,7 @@ Score materiału liczy backend z `findings`.
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 Result = Literal["violation", "ok", "n/a"]
 
@@ -36,7 +36,7 @@ TEXT_RULES: tuple[str, ...] = (
 # Hierarchię wag warto potwierdzić z UKNF.
 RULE_WEIGHTS: dict[str, float] = {
     "1": 0.3, "2": 0.3, "3": 1.0, "9": 1.0, "10": 1.0, "11": 1.0, "12a": 1.0, "12b": 1.0,
-    "14": 1.0, "15": 1.0, "16": 1.0, "17": 1.0, "18": 1.0,
+    "13": 1.0, "14": 1.0, "15": 1.0, "16": 1.0, "17": 1.0, "18": 1.0,
 }  # fmt: skip
 
 # Poniżej tej wartości warunek wstępny reguły (np. „są wyniki historyczne”) uznajemy za niespełniony.
@@ -209,6 +209,8 @@ class Finding:
     reason: str
     # Silnik LLM: P(violation), P(ok), P(n/a) z logprobs odpowiedzi modelu.
     probabilities: dict[Result, float] | None = None
+    # Reguły wizualne z klatek filmu (KONTRAKT.md §2): {"ts": s, "file": "42000.png", "box": [x0, y0, x1, y1]}.
+    frame: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

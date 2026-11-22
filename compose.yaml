@@ -57,10 +57,11 @@ services:
     environment:
       # Ollama na hoście zamiast w kontenerze (np. Mac z GPU Apple): http://host.docker.internal:11434
       OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
       # Moduł 2: rules (regex, bez LLM), hybrid (regex + LLM — zalecany), llm (sam LLM).
       M2_ENGINE: ${M2_ENGINE:-rules}
       OLLAMA_RISK_MODEL: ${OLLAMA_RISK_MODEL:-hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0}
+      # Klatki filmów dla reguł wizualnych M2 (4, 5, 6, 13): <MEDIA_DIR>/<material_id>/manifest.json + PNG.
+      MEDIA_DIR: /data/media
       SCRAPER_PROXY_URL: ${SCRAPER_PROXY_URL:-}
       YOUTUBE_DELAY_S: ${YOUTUBE_DELAY_S:-3}
       # Klatki filmów od serwisu `media` (reguły wizualne M2, docs/KLATKI.md) — tylko odczyt.
@@ -73,6 +74,8 @@ services:
         condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - media:/data/media
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -171,26 +174,25 @@ services:
       retries: 20
     restart: unless-stopped
 
-  # Jednorazowo pobiera modele do wolumenu `ollama-models` (pierwszy start: kilka GB).
-  # Model Modułu 2 tylko przy M2_ENGINE innym niż `rules` (Bielik APT4 Q8_0: ok. 12 GB).
+  # Jednorazowo pobiera model Modułu 2 do wolumenu `ollama-models` — tylko przy M2_ENGINE innym
+  # niż `rules` (Bielik APT4 Q8_0: ok. 12 GB). Przy `rules` kończy się od razu.
   ollama-pull:
     image: ollama/ollama:0.40.17
     environment:
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
       M2_ENGINE: ${M2_ENGINE:-rules}
       OLLAMA_RISK_MODEL: ${OLLAMA_RISK_MODEL:-hf.co/speakleash/Bielik-PL-11B-v3.0-Instruct-GGUF:Q8_0}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        ollama pull "$$OLLAMA_MODEL" &&
-        { [ "$$M2_ENGINE" = rules ] || ollama pull "$$OLLAMA_RISK_MODEL"; }
+        [ "$$M2_ENGINE" = rules ] || ollama pull "$$OLLAMA_RISK_MODEL"
     depends_on:
       ollama:
         condition: service_healthy
     restart: "no"
 
 volumes:
+  media:
   db-data:
   ollama-models:
   content-store:
