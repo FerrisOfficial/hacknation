@@ -31,7 +31,10 @@ const channelMetadataSchema = z.object({
   channel_url: z.string().url(),
 });
 
-const CHANNEL_URL = /^https:\/\/(?:www\.|m\.)?youtube\.com\/(@[\w.-]+|channel\/UC[\w-]{22})/;
+// Handle z polską literą YouTube podaje zakodowany („@MarcinIwu%C4%87FBO”) albo wprost („@Giełda…”):
+// bez `%XX` i liter Unicode adres urywał się na „@MarcinIwu” (404) albo „@Gie” (cudzy kanał).
+const CHANNEL_URL =
+  /^https:\/\/(?:www\.|m\.)?youtube\.com\/(@(?:[\p{L}\p{N}_.-]|%[0-9A-Fa-f]{2})+|channel\/UC[\w-]{22})(?=[/?#]|$)/u;
 
 // Adres kanału filmu z `materials.metadata` (kolektor YouTube), znormalizowany. null, gdy brak.
 export function channelUrlOf(metadata: Record<string, unknown>): string | null {

@@ -368,6 +368,15 @@ def test_channel_videos_url_accepts_channel_forms_only() -> None:
         youtube.channel_videos_url("https://m.youtube.com/channel/UC1234567890123456789012/shorts")
         == "https://www.youtube.com/channel/UC1234567890123456789012/videos"
     )
+    # Handle z polską literą, zakodowany albo wprost — bez urywania na „@MarcinIwu”.
+    assert (
+        youtube.channel_videos_url("https://www.youtube.com/@MarcinIwu%C4%87FBO")
+        == "https://www.youtube.com/@MarcinIwu%C4%87FBO/videos"
+    )
+    assert (
+        youtube.channel_videos_url("https://www.youtube.com/@GiełdaInwestycjeTrading")
+        == "https://www.youtube.com/@GiełdaInwestycjeTrading/videos"
+    )
     with pytest.raises(ValueError):
         youtube.channel_videos_url("https://evil.example/@kanal")
     with pytest.raises(ValueError):
