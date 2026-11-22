@@ -10,7 +10,9 @@ w tekście przesłanek, że ktoś oferuje taką usługę:
    „to nie jest doradztwo” przy ofercie indywidualnej) z fraz regex,
 2. P(doradztwo) = regresja logistyczna na score'ach przesłanek: sama wzmianka o akcjach albo
    o zarządzaniu majątkiem nie wystarcza, dopiero oferta + dopasowanie do klienta + instrumenty,
-3. w wariancie `hybrid` trzy główne przesłanki dodatkowo ocenia LLM (Bielik, P(TAK) z logprobs),
+3. w wariancie `hybrid` werdykt wydaje LLM (Bielik, P(TAK) z logprobs) na dwa pytania: czy autor
+   oferuje doradztwo inwestycyjne (art. 69 ust. 2 pkt 5) i czy oferuje zarządzanie portfelem (pkt 4);
+   P = max z obu, regex zostaje bramką (LLM tylko przy przesłankach) i źródłem cytatów,
 4. każda przesłanka to osobna reguła z dosłownym cytatem — analityk widzi, dlaczego oflagowano.
 
 Czy podmiot ma zezwolenie, rozstrzyga backend z rejestru KNF (tu nie ma dostępu do sieci).
@@ -388,9 +390,14 @@ WEIGHTS: dict[str, float] = {
     "claims": 0.5,
     "disclaimer": 0.6,
 }
-# Przesłanki oceniane też przez LLM w wariancie `hybrid` (wynik = średnia regex i LLM).
-LLM_SIGNALS: tuple[str, ...] = ("offer", "recommendation", "personal")
-LLM_SHARE = 0.5
+# Usługi, o które pytamy LLM w wariancie `hybrid`. Kody z rejestru KNF („Zakres działalności”,
+# art. 69 ust. 2 UoIF): 5 — doradztwo inwestycyjne, 4 — zarządzanie portfelem. Backend porównuje
+# `service` z zakresem zezwolenia podmiotu.
+SERVICES: dict[str, str] = {"advisory": "5", "portfolio": "4"}
+SERVICE_NAMES: dict[str, str] = {
+    "advisory": "doradztwo inwestycyjne",
+    "portfolio": "zarządzanie portfelem",
+}
 # LLM pytamy tylko, gdy regex widzi choć trochę przesłanek — strona brokera bez oferty doradczej
 # nie musi czekać na model.
 LLM_GATE = 0.12
@@ -421,7 +428,8 @@ class AdvisoryAnalysis:
     signals: dict[str, float]
     subject: Subject
     engine: str = "rules"
-    llm: dict[str, float] = field(default_factory=dict)
+    llm: dict[str, float] = field(default_factory=dict)  # P(TAK) od LLM per usługa z SERVICES
+    service: str | None = None  # usługa z najwyższym P od LLM (klucz SERVICES)
 
 
 def _quote(paragraph: str, start: int) -> str:
@@ -530,6 +538,7 @@ def _findings(
     hits: dict[str, SignalHit],
     signals: dict[str, float],
     requested: set[str],
+    llm: dict[str, float] | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     contradictory = (
@@ -554,6 +563,10 @@ def _findings(
     if ADVISORY_RULE in requested:
         present_names = [n for n in SIGNAL_RULES if signals[n] >= SIGNAL_MIN and n != "disclaimer"]
         strongest = max(present_names, key=lambda n: WEIGHTS[n] * signals[n], default=None)
+        if strongest is None and llm:
+            # LLM rozpoznał usługę, a przesłanki regex są słabe — cytat z najmocniejszej z nich.
+            quoted = [n for n in SIGNAL_RULES if hits[n].quote and n != "disclaimer"]
+            strongest = max(quoted, key=lambda n: hits[n].score, default=None)
         violation = probability_ >= VIOLATION_MIN
         reason = (
             "Przesłanki doradztwa inwestycyjnego: "
@@ -562,6 +575,12 @@ def _findings(
             if present_names
             else "Brak przesłanek doradztwa inwestycyjnego."
         )
+        if llm:
+            verdict = ", ".join(
+                f"{SERVICE_NAMES[name]} P={p:.2f}".replace(".", ",") for name, p in llm.items()
+            )
+            reason = f"{reason} Ocena modelu językowego: {verdict}."
+
         findings.insert(
             0,
             Finding(
@@ -597,65 +616,86 @@ def analyze_advisory(
     *,
     llm: dict[str, float] | None = None,
 ) -> AdvisoryAnalysis:
-    """M3 z reguł regex; `llm` = P(TAK) przesłanek od modelu (wariant hybrid)."""
+    """M3 z reguł regex; `llm` = P(TAK) usług z SERVICES od modelu (wariant hybrid).
+
+    Z `llm` werdykt (P i etykieta) wydaje model, a regex daje przesłanki i cytaty.
+    """
     paragraphs = split_paragraphs(text)
     hits = {name: _signal(paragraphs, name) for name in _SIGNALS}
     signals = {name: hit.score for name, hit in hits.items()}
-    for name, p in (llm or {}).items():
-        signals[name] = round((1 - LLM_SHARE) * signals[name] + LLM_SHARE * p, 3)
     # Zastrzeżenie liczy się tylko przy ofercie indywidualnej (inaczej to zwykła nota edukacyjna).
     if max(signals["offer"], signals["personal"]) < VIOLATION_MIN:
         signals["disclaimer"] = 0.0
-    p = round(probability(signals), 3)
+    service: str | None = None
+    if llm:
+        service = max(llm, key=llm.__getitem__)
+        p = round(llm[service], 3)
+    else:
+        p = round(probability(signals), 3)
     subject = extract_subject(text)
     requested = set(rules) if rules else set(RULE_IDS)
     return AdvisoryAnalysis(
         probability=p,
         label=POSITIVE_LABEL if p >= VIOLATION_MIN else NEGATIVE_LABEL,
-        findings=_findings(p, hits, signals, requested),
+        findings=_findings(p, hits, signals, requested, llm),
         summary=summarize(p, signals, subject),
         signals=signals,
         subject=subject,
         engine="hybrid" if llm else "rules",
         llm=llm or {},
+        service=service if p >= VIOLATION_MIN else None,
     )
 
 
-# ─── Wariant hybrid: Bielik ocenia trzy główne przesłanki ───────────────────────────────────────
+# ─── Wariant hybrid: Bielik wydaje werdykt (P(TAK) z logprobs) ──────────────────────────────────
 
 LLM_SYSTEM_PROMPT = (
-    "Jesteś analitykiem Urzędu Komisji Nadzoru Finansowego. Sprawdzasz, czy tekst ze strony "
-    "internetowej lub z filmu wskazuje, że jego autor świadczy doradztwo inwestycyjne w rozumieniu "
-    "art. 76 ustawy o obrocie instrumentami finansowymi. Odpowiadasz rzetelnie, tylko na podstawie tekstu."
+    "Jesteś analitykiem Urzędu Komisji Nadzoru Finansowego. Sprawdzasz, czy autor tekstu ze strony "
+    "internetowej lub z filmu oferuje klientom usługę inwestycyjną, na którą w Polsce potrzebne jest "
+    "zezwolenie KNF. Odpowiadasz rzetelnie, tylko na podstawie tekstu."
 )
 
+# Po 2 przykłady TAK i NIE, na przemian, ostatni NIE (ostatni przykład najmocniej ciągnie
+# odpowiedź). Negatywy to przypadki graniczne: własny portfel autora, rekomendacja ogólna dla
+# wszystkich z notą „to nie jest porada”, edukacja. Przykłady nie są cytatami z ocenianych materiałów.
 LLM_QUESTIONS: dict[str, tuple[str, list[tuple[str, str]]]] = {
-    "offer": (
-        "Czy autor tekstu oferuje klientom usługę: doradztwo inwestycyjne, zarządzanie ich majątkiem "
-        "lub portfelem, sygnały transakcyjne albo inną płatną pomoc w podejmowaniu decyzji inwestycyjnych?",
+    "advisory": (
+        "Doradztwo inwestycyjne (art. 76 ustawy o obrocie instrumentami finansowymi) to "
+        "rekomendacje kupna, sprzedaży lub trzymania instrumentów finansowych (akcji, obligacji, "
+        "funduszy, ETF, kontraktów, kryptowalut-instrumentów) przygotowane dla konkretnego klienta, "
+        "z uwzględnieniem jego sytuacji i potrzeb. Ogólne opinie i analizy dla wszystkich "
+        "odbiorców to NIE doradztwo.\n"
+        "Czy autor tekstu oferuje klientom doradztwo inwestycyjne (także płatne konsultacje, "
+        "mentoring albo grupę, w której dobiera inwestycje pod klienta)?",
         [
-            ("Zarządzamy majątkiem naszych klientów i doradzamy, w co inwestować.", "TAK"),
-            ("Dołącz do grupy VIP — codziennie sygnały kupna i sprzedaży.", "TAK"),
-            ("Otwórz rachunek maklerski i handluj akcjami bez prowizji.", "NIE"),
-            ("W tym filmie tłumaczę, czym jest ETF.", "NIE"),
+            (
+                "Na konsultacji 1:1 przeanalizujemy Twój portfel i powiemy, które spółki dokupić.",
+                "TAK",
+            ),
+            ("Dobierzemy fundusze i obligacje do Twoich celów i horyzontu inwestycyjnego.", "TAK"),
+            ("Kupiłem w tym miesiącu akcje PKN Orlen — pokazuję cały mój portfel.", "NIE"),
+            (
+                "Nasz analityk uważa, że kurs CD Projekt wzrośnie do 200 zł. To nie jest porada inwestycyjna.",
+                "NIE",
+            ),
         ],
     ),
-    "recommendation": (
-        "Czy tekst zawiera albo obiecuje rekomendacje kupna, sprzedaży lub trzymania konkretnych "
-        "instrumentów finansowych (akcji, obligacji, funduszy, ETF, kontraktów, opcji)?",
+    "portfolio": (
+        "Zarządzanie portfelem to podejmowanie decyzji inwestycyjnych i zawieranie transakcji na "
+        "rachunku klienta w jego imieniu (klient powierza środki albo daje pełnomocnictwo).\n"
+        "Czy autor tekstu oferuje klientom zarządzanie ich pieniędzmi, majątkiem albo portfelem "
+        "inwestycyjnym?",
         [
-            ("Powiemy Ci, które spółki kupić, a kiedy sprzedać.", "TAK"),
-            ("Przygotujemy portfel ETF dla Ciebie.", "TAK"),
-            ("Akcje to udziały w spółce.", "NIE"),
-        ],
-    ),
-    "personal": (
-        "Czy propozycje inwestycyjne mają być przygotowane dla konkretnego klienta, z uwzględnieniem "
-        "jego sytuacji, potrzeb lub celów?",
-        [
-            ("Strategię dobierzemy do Twojej sytuacji finansowej i celów.", "TAK"),
-            ("Umów konsultację 1:1 — przeanalizujemy Twój portfel.", "TAK"),
-            ("Kurs dla początkujących: 10 lekcji wideo.", "NIE"),
+            (
+                "Powierz nam swoje oszczędności — zainwestujemy je za Ciebie i co miesiąc wyślemy raport.",
+                "TAK",
+            ),
+            ("W tym filmie tłumaczę, jak samemu zbudować portfel z ETF.", "NIE"),
+            (
+                "Udziel nam pełnomocnictwa do rachunku, a nasi traderzy będą handlować na Twoim koncie.",
+                "TAK",
+            ),
+            ("Zarządzam własnym portfelem od 10 lat — oto moje wyniki.", "NIE"),
         ],
     ),
 }
@@ -674,7 +714,7 @@ def llm_signals(
     ollama_url: str | None = None,
     client: httpx.Client | None = None,
 ) -> dict[str, float]:
-    """P(TAK) każdej przesłanki z `LLM_SIGNALS` (logprobs, skalibrowane jak w M2)."""
+    """P(TAK) dla każdej usługi z SERVICES (logprobs, skalibrowane jak w M2)."""
     url = (ollama_url or os.environ.get("OLLAMA_URL") or risk_llm.DEFAULT_OLLAMA_URL).rstrip("/")
     name = model or os.environ.get("OLLAMA_RISK_MODEL") or risk_llm.DEFAULT_MODEL
     http = client or httpx.Client(timeout=risk_llm.TIMEOUT)
@@ -682,9 +722,9 @@ def llm_signals(
         ollama = risk_llm.Ollama(url, name, http, system=LLM_SYSTEM_PROMPT)
         prefix = risk_llm.material_message(text)
         result: dict[str, float] = {}
-        for signal in LLM_SIGNALS:
+        for service in SERVICES:
             body = ollama.chat(
-                [{"role": "user", "content": prefix + _llm_question(signal)}],
+                [{"role": "user", "content": prefix + _llm_question(service)}],
                 logprobs=True,
                 top_logprobs=20,
                 options={"temperature": 0, "num_predict": 1, "num_ctx": risk_llm.NUM_CTX},
@@ -693,7 +733,7 @@ def llm_signals(
                 top = body["logprobs"][0]["top_logprobs"]
             except (KeyError, IndexError, TypeError) as exc:
                 raise risk_llm.LlmError("Ollama nie zwróciła logprobs") from exc
-            result[signal] = round(risk_llm.calibrate(risk_llm.binary_probability(top)), 3)
+            result[service] = round(risk_llm.calibrate(risk_llm.binary_probability(top)), 3)
         return result
     finally:
         if client is None:
@@ -701,7 +741,7 @@ def llm_signals(
 
 
 def analyze_advisory_engine(text: str, rules: list[str] | None = None) -> AdvisoryAnalysis:
-    """M3 wg M3_ENGINE: `rules` (regex) albo `hybrid` (regex + LLM). Błąd LLM → wynik z regex."""
+    """M3 wg M3_ENGINE: `rules` (regex) albo `hybrid` (werdykt LLM). Błąd LLM → wynik z regex."""
     base = analyze_advisory(text, rules)
     if os.environ.get("M3_ENGINE", "rules") != "hybrid":
         return base
