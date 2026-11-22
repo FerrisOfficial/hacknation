@@ -396,7 +396,7 @@ SERVICE_NAMES: dict[str, str] = {
 }
 # LLM pytamy tylko, gdy regex widzi choć trochę przesłanek — strona brokera bez oferty doradczej
 # nie musi czekać na model.
-LLM_GATE = 0.3  # oferta, rekomendacje albo dopasowanie co najmniej na poziomie SIGNAL_MIN
+LLM_GATE = 0.3  # bez oferty usługi nie ma doradztwa, więc model nie jest potrzebny
 
 
 @dataclass(frozen=True)
@@ -569,7 +569,9 @@ def _findings(
         )
     if ADVISORY_RULE in requested:
         present_names = [n for n in SIGNAL_RULES if signals[n] >= SIGNAL_MIN and n != "disclaimer"]
-        strongest = max(present_names, key=lambda n: signals[n], default=None)
+        # Cytat werdyktu z przesłanek warunku (oferta, rekomendacje, dopasowanie), nie z odpłatności.
+        core = [n for n in present_names if n in (REQUIRED, *ANY_OF)]
+        strongest = max(core or present_names, key=lambda n: signals[n], default=None)
         if strongest is None and llm:
             # LLM rozpoznał usługę, a przesłanki regex są słabe — cytat z najmocniejszej z nich.
             quoted = [n for n in SIGNAL_RULES if hits[n].quote and n != "disclaimer"]
@@ -752,7 +754,7 @@ def analyze_advisory_engine(text: str, rules: list[str] | None = None) -> Adviso
     base = analyze_advisory(text, rules)
     if os.environ.get("M3_ENGINE", "rules") != "hybrid":
         return base
-    if max(base.signals[name] for name in (REQUIRED, *ANY_OF)) < LLM_GATE:
+    if base.signals[REQUIRED] < LLM_GATE:
         return base
     try:
         return analyze_advisory(text, rules, llm=llm_signals(text))

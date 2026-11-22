@@ -13,6 +13,7 @@ from ml.advisory import (
     analyze_advisory,
     analyze_advisory_engine,
     extract_subject,
+    probability,
     rule_scores,
 )
 from ml.main import app
@@ -46,7 +47,7 @@ def violations(text: str) -> set[str]:
 
 def test_wealth_manager_offer_is_advisory_with_quotes() -> None:
     analysis = analyze_advisory(WEALTH)
-    assert analysis.probability >= 0.8
+    assert analysis.probability == 0.85
     assert analysis.label == POSITIVE_LABEL
     assert violations(WEALTH) >= {
         ADVISORY_RULE,
@@ -191,7 +192,7 @@ def test_analyze_endpoint_m3(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["label"] == POSITIVE_LABEL
-    assert body["probability"] >= 0.8
+    assert body["probability"] == 0.85
     assert body["error"] is None
     assert body["subject"]["name"] == "Kowalski Wealth Partners sp. z o.o."
     assert body["signals"]["offer"] == 0.85
@@ -239,3 +240,33 @@ def test_subject_skips_author_bio() -> None:
         extract_subject("Był Prezesem Zarządu Banku XYZ S.A. przez 10 lat. " * 1 + "x" * 200).name
         is None
     )
+
+
+@pytest.mark.parametrize(
+    ("signals", "expected"),
+    [
+        ({"offer": 0.9, "recommendation": 0.0, "personal": 0.0}, 0.0),
+        ({"offer": 0.0, "recommendation": 0.9, "personal": 0.9}, 0.0),
+        ({"offer": 0.9, "recommendation": 0.6, "personal": 0.0}, 0.6),
+        ({"offer": 0.7, "recommendation": 0.2, "personal": 0.9}, 0.7),
+        ({"offer": 0.9, "paid": 0.9, "claims": 0.9}, 0.0),
+    ],
+)
+def test_probability_is_offer_and_any_of(signals: dict[str, float], expected: float) -> None:
+    assert probability(signals) == expected
+
+
+def test_advisory_quote_comes_from_condition_not_payment() -> None:
+    finding = next(f for f in analyze_advisory(WEALTH).findings if f.rule_id == ADVISORY_RULE)
+    paid = next(f for f in analyze_advisory(WEALTH).findings if f.rule_id == "M3.paid")
+    assert finding.quote is not None
+    assert finding.quote != paid.quote
+
+
+@respx.mock
+def test_hybrid_skips_llm_without_offer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("M3_ENGINE", "hybrid")
+    monkeypatch.setenv("OLLAMA_URL", "http://ollama.test")
+    route = respx.post("http://ollama.test/api/chat")
+    analyze_advisory_engine(FINFLUENCER)
+    assert route.call_count == 0
