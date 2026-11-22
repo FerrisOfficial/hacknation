@@ -20,14 +20,12 @@ import {
   sourceHasError,
   useEngine,
   useIncidents,
-  useMe,
   useSources,
   useViolationCount,
 } from "@/lib/client/api";
 import { fmtTime, plural } from "@/lib/client/format";
 import { RealtimeProvider, useRealtime } from "@/lib/client/realtime";
 import { cn } from "@/lib/utils";
-import { Avatar } from "./ui";
 
 export const OPEN_STATUSES = ["new", "in_review"] as const;
 
@@ -151,27 +149,6 @@ function LivePanel() {
   );
 }
 
-function CurrentUser() {
-  const me = useMe();
-  const collapsed = useContext(Collapsed);
-  if (!me.data) return null;
-  if (collapsed)
-    return (
-      <span title={me.data.name} className="flex justify-center">
-        <Avatar reviewer={me.data} />
-      </span>
-    );
-  return (
-    <p className="flex items-center gap-2 px-1 text-[13px] text-ink-700">
-      <Avatar reviewer={me.data} />
-      <span className="truncate">
-        {me.data.name}
-        {me.data.role ? <span className="text-ink-600"> · {me.data.role}</span> : null}
-      </span>
-    </p>
-  );
-}
-
 function NavGroup({ label, children }: { label: string; children: ReactNode }) {
   const collapsed = useContext(Collapsed);
   return (
@@ -200,19 +177,18 @@ function Nav({ onToggle }: { onToggle: () => void }) {
         collapsed ? "w-14 px-2" : "w-[220px] px-3",
       )}
     >
-      <div className={cn("flex items-start gap-2", collapsed ? "justify-center" : "px-2.5")}>
+      <div className={cn("flex items-center gap-2", collapsed ? "justify-center" : "px-2.5")}>
         {collapsed ? null : (
           <div className="min-w-0 flex-1">
             <Image
               src={withBasePath("/ive-logo.svg")}
               alt="IVE — Investor Vigilance Engine"
-              width={286}
+              width={198}
               height={84}
               unoptimized
               priority
-              className="h-auto w-full"
+              className="block h-8 w-auto"
             />
-            <p className="mt-1.5 text-ink-600 text-xs">UKNF · nadzór marketingu</p>
           </div>
         )}
         <button
@@ -266,7 +242,6 @@ function Nav({ onToggle }: { onToggle: () => void }) {
       </NavGroup>
       <div className="mt-auto flex flex-col gap-3">
         <LivePanel />
-        <CurrentUser />
       </div>
     </nav>
   );
