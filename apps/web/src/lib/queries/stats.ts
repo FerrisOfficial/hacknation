@@ -30,16 +30,49 @@ export type TrendPoint = { bucket: string; total: number } & Record<AnalysisModu
 
 export function trendRange(query: TrendQuery, now = new Date()): { from: Date; to: Date } {
   const to = query.to ?? now;
-  const defaultSpan =
-    query.bucket === "hour" ? 2 * DAY_MS : query.bucket === "week" ? 180 * DAY_MS : 30 * DAY_MS;
-  const from = query.from ?? new Date(to.getTime() - defaultSpan);
+  const from = query.from ?? new Date(to.getTime() - DEFAULT_SPAN_MS[query.bucket]);
   return { from, to };
 }
 
 const BUCKET_MS: Record<TrendQuery["bucket"], number> = {
+  minute: 60_000,
+  "5min": 300_000,
   hour: 3_600_000,
   day: DAY_MS,
   week: 7 * DAY_MS,
+};
+
+const DEFAULT_SPAN_MS: Record<TrendQuery["bucket"], number> = {
+  minute: 3_600_000,
+  "5min": 6 * 3_600_000,
+  hour: 2 * DAY_MS,
+  day: 30 * DAY_MS,
+  week: 180 * DAY_MS,
+};
+
+// Koszyk w czasie lokalnym (`timestamp` bez strefy): minuty przez `date_bin` (5 min nie ma
+// w `date_trunc`), dłuższe przez `date_trunc` (tydzień od poniedziałku).
+const BUCKET_SQL: Record<TrendQuery["bucket"], { interval: string; trunc: string | null }> = {
+  minute: { interval: "1 minute", trunc: "minute" },
+  "5min": { interval: "5 minutes", trunc: null },
+  hour: { interval: "1 hour", trunc: "hour" },
+  day: { interval: "1 day", trunc: "day" },
+  week: { interval: "1 week", trunc: "week" },
+};
+
+function bucketSql(bucket: TrendQuery["bucket"], local: SQL): SQL {
+  const { interval, trunc } = BUCKET_SQL[bucket];
+  return trunc
+    ? sql`date_trunc(${sql.raw(`'${trunc}'`)}, ${local})`
+    : sql`date_bin(${sql.raw(`'${interval}'`)}::interval, ${local}, timestamp '2000-01-01')`;
+}
+
+const BUCKET_LABEL: Record<TrendQuery["bucket"], string> = {
+  minute: `'YYYY-MM-DD"T"HH24:MI'`,
+  "5min": `'YYYY-MM-DD"T"HH24:MI'`,
+  hour: `'YYYY-MM-DD"T"HH24:00'`,
+  day: `'YYYY-MM-DD'`,
+  week: `'YYYY-MM-DD'`,
 };
 
 // Liczba wykrytych incydentów w czasie (wykres trendu): koszyki bez incydentów też są (zera),
@@ -53,10 +86,10 @@ export async function incidentTrend(
   if ((to.getTime() - from.getTime()) / BUCKET_MS[query.bucket] > MAX_BUCKETS) {
     throw new RangeError(`Zakres daje ponad ${MAX_BUCKETS} koszyków — zwiększ \`bucket\``);
   }
-  const unit = sql.raw(`'${query.bucket}'`);
-  const step = sql.raw(`'1 ${query.bucket}'`);
-  const label = sql.raw(query.bucket === "hour" ? `'YYYY-MM-DD"T"HH24:00'` : `'YYYY-MM-DD'`);
+  const step = sql.raw(`'${BUCKET_SQL[query.bucket].interval}'`);
+  const label = sql.raw(BUCKET_LABEL[query.bucket]);
   const tz = sql.raw(`'${TIME_ZONE}'`);
+  const bucketOf = (value: SQL) => bucketSql(query.bucket, sql`timezone(${tz}, ${value})`);
 
   const conditions: SQL[] = [
     gte(analysisResults.createdAt, from),
@@ -72,13 +105,13 @@ export async function incidentTrend(
   const rows = await db.execute<{ bucket: string; module: AnalysisModule | null; n: number }>(sql`
     with buckets as (
       select generate_series(
-        date_trunc(${unit}, timezone(${tz}, ${from.toISOString()}::timestamptz)),
-        date_trunc(${unit}, timezone(${tz}, ${to.toISOString()}::timestamptz)),
+        ${bucketOf(sql`${from.toISOString()}::timestamptz`)},
+        ${bucketOf(sql`${to.toISOString()}::timestamptz`)},
         ${step}::interval
       ) as bucket
     ),
     hits as (
-      select date_trunc(${unit}, timezone(${tz}, ${analysisResults.createdAt})) as bucket,
+      select ${bucketOf(sql`${analysisResults.createdAt}`)} as bucket,
         ${analysisResults.module}::text as module, count(*)::int as n
       from ${analysisResults}
       inner join ${materials} on ${materials.id} = ${analysisResults.materialId}

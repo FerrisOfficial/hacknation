@@ -21,6 +21,7 @@ import { ANALYSIS_MODULES, type ModuleThreshold } from "@/lib/analysis/modules";
 import {
   type SourceItem,
   sourceHasError,
+  type TrendRange,
   useIncidents,
   useRunSource,
   useSources,
@@ -176,12 +177,12 @@ function StatusLink({ status, from }: { status: UiStatus; from: string }) {
 
 export function Overview() {
   const router = useRouter();
-  const [range, setRange] = useState<"7" | "30">("7");
+  const [range, setRange] = useState<TrendRange>("7d");
   const thresholds = useThresholds();
   const sources = useSources();
   const open = useIncidents({ status: ["new"], page_size: 1 });
   const weekFrom = daysAgoIso(6);
-  const trend = useTrend(daysAgoIso(range === "7" ? 6 : 29));
+  const trend = useTrend(range);
 
   useHotkeys({ Enter: () => router.push("/kolejka") });
 
@@ -231,8 +232,10 @@ export function Overview() {
             value={range}
             onChange={setRange}
             tabs={[
-              { value: "7", label: "7 dni" },
-              { value: "30", label: "30 dni" },
+              { value: "5m", label: "5 min" },
+              { value: "1h", label: "1 h" },
+              { value: "7d", label: "7 dni" },
+              { value: "30d", label: "30 dni" },
             ]}
           />
         </div>

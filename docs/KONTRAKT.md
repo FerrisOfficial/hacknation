@@ -202,7 +202,7 @@ Klatka filmu (dowód reguł wizualnych): `GET /api/incidents/:id/frames/:file` z
 
 ## 7. `GET /api/stats/trend`
 
-Parametry: `from`, `to`
+Parametry: `from`, `to`, `bucket` (opcjonalny): `day` (domyślnie), `5min` albo `minute`
 
 ```json
 {
@@ -212,7 +212,7 @@ Parametry: `from`, `to`
 }
 ```
 
-Liczba incydentów ze score ≥ próg modułu.
+Liczba incydentów ze score ≥ próg modułu w koszyku czasu (Europe/Warsaw). `date` to `YYYY-MM-DD` dla `day`, a dla `5min` i `minute` początek koszyka `YYYY-MM-DDTHH:MM`. Koszyki minutowe zasilają wykres „5 min” i „1 h” na Przeglądzie.
 
 ## 8. `GET` / `PUT /api/settings/threshold`
 
