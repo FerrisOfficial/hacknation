@@ -269,16 +269,28 @@ export function Entity() {
             </div>
             <div className="flex flex-col gap-4">
               <Card className="p-4">
-                <SectionTitle>Publikujący o tym podmiocie</SectionTitle>
-                <ul className="mt-2 flex flex-col gap-1 text-[13px] text-ink-700">
+                <SectionTitle>Reklamujący tę firmę</SectionTitle>
+                <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-[13px]">
                   {[...publishers.entries()]
                     .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
                     .map(([publisher, count]) => (
-                      <li key={publisher}>
-                        {publisher} · {count} {plural(count, "materiał", "materiały", "materiałów")}
-                      </li>
+                      <div key={publisher} className="contents">
+                        <dt className="truncate font-medium text-ink-900">{publisher}</dt>
+                        <dd className="tnum text-ink-600">
+                          {count} {plural(count, "materiał", "materiały", "materiałów")}
+                        </dd>
+                      </div>
                     ))}
-                </ul>
+                </dl>
+                {publishers.size > 3 ? (
+                  <Link
+                    href="/reklamy"
+                    className="mt-3 inline-block font-medium text-[13px] text-primary-700 hover:underline"
+                  >
+                    + {publishers.size - 3} innych w rejestrze Reklamy →
+                  </Link>
+                ) : null}
               </Card>
               {firstId ? <Registry id={firstId} /> : null}
               {decisions.length ? (

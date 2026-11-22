@@ -494,6 +494,20 @@ export function Queue() {
       ) : flat.length === 0 ? (
         filtersActive ? (
           <EmptyState illustration="archiwum" title="Nic nie pasuje do filtrów">
+            <span className="block">
+              {[
+                params.date !== "wszystko" ? `Data: ostatnie ${params.date} dni` : null,
+                params.platform !== "wszystkie"
+                  ? `Źródło: ${PLATFORM_LABEL[params.platform]}`
+                  : null,
+                params.risk !== "wszystkie" ? "Ryzyko: wysokie" : null,
+                params.module !== "naruszenia" && params.module !== "wszystkie"
+                  ? `Rodzaj: ${MODULE_NAME[params.module].toLowerCase()}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
             <Button
               className="mt-2"
               onClick={() =>
