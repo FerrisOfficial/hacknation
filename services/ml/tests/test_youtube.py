@@ -284,7 +284,9 @@ def test_collect_videos_transcripts_and_linked_pages() -> None:
     assert geolink.followed and geolink.final_domain == "broker.example"
     assert geolink.title == "Broker Przykładowy — konto"
     assert geolink.text == "Otwórz rachunek. Inwestowanie wiąże się z ryzykiem."
-    assert (instagram.domain, instagram.followed) == ("instagram.com", False)
+    # Kopia strony z dnia pobrania (Okno sprawy, reguły 7 i 8 M2).
+    assert geolink.html is not None and "Otwórz rachunek." in geolink.html
+    assert (instagram.domain, instagram.followed, instagram.html) == ("instagram.com", False, None)
     assert kurs.followed and kurs.title == "Kurs"
     # Ten sam link afiliacyjny w dwóch filmach pobieramy raz.
     assert plain.links == (geolink,)

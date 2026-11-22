@@ -1,6 +1,7 @@
 import type { components } from "@app/api-ml";
 import { describe, expect, it } from "vitest";
 import {
+  linkedPageHtml,
   type YoutubeCollection,
   youtubeMaterialRows,
   youtubeSearchSource,
@@ -19,6 +20,7 @@ const BROKER_PAGE: LinkedPage = {
   text: "Otwórz rachunek.",
   content_hash: "hash-broker",
   error: null,
+  html: "<html><body>Otwórz rachunek.</body></html>",
 };
 const INSTAGRAM: LinkedPage = {
   url: "https://www.instagram.com/kanal",
@@ -30,6 +32,7 @@ const INSTAGRAM: LinkedPage = {
   text: null,
   content_hash: null,
   error: null,
+  html: null,
 };
 const BROKEN: LinkedPage = {
   ...INSTAGRAM,
@@ -165,6 +168,19 @@ describe("youtubeMaterialRows", () => {
         ],
       },
     });
+  });
+
+  it("strona z linku dostaje kopię HTML z dnia pobrania, film i strona bez kopii nie", () => {
+    const html = linkedPageHtml(COLLECTION);
+    expect([...html]).toEqual([["https://www.broker.example/pl/konto", BROKER_PAGE.html]]);
+    const withRefs = youtubeMaterialRows(
+      COLLECTION,
+      IDS,
+      SCRAPED_AT,
+      new Map([["https://www.broker.example/pl/konto", "sha256:abc"]]),
+    );
+    expect(withRefs.map((row) => row.contentRef ?? null)).toEqual([null, null, "sha256:abc"]);
+    expect(rows[2]?.contentRef).toBeNull();
   });
 
   it("pusty wynik to brak wierszy", () => {

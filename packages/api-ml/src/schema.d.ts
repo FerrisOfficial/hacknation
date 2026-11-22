@@ -630,6 +630,11 @@ export interface components {
             content_hash: string | null;
             /** Error */
             error: string | null;
+            /**
+             * Html
+             * @description Surowy HTML strony z dnia pobrania (kopia do materials.content_ref).
+             */
+            html: string | null;
         };
         /** YoutubeTranscript */
         YoutubeTranscript: {

@@ -1439,6 +1439,18 @@
               }
             ],
             "title": "Error"
+          },
+          "html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Html",
+            "description": "Surowy HTML strony z dnia pobrania (kopia do materials.content_ref)."
           }
         },
         "type": "object",
@@ -1451,7 +1463,8 @@
           "title",
           "text",
           "content_hash",
-          "error"
+          "error",
+          "html"
         ],
         "title": "YoutubeLinkedPage"
       },

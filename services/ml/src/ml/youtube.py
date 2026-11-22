@@ -155,6 +155,8 @@ class LinkedPage:
     text: str | None = None
     content_hash: str | None = None
     error: str | None = None
+    # Surowy HTML z dnia pobrania — kopia strony do Okna sprawy i reguł M2 dla stron WWW (R4).
+    html: str | None = None
 
 
 @dataclass(frozen=True)
@@ -473,6 +475,7 @@ def scrape_linked_page(url: str, *, client: httpx.Client) -> LinkedPage:
         title=page.title,
         text=page.text[:MAX_LINKED_TEXT],
         content_hash=page.content_hash,
+        html=page.html,
     )
 
 

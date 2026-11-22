@@ -1,7 +1,8 @@
 import "server-only";
 import type { MlClient } from "@app/api-ml";
 import type { NewMaterial } from "@app/db";
-import { type YoutubeCollection, youtubeMaterialRows } from "./youtube-materials";
+import { putContent } from "@/lib/content-store";
+import { linkedPageHtml, type YoutubeCollection, youtubeMaterialRows } from "./youtube-materials";
 
 // Kolektor YouTube: wyszukiwanie w serwisie ML (bezstanowy) → wiersze `materials`. Zapis do bazy,
 // historię zadania i kolejkę analizy robi pipeline (@/lib/pipeline/scrape).
@@ -72,11 +73,21 @@ async function runChannelCollector(
   return data;
 }
 
-function summarize(
+// Kopie HTML stron z linków do bazy treści (jak strony WWW w @/lib/pipeline/scrape) — bez nich
+// Okno sprawy nie ma kopii strony z dnia pobrania, a M2 nie sprawdzi reguł 7 i 8 dla strony.
+async function storeLinkedPages(collection: YoutubeCollection): Promise<Map<string, string>> {
+  const refs = new Map<string, string>();
+  for (const [url, html] of linkedPageHtml(collection)) {
+    refs.set(url, await putContent(html));
+  }
+  return refs;
+}
+
+async function summarize(
   collection: YoutubeCollection,
   ids: { sourceId: string; jobId: string },
-): YoutubeCollected {
-  const rows = youtubeMaterialRows(collection, ids, new Date());
+): Promise<YoutubeCollected> {
+  const rows = youtubeMaterialRows(collection, ids, new Date(), await storeLinkedPages(collection));
   return {
     rows,
     videos: collection.videos.length,
