@@ -4,12 +4,14 @@ import {
   analysisResults,
   type Db,
   eq,
+  incidentEvents,
   type Material,
   materials,
   sql,
 } from "@app/db";
 import type { AnalysisResultInput } from "@/lib/analysis/contract";
 import { readIncidentDetails } from "@/lib/incidents/contract";
+import { systemEvents } from "@/lib/incidents/history";
 import { publishEvent } from "@/lib/realtime/publish";
 import { getThresholdSettings } from "./thresholds";
 
@@ -18,7 +20,8 @@ type AnalyzedMaterial = Pick<Material, "id" | "title" | "url" | "author" | "cont
 // Agregacja wyników modułów 1–3 dla materiału: upsert po (materiał, moduł) — ponowna analiza
 // nadpisuje score/label/details, a status przeglądu analityka zostaje. Wynik, który właśnie
 // przekroczył próg `alert` swojego modułu (nowy albo wcześniej poniżej), idzie do Socket.io jako
-// `incident.high_risk` (docs/KONTRAKT.md §10).
+// `incident.high_risk` (docs/KONTRAKT.md §10). Oflagowanie, alert i zmiana score'u incydentu
+// trafiają do historii (`incident_events`, autor = system).
 export async function saveAnalysisResults(
   db: Db,
   material: AnalyzedMaterial,
@@ -64,9 +67,17 @@ export async function saveAnalysisResults(
     }
 
     for (const result of saved) {
-      const alert = settings[result.module].alert;
+      const { flag, alert } = settings[result.module];
       const before = previous.get(result.module);
-      if (result.score < alert || (before !== undefined && before >= alert)) continue;
+      const events = systemEvents({ score: result.score, before, flag, alert });
+      if (events.length > 0) {
+        await tx
+          .insert(incidentEvents)
+          .values(
+            events.map((event) => ({ resultId: result.id, ...event, actorId: null, at: now })),
+          );
+      }
+      if (!events.some((event) => event.kind === "alert")) continue;
       // NOTIFY w transakcji wychodzi dopiero po COMMIT — przeglądarka nie dostanie alertu
       // o wyniku, którego nie ma w bazie.
       await publishEvent(tx, {

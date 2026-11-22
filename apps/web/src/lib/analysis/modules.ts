@@ -18,9 +18,25 @@ export const AI_MODULES = [
 export const REVIEW_STATUSES = [
   "new",
   "in_review",
+  "postponed",
   "confirmed",
   "dismissed",
 ] as const satisfies readonly ReviewStatus[];
+
+// Statusy bez decyzji analityka: kalibracja nie liczy ich do TP/FP/FN/TN.
+export const UNDECIDED_STATUSES = [
+  "new",
+  "in_review",
+  "postponed",
+] as const satisfies readonly ReviewStatus[];
+
+export const STATUS_LABELS: Record<ReviewStatus, string> = {
+  new: "Nowy",
+  in_review: "W trakcie",
+  postponed: "Odłożony",
+  confirmed: "Potwierdzony",
+  dismissed: "Fałszywy alarm",
+};
 
 export const PLATFORMS = [
   "web",

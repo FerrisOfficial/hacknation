@@ -37,6 +37,8 @@ Dashboard (bez logowania, tylko localhost):
 | `POST /materials/:id/analyze` | ponowna analiza AI |
 | `GET /results` | wyniki modułów (materiał × moduł) |
 | `GET /incidents` · `GET/PATCH /incidents/:id` · `GET /incidents/:id/snapshot` | incydenty dla dashboardu (wynik modułu ≥ próg `flag`), szczegół z dowodami, zmiana statusu, kopia strony — kształty w [KONTRAKT.md](KONTRAKT.md) §4–§6 |
+| `GET /me` | analityk z env (`UI_USER_NAME`, `UI_USER_ROLE`, `UI_USER_ID`) — autor decyzji i wpisów w historii (tabele `reviewers`, `incident_events`) |
+| `GET /entities/dossier?firm=` | teczka podmiotu: ZIP z potwierdzonymi materiałami (kopia HTML, tekst, `details`, historia) |
 | `GET /settings/threshold` · `PUT /settings/threshold` | progi `flag` i `alert` per moduł ([KONTRAKT.md](KONTRAKT.md) §8) |
 | `GET /calibration?module=&threshold=` | TP/FP/FN/TN, precyzja, pełność i liczba oflagowanych dla progu ([KONTRAKT.md](KONTRAKT.md) §9) |
 | `GET /stats/summary` | kafelki: źródła, materiały, wyniki per moduł/ryzyko/status, zadania z 24 h |
@@ -118,4 +120,4 @@ Typy: `apps/web/src/lib/realtime/events.ts`.
 
 ## Zmienne środowiskowe (`apps/web/.env.example`)
 
-`REALTIME_PORT`, `REALTIME_HOST`, `REALTIME_CORS_ORIGIN` (Socket.io), `WORKER_ENABLED`, `SCRAPE_CONCURRENCY`, `ANALYZE_CONCURRENCY` (worker), `CONTENT_STORE_DIR` (baza treści), `COLLECTOR_TOKEN` (endpointy dla maszyn).
+`REALTIME_PORT`, `REALTIME_HOST`, `REALTIME_CORS_ORIGIN` (Socket.io), `WORKER_ENABLED`, `SCRAPE_CONCURRENCY`, `ANALYZE_CONCURRENCY` (worker), `CONTENT_STORE_DIR` (baza treści), `COLLECTOR_TOKEN` (endpointy dla maszyn), `UI_USER_NAME`, `UI_USER_ROLE`, `UI_USER_ID` (kto pracuje w dashboardzie, bez logowania).

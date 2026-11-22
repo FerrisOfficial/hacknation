@@ -126,12 +126,21 @@ Parametry: `module`, `from`, `to`, `platform`, `min_score`, `status`, `page`
       "platform": "web",
       "url": "string",
       "created_at": "2026-11-21T20:00:00Z",
-      "status": "new"
+      "title": "string | null",
+      "in_register": true,
+      "status": "new",
+      "reviewed_by": { "id": "uuid", "name": "Marta Kowalska", "role": "analityczka" },
+      "reviewed_at": "2026-11-21T21:00:00Z",
+      "review_note": "string | null"
     }
   ],
   "total": 0
 }
 ```
+
+- `title`: `materials.title`; `in_register`: `details.entity.in_register`.
+- `reviewed_by` / `reviewed_at`: kto i kiedy ostatnio zmienił status (także automatyczne `in_review` po otwarciu sprawy). `null` przy `status = new`.
+- `review_note`: powód decyzji (np. „dowód niepełny” przy `postponed`), inaczej `null`.
 
 ## 5. `GET /api/incidents/:id`
 
@@ -142,6 +151,9 @@ Parametry: `module`, `from`, `to`, `platform`, `min_score`, `status`, `page`
   "score": 0.8,
   "label": "naruszenie",
   "status": "new",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "review_note": null,
   "created_at": "2026-11-21T20:00:00Z",
   "material": {
     "url": "string",
@@ -151,11 +163,26 @@ Parametry: `module`, `from`, `to`, `platform`, `min_score`, `status`, `page`
     "text": "string",
     "published_at": "string | null",
     "scraped_at": "string",
-    "has_snapshot": true
+    "has_snapshot": true,
+    "duration_s": 312,
+    "content_hash": "sha256 hex"
   },
-  "details": "kształt z punktu 3"
+  "details": "kształt z punktu 3",
+  "history": [
+    { "at": "2026-11-21T21:00:00Z", "actor": { "id": "uuid", "name": "Marta Kowalska", "role": "analityczka" }, "action": "Odłożony: dowód niepełny", "status": "postponed" },
+    { "at": "2026-11-21T20:00:00Z", "actor": null, "action": "oflagowano 0,84 przy progu 0,55", "status": null }
+  ]
 }
 ```
+
+- `reviewed_by`, `reviewed_at`, `review_note`: jak w §4.
+- `material.duration_s`: długość filmu z metadanych YouTube, `null` dla stron WWW.
+- `material.content_hash`: SHA-256 zapisanej kopii (R4) — surowego HTML-a z dnia scrapingu, a dla materiałów bez kopii (np. filmów) skrót tekstu `materials.content_hash`.
+- `history`: od najnowszego. `actor = null` = system: oflagowanie (`oflagowano 0,84 przy progu 0,55`), alert (`alert: wysokie ryzyko …`), ponowna analiza ze zmianą score'u. Zmiany statusu mają autora i `status`. Wyniki sprzed historii dostają wpis `oflagowano <score>` z datą wykrycia.
+
+Teczka podmiotu (Z7): `GET /api/entities/dossier?firm=<nazwa>` zwraca `application/zip` (`Content-Disposition: attachment`). `firm` = nazwa podmiotu jak w Kolejce (`firm_name`, a bez niej `advertiser`). W środku `spis.txt`, `teczka.json` i katalog na każdy potwierdzony materiał: `material.json` (materiał, wyniki modułów z `details` i historią), `tekst.txt`, `kopia.html` (gdy jest kopia). Bierze wszystkie potwierdzone, także poniżej obecnego progu `flag`. 404, gdy podmiot nie ma potwierdzonych materiałów.
+
+Analityk: `GET /api/me` → `{ "id": "uuid", "name": "string", "role": "string | null" }`. Bez logowania to jeden użytkownik z env (`UI_USER_NAME`, `UI_USER_ROLE`, opcjonalnie `UI_USER_ID`).
 
 Kopia strony: `GET /api/incidents/:id/snapshot` zwraca `raw_html` jako `text/html`.
 
@@ -164,10 +191,10 @@ Klatka filmu (dowód reguł wizualnych): `GET /api/incidents/:id/frames/:file` z
 ## 6. `PATCH /api/incidents/:id`
 
 ```json
-{ "status": "confirmed" }
+{ "status": "postponed", "review_note": "dowód niepełny" }
 ```
 
-`status`: `new` | `in_review` | `confirmed` | `dismissed`
+`status`: `new` | `in_review` | `postponed` | `confirmed` | `dismissed`. `review_note` opcjonalne (do 500 znaków); bez niego poprzedni powód znika. Zapisuje autora (`/api/me`) i czas, a przy zmianie statusu albo powodu — wpis w `history`. `new` czyści autora i czas.
 
 ## 7. `GET /api/stats/trend`
 
@@ -210,7 +237,7 @@ Liczba incydentów ze score ≥ próg modułu.
 }
 ```
 
-Liczone na rekordach ze statusem `confirmed` (naruszenie) i `dismissed` (brak naruszenia).
+Liczone na rekordach ze statusem `confirmed` (naruszenie) i `dismissed` (brak naruszenia). `new`, `in_review` i `postponed` to brak decyzji.
 
 ## 10. WebSocket: `incident.high_risk`
 
@@ -224,7 +251,7 @@ Wysyłany po zapisie wyniku, gdy score ≥ `alert` danego modułu.
 
 - `module`: `finfluencer` | `risk_disclosure` | `unauthorized_advisory`
 - `platform` (enum w `packages/db/src/schema.ts`): `web` | `facebook` | `instagram` | `tiktok` | `youtube` | `x` | `linkedin` | `telegram`
-- `status`: `new` | `in_review` | `confirmed` | `dismissed`
+- `status`: `new` | `in_review` | `postponed` | `confirmed` | `dismissed`
 - `id` incydentu = id wyniku analizy (`analysis_results`), czyli para (materiał, moduł). Jeden materiał może dać do trzech incydentów.
 
 ## Do zrobienia: różnice względem obecnego `main`
@@ -275,28 +302,28 @@ Frontend jest już zrobiony według ekranów hi-fi z Figmy; backend dostosowuje 
 W tej wersji zbieramy tylko **YouTube i strony WWW**; Instagram, Facebook, TikTok zostają w enumie, ale UI nie pokazuje ich w filtrach.
 
 **Status „Odłożony”**
-- [ ] `review_status` dostaje wartość `postponed` (migracja). Słownik `status` w tym pliku: `new | in_review | postponed | confirmed | dismissed`.
-- [ ] `PATCH /api/incidents/:id` przyjmuje `{ "status": "...", "review_note": "string" }` (`review_note` opcjonalne; UI wysyła je przy Odłóż: „dowód niepełny”, „czekam na nowe materiały podmiotu”, „do konsultacji”).
-- [ ] Kalibracja traktuje `postponed` jak brak decyzji (nie liczy do TP/FP/FN/TN).
+- [x] `review_status` dostaje wartość `postponed` (migracja). Słownik `status` w tym pliku: `new | in_review | postponed | confirmed | dismissed`.
+- [x] `PATCH /api/incidents/:id` przyjmuje `{ "status": "...", "review_note": "string" }` (`review_note` opcjonalne; UI wysyła je przy Odłóż: „dowód niepełny”, „czekam na nowe materiały podmiotu”, „do konsultacji”).
+- [x] Kalibracja traktuje `postponed` jak brak decyzji (nie liczy do TP/FP/FN/TN).
 
 **Autor i czas decyzji (R16)**
-- [ ] `GET /api/me` → `{ "id": "string", "name": "Marta Kowalska", "role": "analityczka" }`. Bez logowania: stały użytkownik z env (np. `UI_USER_NAME`, `UI_USER_ROLE`).
-- [ ] `PATCH` zapisuje `reviewed_by` (użytkownik z `/api/me`) i `reviewed_at` (kolumny już są w `analysis_results`), także przy automatycznym `in_review` po otwarciu materiału.
-- [ ] §4 i §5: każdy incydent ma `reviewed_by: { id, name, role } | null`, `reviewed_at: string | null`, `review_note: string | null`.
-- [ ] §5: `history: [{ "at": "ISO", "actor": { id, name, role } | null, "action": "oflagowano 0,84 przy progu 0,55", "status": "confirmed" | null }]` — zdarzenia materiału od najnowszego: oflagowanie, alert, każda zmiana statusu z autorem. `actor = null` = system.
+- [x] `GET /api/me` → `{ "id": "string", "name": "Marta Kowalska", "role": "analityczka" }`. Bez logowania: stały użytkownik z env (np. `UI_USER_NAME`, `UI_USER_ROLE`).
+- [x] `PATCH` zapisuje `reviewed_by` (użytkownik z `/api/me`) i `reviewed_at` (kolumny już są w `analysis_results`), także przy automatycznym `in_review` po otwarciu materiału.
+- [x] §4 i §5: każdy incydent ma `reviewed_by: { id, name, role } | null`, `reviewed_at: string | null`, `review_note: string | null`.
+- [x] §5: `history: [{ "at": "ISO", "actor": { id, name, role } | null, "action": "oflagowano 0,84 przy progu 0,55", "status": "confirmed" | null }]` — zdarzenia materiału od najnowszego: oflagowanie, alert, każda zmiana statusu z autorem. `actor = null` = system.
 
 **Lista incydentów (§4)**
-- [ ] `title: string | null` (`materials.title`): tytuł wiersza w Kolejce. Bez niego UI składa tytuł z `advertiser` i `summary`.
-- [ ] `in_register: boolean | null` (z `details.entity`): chip „w rejestrze KNF” w nagłówku grupy.
+- [x] `title: string | null` (`materials.title`): tytuł wiersza w Kolejce. Bez niego UI składa tytuł z `advertiser` i `summary`.
+- [x] `in_register: boolean | null` (z `details.entity`): chip „w rejestrze KNF” w nagłówku grupy.
 
 **Wideo i dowód (§5)**
-- [ ] `material.has_video: boolean`, `material.duration_s: number | null`. Pobrany film YouTube **zostaje na dysku** po wycięciu klatek (zmiana względem [KLATKI.md](KLATKI.md), krok 5), bo Okno sprawy odtwarza go od oflagowanej sekundy.
+- [ ] `material.has_video: boolean` — czeka na pobieranie filmów ([KLATKI.md](KLATKI.md)); do tego czasu pola nie ma i UI nie pokazuje odtwarzacza. `material.duration_s: number | null` — jest (metadane YouTube). Pobrany film YouTube **zostaje na dysku** po wycięciu klatek (zmiana względem [KLATKI.md](KLATKI.md), krok 5), bo Okno sprawy odtwarza go od oflagowanej sekundy.
 - [ ] `GET /api/incidents/:id/video` → `video/mp4` z obsługą `Range` (przewijanie w `<video>`). 404, gdy filmu nie ma.
 - [ ] `evidence.frame` i `GET /api/incidents/:id/frames/:file` jak w §3 i §5. UI pokazuje klatkę z ramką `box` i przewija film do `timestamp_s`.
-- [ ] `material.content_hash: string | null` (SHA-256 kopii, R4) — wyświetlany przy „kopia …”.
+- [x] `material.content_hash: string | null` (SHA-256 kopii, R4) — wyświetlany przy „kopia …”.
 
 **Teczka podmiotu (Z7)**
-- [ ] `GET /api/entities/dossier?firm=<firm_name>` → `application/zip` (`Content-Disposition: attachment`): potwierdzone materiały podmiotu z kopią HTML lub filmem, klatkami dowodów, `details` i historią decyzji.
+- [x] `GET /api/entities/dossier?firm=<firm_name>` → `application/zip` (`Content-Disposition: attachment`): potwierdzone materiały podmiotu z kopią HTML lub filmem, klatkami dowodów, `details` i historią decyzji. Na razie bez filmu i klatek — dojdą razem z warstwą pobierania (KLATKI.md).
 
 **Bez zmian kontraktu, ale ważne dla UI**
 - Zmiana progu `flag` od razu zmienia listę incydentów (obecne zachowanie). Ekran Kalibracji tak to opisuje.

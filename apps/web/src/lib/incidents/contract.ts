@@ -47,6 +47,26 @@ export type IncidentDetails = {
 
 // ─── §4–§10: REST i Socket.io ───────────────────────────────────────────────────────────────
 
+// Autor decyzji (R16), także odpowiedź GET /api/me.
+export type Reviewer = { id: string; name: string; role: string | null };
+
+// Decyzja analityka przy incydencie. `reviewed_by`/`reviewed_at` = null przy statusie `new`.
+export type Review = {
+  status: ReviewStatus;
+  reviewed_by: Reviewer | null;
+  reviewed_at: string | null;
+  // Powód przy „Odłożony” i „Fałszywy alarm”, np. „dowód niepełny”.
+  review_note: string | null;
+};
+
+// Zdarzenie w historii incydentu (§5). `actor` = null to system (oflagowanie, alert, analiza).
+export type HistoryEntry = {
+  at: string;
+  actor: Reviewer | null;
+  action: string;
+  status: ReviewStatus | null;
+};
+
 export type IncidentListItem = {
   id: string;
   module: AnalysisModule;
@@ -58,8 +78,10 @@ export type IncidentListItem = {
   platform: Platform;
   url: string;
   created_at: string;
-  status: ReviewStatus;
-};
+  // Tytuł materiału (materials.title) i rejestr KNF z `details.entity` — nagłówki w Kolejce.
+  title: string | null;
+  in_register: boolean | null;
+} & Review;
 
 export type IncidentList = { items: IncidentListItem[]; total: number };
 
@@ -68,7 +90,6 @@ export type IncidentDetail = {
   module: AnalysisModule;
   score: number;
   label: string;
-  status: ReviewStatus;
   created_at: string;
   material: {
     url: string;
@@ -79,9 +100,15 @@ export type IncidentDetail = {
     published_at: string | null;
     scraped_at: string;
     has_snapshot: boolean;
+    // Długość filmu w sekundach (metadane YouTube), null dla stron WWW.
+    duration_s: number | null;
+    // SHA-256 zapisanej kopii (R4): kopii HTML, a bez niej tekstu materiału.
+    content_hash: string;
   };
   details: IncidentDetails;
-};
+  // Od najnowszego: zmiany statusu z autorem, oflagowanie, alert, ponowna analiza.
+  history: HistoryEntry[];
+} & Review;
 
 export type TrendPoint = { date: string } & Record<AnalysisModule, number>;
 export type Trend = { points: TrendPoint[] };
