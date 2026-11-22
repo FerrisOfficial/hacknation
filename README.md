@@ -21,13 +21,13 @@ cp .env.example .env   # albo pnpm install, który tworzy .env sam
 docker compose up --build
 ```
 
-Pierwszy start pobiera model `gemma4:e2b` do Ollamy (kilka GB). Kolejne starty używają wolumenu.
+Domyślnie Moduł 2 działa na regułach (`M2_ENGINE=rules`) i nie pobiera żadnego modelu. Z LLM (`M2_ENGINE=hybrid`) pierwszy start pobiera Bielika do Ollamy (ok. 12 GB), kolejne używają wolumenu.
 
 | Usługa | Adres | Co robi |
 |---|---|---|
 | `web` | http://localhost:3000/hacknation | Next.js — dashboard i API |
 | `ml` | http://127.0.0.1:8000/docs | FastAPI — modele |
-| `ollama` | http://127.0.0.1:11434 | lokalny LLM (model z `OLLAMA_MODEL` w `.env`) |
+| `ollama` | http://127.0.0.1:11434 | lokalny LLM dla Modułu 2 (model z `OLLAMA_RISK_MODEL` w `.env`) |
 | `db` | 127.0.0.1:5432 | Postgres 17 — jedyna baza projektu |
 | `migrate`, `ollama-pull` | — | jednorazowo: migracje Drizzle, pobranie modelu |
 

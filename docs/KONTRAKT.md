@@ -33,7 +33,7 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
 
 `module`: `risk_disclosure` | `unauthorized_advisory` (M1 liczy backend bez modelu). W M3 `rules` = `["M3.advisory"]`.
 
-Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym samym `POST /analyze`: backend dodaje je do `rules`, gdy materiał ma wycięte klatki (`materials.metadata.frames.status = "done"`). Klatki serwis ML czyta z dysku po `material_id`, kształt wejścia się nie zmienia. Bez klatek te reguły dostają `n/a`. Plan: [KLATKI.md](KLATKI.md).
+Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym samym `POST /analyze`: backend dodaje je do `rules`, gdy materiał ma wycięte klatki (`materials.metadata.frames.status = "done"`). Klatki serwis ML czyta z dysku po `material_id`, kształt wejścia się nie zmienia. Bez klatek te reguły dostają `n/a`. Stan i plan: [KLATKI.md](KLATKI.md).
 
 ## 2. Model AI: wyjście
 
@@ -268,7 +268,7 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - [x] `POST /analyze` zwraca kształt z punktu 2: `findings[]` per reguła (`result`, `confidence`, `quote`, `reason`) oraz `label`, `probability`, `summary` — M2 (13 reguł tekstowych, #25), z `rule_scores` i `risk_score`.
 - [x] `pnpm api:generate` w tym samym PR.
 - [ ] `POST /media/frames`: pobranie filmu z YouTube i wycięcie klatek (osobna warstwa, bez OCR), plan w [KLATKI.md](KLATKI.md).
-- [ ] M2 w `POST /analyze`: reguły 4, 5, 6, 13 z klatek filmu (OCR + Gemma w module M2), `findings[]` z `frame` (punkty 1–2).
+- [x] M2 w `POST /analyze`: reguły 4, 5, 6, 13 z klatek filmu (OCR + pomiary pikseli, bez LLM), `findings[]` z `frame` (punkty 1–2). Klatki z `${MEDIA_DIR}/<material_id>/`, opis w [KLATKI.md](KLATKI.md).
 
 **Backend (`apps/web`)**
 - [x] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory`).

@@ -48,4 +48,6 @@ ollama create bielik-pl-11b-apt4:Q4_K_M -f Modelfile
 
 W `.env`: `M2_ENGINE=hybrid`, `OLLAMA_RISK_MODEL=bielik-pl-11b-apt4:Q4_K_M`, `OLLAMA_URL=http://host.docker.internal:11434`.
 
+**Reguły wizualne (4, 5, 6, 13)** dla filmów: `risk_visual.py`, OCR (RapidOCR, modele w paczce) + pomiary pikseli, bez LLM. Działają, gdy w `MEDIA_DIR/<material_id>/` są klatki z `manifest.json` — szczegóły i stan w [docs/KLATKI.md](../../docs/KLATKI.md). Pobierania klatek z YouTube jeszcze nie ma.
+
 Porównanie silników i modeli oraz ewaluacja na etykietach: `scripts/compare_m2.py`, `scripts/compare_models.py`, `scripts/eval_m2.py`.
