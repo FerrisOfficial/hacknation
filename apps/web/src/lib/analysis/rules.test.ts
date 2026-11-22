@@ -13,6 +13,21 @@ describe("requestedRuleIds", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("film YouTube dostaje w M2 regułę 7, a z klatkami także 8", () => {
+    expect(requestedRuleIds("risk_disclosure")).not.toContain("7");
+    expect(requestedRuleIds("risk_disclosure", { video: true })).toContain("7");
+    expect(requestedRuleIds("risk_disclosure", { video: true })).not.toContain("8");
+    expect(requestedRuleIds("risk_disclosure", { frames: true })).toContain("8");
+    expect(requestedRuleIds("unauthorized_advisory", { video: true })).not.toContain("7");
+  });
+
+  it("strona WWW z HTML-em dostaje w M2 reguły 7 i 8", () => {
+    const ids = requestedRuleIds("risk_disclosure", { page: true });
+    expect(ids).toContain("7");
+    expect(ids).toContain("8");
+    expect(requestedRuleIds("unauthorized_advisory", { page: true })).not.toContain("8");
+  });
+
   it("M3 nie dostaje reguł wizualnych", () => {
     expect(requestedRuleIds("unauthorized_advisory", { frames: true })).toEqual(
       requestedRuleIds("unauthorized_advisory"),

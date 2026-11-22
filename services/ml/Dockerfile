@@ -11,6 +11,14 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
 RUN uv sync --locked --no-dev --no-editable
 
+# Chromium (headless shell) dla reguł 7 i 8 M2 na stronach WWW: renderowanie zapisanego HTML-a
+# w trzech rozdzielczościach (risk_web.py). Wersja przeglądarki = wersja paczki playwright z uv.lock.
+# libatomic1: potrzebny sterownikowi Playwrighta (Node w paczce), slim go nie ma.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && /app/.venv/bin/playwright install --with-deps --only-shell chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --system --no-create-home app
 USER app
 ENV PATH="/app/.venv/bin:$PATH"

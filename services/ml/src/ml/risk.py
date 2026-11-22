@@ -48,8 +48,8 @@ _NOT_EVALUATED: dict[str, str] = {
     "4": "Wymaga renderowania strony (rozmiar czcionki) — nieoceniane w tej wersji.",
     "5": "Wymaga renderowania strony (kontrast, przesłonięcie) — nieoceniane w tej wersji.",
     "6": "Wymaga renderowania strony (widoczność ostrzeżenia) — nieoceniane w tej wersji.",
-    "7": "Wymaga renderowania strony (ostrzeżenie za kliknięciem) — nieoceniane w tej wersji.",
-    "8": "Wymaga renderowania na różnych ekranach — nieoceniane w tej wersji.",
+    "7": "Oceniana dla filmów (opis, transkrypcja, klatki); strony WWW wymagają renderowania.",
+    "8": "Oceniana z klatek filmu; strony WWW wymagają renderowania na różnych ekranach.",
     "9": "Wymaga oceny językowej (LLM) — nieoceniane w tej wersji.",
     "13": "Wymaga układu strony (ekspozycja wyników) — nieoceniane w tej wersji.",
 }
@@ -79,6 +79,9 @@ _FEATURES: dict[str, list[tuple[re.Pattern[str], float]]] = {
     ],
     "risk_warning": [
         (_p(r"\d+(?:[.,]\d+)?\s?%\s+rachunków\s+inwestorów\s+detalicznych\s+traci\s+pieniądze"), 0.99),
+        # Brzmienie ESMA (np. XTB): „79% rachunków inwestorów detalicznych odnotowuje straty
+        # pieniężne w wyniku handlu kontraktami CFD u niniejszego dostawcy CFD”.
+        (_p(r"rachunków\s+inwestorów\s+detalicznych\s+(?:odnotowuje|ponosi)\s+strat"), 0.99),
         (_p(r"ryzyk\w*\s+utraty\s+(?:części\s+lub\s+całości\s+|całości\s+|części\s+)?"
             r"(?:zainwestowan\w+\s+)?(?:kapitał|środk|pieniędzy)\w*"), 0.97),
         (_p(r"możesz\s+(?:stracić|utracić)|może(?:sz)?\s+ponieść\s+strat"), 0.95),

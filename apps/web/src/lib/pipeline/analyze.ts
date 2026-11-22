@@ -1,10 +1,12 @@
 import "server-only";
 import { type AnalysisModule, type Db, eq, type Material, materials } from "@app/db";
-import type { AnalysisResultInput, AnalyzeOutput } from "@/lib/analysis/contract";
+import type { AnalysisResultInput, AnalyzeOutput, AnalyzePage } from "@/lib/analysis/contract";
 import { buildAnalysisResult } from "@/lib/analysis/details";
 import { buildFinfluencerResult } from "@/lib/analysis/finfluencer";
 import { AI_MODULES } from "@/lib/analysis/modules";
 import { requestedRuleIds } from "@/lib/analysis/rules";
+import { videoParts } from "@/lib/analysis/video-parts";
+import { getContent } from "@/lib/content-store";
 import { framesDone } from "@/lib/media-state";
 import { analyzeMaterial } from "@/lib/ml";
 import { lookupEntity, lookupPromotedFirm, refineEntityByName } from "./entity";
@@ -39,6 +41,16 @@ export async function buildResults(
   );
 }
 
+// Limit `page.html` w serwisie ML (AnalyzePage) — większych stron nie renderujemy.
+const PAGE_HTML_MAX = 6_000_000;
+
+// HTML strony z dnia scrapingu (baza treści, starsze materiały: `raw_html`). null = brak kopii.
+async function pageSnapshot(material: Material): Promise<AnalyzePage | null> {
+  const html = material.contentRef ? await getContent(material.contentRef) : material.rawHtml;
+  if (!html || html.length > PAGE_HTML_MAX) return null;
+  return { url: material.url, html };
+}
+
 // Moduł 1 bez AI: firma z KNF w linkach materiału + sygnały reklamy (`@/lib/analysis/finfluencer`).
 export async function runFinfluencer(material: Material): Promise<AnalysisResultInput> {
   return buildFinfluencerResult(material, await lookupPromotedFirm(material));
@@ -67,16 +79,29 @@ export async function runAnalysis(
     m1.push(finfluencer);
   }
   const outputs: ModuleOutputs = [];
-  // Film z wyciętymi klatkami: M2 ocenia też reguły wizualne (4, 5, 6, 13) z klatek na dysku.
+  // Film z wyciętymi klatkami: M2 ocenia też reguły wizualne (4, 5, 6, 8, 13) z klatek na dysku.
   const frames = framesDone(material.metadata.frames);
+  // Film YouTube: M2 ocenia regułę 7 (ostrzeżenie tylko w rozwijanym opisie) z części filmu.
+  const video = videoParts(material);
+  // Strona WWW z zapisanym HTML-em: M2 ocenia reguły 7 i 8 z renderu w Chromium (serwis ML).
+  const page = video === null && wanted("risk_disclosure") ? await pageSnapshot(material) : null;
   try {
     for (const module of AI_MODULES.filter(wanted)) {
+      const m2 = module === "risk_disclosure";
+      const m2Video = m2 ? video : null;
+      const m2Page = m2 ? page : null;
       const output = await analyzeMaterial(
         {
           material_id: material.id,
           module,
           text: material.text,
-          rules: requestedRuleIds(module, { frames }),
+          rules: requestedRuleIds(module, {
+            frames,
+            video: m2Video !== null,
+            page: m2Page !== null,
+          }),
+          ...(m2Video ? { video: m2Video } : {}),
+          ...(m2Page ? { page: m2Page } : {}),
         },
         options.signal,
       );

@@ -197,6 +197,20 @@ export interface components {
             /** Phones */
             phones?: string[];
         };
+        /** AnalyzePage */
+        AnalyzePage: {
+            /**
+             * Url
+             * Format: uri
+             * @description Adres strony (baza dla względnych arkuszy CSS).
+             */
+            url: string;
+            /**
+             * Html
+             * @description Surowy HTML z dnia scrapingu.
+             */
+            html: string;
+        };
         /** AnalyzeRequest */
         AnalyzeRequest: {
             /** Material Id */
@@ -216,6 +230,10 @@ export interface components {
              * @description Reguły do oceny; pusta lista = wszystkie reguły modułu.
              */
             rules?: string[];
+            /** @description M2, reguła 7: części filmu YouTube (tytuł, opis, transkrypcja) osobno. */
+            video?: components["schemas"]["AnalyzeVideo"] | null;
+            /** @description M2, reguły 7 i 8 dla strony WWW: HTML renderowany w Chromium (bez JS). */
+            page?: components["schemas"]["AnalyzePage"] | null;
         };
         /** AnalyzeResponse */
         AnalyzeResponse: {
@@ -268,6 +286,24 @@ export interface components {
             model?: string | null;
             /** Error */
             error?: string | null;
+        };
+        /** AnalyzeVideo */
+        AnalyzeVideo: {
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Transcript
+             * @description Tekst transkrypcji; null = film bez transkrypcji.
+             */
+            transcript?: string | null;
         };
         /** FindingFrame */
         FindingFrame: {

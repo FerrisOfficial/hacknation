@@ -26,6 +26,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: uv sync --locked
         working-directory: services/ml
+      # Chromium dla testów reguł 7 i 8 M2 na stronach WWW (services/ml/tests/test_risk_web.py).
+      - run: uv run playwright install --with-deps --only-shell chromium
+        working-directory: services/ml
       - run: uv sync --locked
         working-directory: services/media
 

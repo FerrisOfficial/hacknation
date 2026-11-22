@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.routing import APIRoute
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
-from ml import advisory, knf, risk, risk_llm, risk_visual, youtube
+from ml import advisory, knf, risk, risk_llm, risk_video, risk_visual, risk_web, youtube
 from ml.model import Label, predict_sentiment
 from ml.scraper import ScrapeError, scrape
 
@@ -205,6 +205,21 @@ AnalysisModuleName = Literal["finfluencer", "risk_disclosure", "unauthorized_adv
 FindingResult = Literal["violation", "ok", "n/a"]
 
 
+class AnalyzeVideo(BaseModel):
+    title: str = Field(default="", max_length=1_000)
+    description: str = Field(default="", max_length=20_000)
+    transcript: str | None = Field(
+        default=None,
+        max_length=500_000,
+        description="Tekst transkrypcji; null = film bez transkrypcji.",
+    )
+
+
+class AnalyzePage(BaseModel):
+    url: AnyHttpUrl = Field(description="Adres strony (baza dla względnych arkuszy CSS).")
+    html: str = Field(max_length=6_000_000, description="Surowy HTML z dnia scrapingu.")
+
+
 class AnalyzeRequest(BaseModel):
     material_id: str = Field(min_length=1, max_length=100)
     module: AnalysisModuleName
@@ -212,6 +227,14 @@ class AnalyzeRequest(BaseModel):
     rules: list[str] = Field(
         default_factory=list,
         description="Reguły do oceny; pusta lista = wszystkie reguły modułu.",
+    )
+    video: AnalyzeVideo | None = Field(
+        default=None,
+        description="M2, reguła 7: części filmu YouTube (tytuł, opis, transkrypcja) osobno.",
+    )
+    page: AnalyzePage | None = Field(
+        default=None,
+        description="M2, reguły 7 i 8 dla strony WWW: HTML renderowany w Chromium (bez JS).",
     )
 
 
@@ -305,21 +328,48 @@ log = logging.getLogger(__name__)
 
 
 def _risk_disclosure(
-    text: str, rules: list[str] | None, material_id: str | None = None
+    text: str,
+    rules: list[str] | None,
+    material_id: str | None = None,
+    video: risk_video.VideoParts | None = None,
+    page: AnalyzePage | None = None,
 ) -> risk.RiskAnalysis:
-    """M2: reguły tekstowe, a gdy materiał ma klatki filmu, także wizualne (4, 5, 6, 13)."""
+    """M2: reguły tekstowe; gdy materiał ma klatki filmu, także wizualne (4, 5, 6, 8, 13);
+    dla filmu z częściami (`video`) reguła 7 — czy ostrzeżenie widać bez klikania;
+    dla strony WWW z HTML-em (`page`) reguły 7 i 8 z renderowania w trzech rozdzielczościach."""
     analysis = _risk_disclosure_text(text, rules)
+    if page is not None and any(rules is None or r in rules for r in risk_web.WEB_RULES):
+        web = {f.rule_id: f for f in _render_page(page, rules, text)}
+        findings = [web.pop(f.rule_id, f) for f in analysis.findings] + list(web.values())
+        analysis = risk.RiskAnalysis(findings=findings, summary=risk.summarize(findings))
     visual_rules = [r for r in risk_visual.VISUAL_RULES if rules is None or r in rules]
-    if material_id is None or not visual_rules:
+    wants_7 = video is not None and (rules is None or "7" in rules)
+    texts: list[risk_visual.FrameText] | None = None
+    if material_id is not None and (visual_rules or wants_7):
+        frames = risk_visual.load_frames(material_id)
+        if frames is not None:
+            texts = risk_visual.read_frames(frames)  # jedno przejście OCR dla wszystkich reguł
+    extra: dict[str, risk.Finding] = {}
+    if texts is not None and visual_rules:
+        extra = {
+            f.rule_id: f for f in risk_visual.evaluate_texts(texts) if f.rule_id in visual_rules
+        }
+    if video is not None and wants_7:
+        extra["7"] = risk_video.rule_7(video, texts)
+    if not extra:
         return analysis
-    frames = risk_visual.load_frames(material_id)
-    if frames is None:
-        return analysis
-    visual = {
-        f.rule_id: f for f in risk_visual.evaluate_frames(frames) if f.rule_id in visual_rules
-    }
-    findings = [visual.pop(f.rule_id, f) for f in analysis.findings] + list(visual.values())
+    findings = [extra.pop(f.rule_id, f) for f in analysis.findings] + list(extra.values())
     return risk.RiskAnalysis(findings=findings, summary=risk.summarize(findings))
+
+
+def _render_page(page: AnalyzePage, rules: list[str] | None, text: str) -> list[risk.Finding]:
+    """Reguły 7 i 8 strony WWW; bez przeglądarki albo przy błędzie renderowania — `n/a`."""
+    try:
+        return risk_web.evaluate(risk_web.measure(page.html, str(page.url)), rules, text)
+    except Exception as exc:  # Playwright bez Chromium, przekroczony czas, uszkodzony HTML
+        log.warning("Renderowanie strony do reguł 7 i 8 nie powiodło się", exc_info=True)
+        reason = f"Nie udało się wyrenderować strony: {type(exc).__name__}."
+        return risk_web.not_rendered(reason, rules)
 
 
 def _risk_disclosure_text(text: str, rules: list[str] | None) -> risk.RiskAnalysis:
@@ -386,7 +436,18 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     unknown = sorted(set(request.rules) - set(risk.RULE_IDS))
     if unknown:
         raise HTTPException(status_code=422, detail=f"Nieznane reguły M2: {', '.join(unknown)}")
-    analysis = _risk_disclosure(request.text, request.rules or None, request.material_id)
+    video = (
+        risk_video.VideoParts(
+            title=request.video.title,
+            description=request.video.description,
+            transcript=request.video.transcript,
+        )
+        if request.video
+        else None
+    )
+    analysis = _risk_disclosure(
+        request.text, request.rules or None, request.material_id, video, request.page
+    )
     return AnalyzeResponse(
         material_id=request.material_id,
         label=None,

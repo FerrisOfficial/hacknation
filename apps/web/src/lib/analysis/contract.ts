@@ -37,6 +37,19 @@ export type AnalyzeRequest = {
   module: (typeof ANALYSIS_MODULES)[number];
   text: string;
   rules: string[];
+  // M2, reguła 7: części filmu YouTube osobno (`videoParts` w `@/lib/analysis/video-parts`).
+  video?: AnalyzeVideo | null;
+  // M2, reguły 7 i 8 strony WWW: zapisany HTML, który serwis ML renderuje w Chromium.
+  page?: AnalyzePage | null;
+};
+
+export type AnalyzePage = { url: string; html: string };
+
+export type AnalyzeVideo = {
+  title: string;
+  description: string;
+  // null = film bez transkrypcji.
+  transcript: string | null;
 };
 
 export const FINDING_RESULTS = ["violation", "ok", "n/a"] as const;

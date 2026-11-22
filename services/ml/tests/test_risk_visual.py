@@ -51,7 +51,7 @@ def test_line_classification() -> None:
 
 def test_bad_frame_violates_all_visual_rules() -> None:
     findings = by_rule([(FrameRef(ts=42.0, file="42000.png", seconds=1.0), BAD)])
-    for rule in ("4", "5", "6", "13"):
+    for rule in ("4", "5", "6", "8", "13"):
         finding = findings[rule]
         assert finding.result == "violation", (rule, finding.reason)
         assert finding.frame is not None and finding.frame["file"] == "42000.png"
@@ -62,7 +62,7 @@ def test_bad_frame_violates_all_visual_rules() -> None:
 
 def test_good_frame_passes() -> None:
     findings = by_rule([(FrameRef(ts=0.0, file="0.png", seconds=8.0), GOOD)])
-    for rule in ("4", "5", "6", "13"):
+    for rule in ("4", "5", "6", "8", "13"):
         assert findings[rule].result == "ok", (rule, findings[rule].reason)
 
 
@@ -70,7 +70,7 @@ def test_no_frames_and_no_warning() -> None:
     assert {f.result for f in evaluate_frames([])} == {"n/a"}
     plain = frame(("Otworz konto juz dzis", (80, 200), 1.2, (255, 255, 255), 3))
     findings = by_rule([(FrameRef(ts=0.0, file="0.png", seconds=5.0), plain)])
-    assert {findings[r].result for r in ("4", "5", "6", "13")} == {"n/a"}
+    assert {findings[r].result for r in ("4", "5", "6", "8", "13")} == {"n/a"}
 
 
 @pytest.fixture
