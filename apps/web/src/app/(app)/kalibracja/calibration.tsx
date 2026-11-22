@@ -260,7 +260,7 @@ function DropList({
         <p className="mt-2 text-[13px] text-ink-600">
           {candidate < saved
             ? `Niższy próg dokłada do Naruszeń materiały z wynikiem od ${fmtScore(candidate)} do ${fmtScore(saved)}. Nikt ich jeszcze nie oceniał, więc nie zmieniają FP ani FN.`
-            : "Przesuń suwak, żeby zobaczyć, które materiały wypadną z Naruszeń."}
+            : `Przesuń suwak, żeby zobaczyć, które materiały wypadną z ${module === "finfluencer" ? "rejestru reklam" : "Naruszeń"}.`}
         </p>
       </Card>
     );
@@ -334,11 +334,13 @@ function ModuleCalibration({
   const diff =
     flaggedBefore !== undefined && flaggedAfter !== undefined ? flaggedBefore - flaggedAfter : null;
 
-  let headline = `Przy progu ${fmtScore(candidate)} w obszarze „${n}” jest ${flaggedAfter ?? "…"} oflagowanych materiałów.`;
+  const what = ads ? "wykrytych reklam" : "oflagowanych materiałów";
+  const where = ads ? "rejestru reklam" : "Naruszeń";
+  let headline = `Przy progu ${fmtScore(candidate)}: ${flaggedAfter ?? "…"} ${what}${ads ? "" : ` (${n})`}.`;
   if (changed && diff !== null && diff > 0) {
-    headline = `Przy progu ${fmtScore(candidate)} z oflagowanych w module ${n} wypada ${diff} z ${flaggedBefore} materiałów.`;
+    headline = `Przy progu ${fmtScore(candidate)} z ${what} wypada ${diff} z ${flaggedBefore}.`;
   } else if (changed && diff !== null && diff < 0) {
-    headline = `Przy progu ${fmtScore(candidate)} w obszarze „${n}” dochodzi ${-diff} materiałów.`;
+    headline = `Przy progu ${fmtScore(candidate)} do ${where} dochodzi ${-diff} materiałów.`;
   }
 
   return (
@@ -426,8 +428,8 @@ function ModuleCalibration({
         </Button>
         <p className="text-[13px] text-ink-600">
           {changed && diff !== null && diff > 0
-            ? `Zapis od razu zmienia Naruszenia: ${diff} ${plural(diff, "materiał zniknie", "materiały znikną", "materiałów zniknie")} z listy.`
-            : "Zapis od razu zmienia Naruszenia i wykres na Przeglądzie."}
+            ? `Zapis od razu zmienia ${ads ? "rejestr reklam" : "Naruszenia"}: ${diff} ${plural(diff, "materiał zniknie", "materiały znikną", "materiałów zniknie")} z listy.`
+            : `Zapis od razu zmienia ${ads ? "rejestr reklam" : "Naruszenia"} i wykres na Przeglądzie.`}
         </p>
       </div>
 
