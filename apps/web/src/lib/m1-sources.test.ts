@@ -33,6 +33,19 @@ describe("źródła M1", () => {
         channel_url: "https://m.youtube.com/channel/UC1234567890123456789012/videos",
       }),
     ).toBe("https://www.youtube.com/channel/UC1234567890123456789012");
+    // Polska litera w handle'u: zakodowana albo wprost — adres nie może się urwać.
+    expect(
+      channelUrlOf({
+        kind: "youtube_video",
+        channel_url: "https://www.youtube.com/@MarcinIwu%C4%87FBO",
+      }),
+    ).toBe("https://www.youtube.com/@MarcinIwu%C4%87FBO");
+    expect(
+      channelUrlOf({
+        kind: "youtube_video",
+        channel_url: "https://www.youtube.com/@GiełdaInwestycjeTrading/videos",
+      }),
+    ).toBe("https://www.youtube.com/@GiełdaInwestycjeTrading");
     expect(channelUrlOf({ kind: "linked_page" })).toBeNull();
     expect(
       channelUrlOf({ kind: "youtube_video", channel_url: "https://evil.example/@x" }),

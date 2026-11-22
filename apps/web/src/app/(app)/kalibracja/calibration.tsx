@@ -108,6 +108,18 @@ function Metric({
   );
 }
 
+// Etykiety pod suwakiem: przy krawędzi wyrównane do brzegu zamiast centrowane, końce skali
+// („0,00”, „1,00”) chowamy, gdy etykieta progu stoi tuż przy nich, a bliskie progi idą w dwa rzędy.
+const EDGE_HIDE = 0.15;
+const EDGE_ALIGN = 0.08;
+const LABELS_APART = 0.25;
+
+function anchor(x: number): string {
+  if (x < EDGE_ALIGN) return "";
+  if (x > 1 - EDGE_ALIGN) return "-translate-x-full";
+  return "-translate-x-1/2";
+}
+
 function Slider({
   value,
   saved,
@@ -119,6 +131,7 @@ function Slider({
   alert: number;
   onChange: (value: number) => void;
 }) {
+  const stacked = Math.abs(alert - saved) < LABELS_APART;
   return (
     <div className="relative pt-7 pb-6">
       <span
@@ -161,15 +174,27 @@ function Slider({
         }
         className="absolute inset-x-0 top-[22px] h-5 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-ink-900 [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-ink-900 [&::-webkit-slider-thumb]:transition-transform hover:[&::-webkit-slider-thumb]:scale-125 focus-visible:[&::-webkit-slider-thumb]:outline-2 focus-visible:[&::-webkit-slider-thumb]:outline-primary-700 focus-visible:[&::-webkit-slider-thumb]:outline-offset-2"
       />
-      <div className="relative mt-3 h-4 text-ink-600 text-xs">
-        <span className="absolute left-0">0,00</span>
-        <span className="absolute -translate-x-1/2" style={{ left: `${saved * 100}%` }}>
-          zapisany {fmtScore(saved)}
-        </span>
-        <span className="absolute -translate-x-1/2" style={{ left: `${alert * 100}%` }}>
+      <div
+        className={cn(
+          "relative mt-3 whitespace-nowrap text-ink-600 text-xs",
+          stacked ? "h-8" : "h-4",
+        )}
+      >
+        {[saved, alert].some((x) => x < EDGE_HIDE) ? null : (
+          <span className="absolute left-0">0,00</span>
+        )}
+        {[saved, alert].some((x) => x > 1 - EDGE_HIDE) ? null : (
+          <span className="absolute right-0">1,00</span>
+        )}
+        <span className={cn("absolute", anchor(alert))} style={{ left: `${alert * 100}%` }}>
           próg alertu {fmtScore(alert)}
         </span>
-        <span className="absolute right-0">1,00</span>
+        <span
+          className={cn("absolute", anchor(saved), stacked && "top-4")}
+          style={{ left: `${saved * 100}%` }}
+        >
+          zapisany {fmtScore(saved)}
+        </span>
       </div>
     </div>
   );
