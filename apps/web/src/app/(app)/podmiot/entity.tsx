@@ -36,6 +36,7 @@ import {
   shortName,
 } from "@/lib/client/format";
 import { entityName, materialTitle } from "@/lib/client/queue";
+import { cn } from "@/lib/utils";
 
 function Timeline({ items }: { items: UiListItem[] }) {
   const sorted = [...items].sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -131,32 +132,44 @@ function MaterialCard({ item }: { item: UiListItem }) {
   );
 }
 
+// Rejestr KNF jako lista etykieta–wartość: etykieta ink-600, wartość ink-900 500 (komentarz z 22.11).
 function Registry({ id }: { id: string }) {
   const detail = useIncident(id);
   const entity = detail.data?.details.entity;
   if (!entity) return <Skeleton className="h-24 w-full" />;
-  const facts = [
-    entity.in_register === null
-      ? "Rejestr KNF: nie sprawdzono"
-      : entity.in_register
-        ? `W rejestrze KNF${entity.knf_id ? ` (nr ${entity.knf_id})` : ""}`
-        : "Brak w rejestrze KNF",
-    entity.on_warning_list === null
-      ? null
-      : entity.on_warning_list
-        ? "Lista ostrzeżeń publicznych KNF: jest wpis"
-        : "Lista ostrzeżeń publicznych KNF: brak wpisu",
-    entity.nip ? `NIP ${entity.nip}` : null,
-    entity.domain ? `Domena ${entity.domain}` : null,
-  ].filter(Boolean);
+  const rows: [string, string | null][] = [
+    [
+      "Rejestr KNF",
+      entity.in_register === null ? "nie sprawdzono" : entity.in_register ? "Tak" : "Brak wpisu",
+    ],
+    ["Numer w rejestrze", entity.knf_id ? String(entity.knf_id) : null],
+    [
+      "Lista ostrzeżeń KNF",
+      entity.on_warning_list === null ? null : entity.on_warning_list ? "Jest wpis" : "Brak wpisu",
+    ],
+    ["NIP", entity.nip],
+    ["Domena", entity.domain],
+  ];
   return (
     <Card className="p-4">
       <SectionTitle>Rejestr KNF</SectionTitle>
-      <ul className="mt-2 flex flex-col gap-1 text-[13px] text-ink-700">
-        {facts.map((fact) => (
-          <li key={fact}>{fact}</li>
-        ))}
-      </ul>
+      <dl className="mt-3 grid grid-cols-[140px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-[13px]">
+        {rows
+          .filter((row): row is [string, string] => row[1] !== null)
+          .map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-ink-600">{label}</dt>
+              <dd
+                className={cn(
+                  "truncate font-medium text-ink-900",
+                  label === "Lista ostrzeżeń KNF" && value === "Jest wpis" && "text-risk-700",
+                )}
+              >
+                {value}
+              </dd>
+            </div>
+          ))}
+      </dl>
     </Card>
   );
 }

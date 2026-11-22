@@ -11,6 +11,7 @@ import {
   Fingerprint,
   Gauge,
   History,
+  Link2,
   RadioTower,
   Scale,
   TriangleAlert,
@@ -31,6 +32,7 @@ import {
   EmptyState,
   ErrorNote,
   Kbd,
+  KindIcon,
   OutlineChip,
   SectionTitle,
   Skeleton,
@@ -670,6 +672,39 @@ function AdvisorySignals({ detail }: { detail: UiDetail }) {
             </li>
           );
         })}
+// Ten sam materiał w innym module (R19). Karta tylko wtedy, gdy API podało inną ocenę.
+function RelatedCard({ detail, suffix }: { detail: UiDetail; suffix: string }) {
+  const related = detail.related ?? [];
+  if (!related.length) return null;
+  return (
+    <Card className="p-4">
+      <p className="flex items-center gap-2 text-[13px] text-ink-700">
+        <Link2 className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
+        Ten sam materiał w innym module
+      </p>
+      <ul className="mt-2 flex flex-col gap-2">
+        {related.map((other) => (
+          <li key={other.id}>
+            <Link
+              href={`/kolejka/${other.id}${suffix}`}
+              className="flex items-center gap-3 rounded-md bg-surface-1 px-3 py-2.5 hover:bg-surface-hover"
+            >
+              <StatusGlyph status={other.status} />
+              <KindIcon module={other.module} />
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium text-ink-900 text-sm">
+                  {MODULE_NAME[other.module]}
+                </span>
+                {other.summary ? (
+                  <span className="block truncate text-[13px] text-ink-600">{other.summary}</span>
+                ) : null}
+              </span>
+              <span className="tnum font-semibold text-ink-900 text-sm">
+                {fmtScore(other.score)}
+              </span>
+            </Link>
+          </li>
+        ))}
       </ul>
     </Card>
   );
@@ -1180,6 +1215,7 @@ export function CaseWindow({ id }: { id: string }) {
             onSeek={onSeek}
           />
           <AdvisorySignals detail={data} />
+          <RelatedCard detail={data} suffix={suffix} />
           <EntityCard detail={data} related={related} />
           <HistoryCard detail={data} threshold={threshold} />
         </div>

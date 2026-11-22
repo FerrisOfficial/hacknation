@@ -343,3 +343,7 @@ Reklama firmy inwestycyjnej publikowana przez osobę trzecią nie jest naruszeni
 - [x] §4: lista ma też `on_warning_list: boolean | null` (z `details.entity`).
 - [ ] Do decyzji backendu: `incident.high_risk` dla M1 tylko z sygnałem naruszenia. Dziś UI pokazuje alert M1 neutralnie („Nowa reklama · pewność”), bez paska ryzyka.
 - Statusy M1 w UI: `confirmed` = „To reklama”, `dismissed` = „To nie reklama”; kalibracja M1 liczy FP/FN z tych decyzji (bez zmian w API).
+
+## Ten sam materiał w innym module (R19, PR `feat/m1-rejestr`)
+- [ ] §5: `related: [{ "id", "module", "score", "status", "summary" }]` — inne incydenty tego samego materiału (np. reklama + doradztwo). Pusta lista albo brak pola = UI nie pokazuje karty.
+- [ ] §4: `related_modules: ["unauthorized_advisory"]` — moduły innych ocen tego materiału (chip „+ doradztwo” w wierszu).
