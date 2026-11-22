@@ -12,7 +12,6 @@ import { findRule } from "./rules";
 
 export const ADVISORY_POSITIVE = "potencjalne_doradztwo";
 export const ADVISORY_ALLOWED = "usluga_dozwolona";
-export const ADVISORY_NONE = "brak_przeslanek";
 
 const REGISTERED_FACTOR = 0.2;
 const WARNING_FACTOR = 0.4;

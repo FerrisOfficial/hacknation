@@ -94,9 +94,3 @@ export function getBoss(): Promise<PgBoss> {
   });
   return globalForBoss.investwatchBoss;
 }
-
-export async function stopBoss(): Promise<void> {
-  const pending = globalForBoss.investwatchBoss;
-  globalForBoss.investwatchBoss = undefined;
-  if (pending) await (await pending.catch(() => null))?.stop({ graceful: true });
-}
