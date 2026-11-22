@@ -24,7 +24,7 @@ import {
   fmtDateTime,
   fmtScore,
   fmtSigned,
-  MODULE_NUMBER,
+  MODULE_NAME,
   plural,
   reviewText,
   STATUS_LABEL,
@@ -344,7 +344,7 @@ function ModuleCalibration({
   const before = useCalibration(module, threshold.flag);
   const after = useCalibration(module, candidate);
   const save = useSaveThreshold();
-  const n = MODULE_NUMBER[module];
+  const n = MODULE_NAME[module].toLowerCase();
   const ads = module === "finfluencer";
   const changed = candidate !== threshold.flag;
   const flaggedBefore = before.data?.flagged;
@@ -353,11 +353,11 @@ function ModuleCalibration({
   const diff =
     flaggedBefore !== undefined && flaggedAfter !== undefined ? flaggedBefore - flaggedAfter : null;
 
-  let headline = `Przy progu ${fmtScore(candidate)} moduł ${n} ma ${flaggedAfter ?? "…"} oflagowanych materiałów.`;
+  let headline = `Przy progu ${fmtScore(candidate)} w obszarze „${n}” jest ${flaggedAfter ?? "…"} oflagowanych materiałów.`;
   if (changed && diff !== null && diff > 0) {
     headline = `Przy progu ${fmtScore(candidate)} z oflagowanych w module ${n} wypada ${diff} z ${flaggedBefore} materiałów.`;
   } else if (changed && diff !== null && diff < 0) {
-    headline = `Przy progu ${fmtScore(candidate)} do Kolejki modułu ${n} dochodzi ${-diff} materiałów.`;
+    headline = `Przy progu ${fmtScore(candidate)} w obszarze „${n}” dochodzi ${-diff} materiałów.`;
   }
 
   return (
@@ -436,14 +436,13 @@ function ModuleCalibration({
             save.mutate(
               { [module]: { flag: candidate, alert: threshold.alert } },
               {
-                onSuccess: () =>
-                  toast.success(`Zapisano próg ${fmtScore(candidate)} dla modułu ${n}`),
+                onSuccess: () => toast.success(`Zapisano próg ${fmtScore(candidate)}: ${n}`),
                 onError: (error) => toast.error(error.message),
               },
             )
           }
         >
-          Zapisz próg {fmtScore(candidate)} dla modułu {n}
+          Zapisz próg {fmtScore(candidate)}
         </Button>
         <Button disabled={!changed} onClick={() => setCandidate(threshold.flag)}>
           Przywróć {fmtScore(threshold.flag)}
@@ -470,16 +469,16 @@ export function Calibration() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-5">
       <PageHeader
         title="Kalibracja"
-        description="Próg flagi decyduje, co trafia do Kolejki (M2, M3) i do rejestru reklam (M1). FP i FN liczymy z decyzji analityków."
+        description="Próg flagi decyduje, co trafia do Kolejki naruszeń i do rejestru reklam. FP i FN liczymy z decyzji analityków."
         actions={
           <Tabs
-            label="Moduł"
+            label="Obszar"
             value={module}
             onChange={setModule}
             tabs={[
-              { value: "finfluencer", label: "Moduł 1" },
-              { value: "risk_disclosure", label: "Moduł 2" },
-              { value: "unauthorized_advisory", label: "Moduł 3" },
+              { value: "finfluencer", label: MODULE_NAME.finfluencer },
+              { value: "risk_disclosure", label: MODULE_NAME.risk_disclosure },
+              { value: "unauthorized_advisory", label: MODULE_NAME.unauthorized_advisory },
             ]}
           />
         }

@@ -14,10 +14,18 @@ export function fmtSigned(value: number, digits = 0): string {
   return abs;
 }
 
+// Numery modułów (M1–M3) są językiem zadania UKNF i demo, nie analityka: UI pokazuje rodzaj sprawy
+// (decyzja z 22.11, 05:37). Chip w wierszu: MODULE_SHORT; nagłówki i zakładki: MODULE_NAME.
 export const MODULE_SHORT: Record<AnalysisModule, string> = {
-  finfluencer: "M1",
-  risk_disclosure: "M2",
-  unauthorized_advisory: "M3",
+  finfluencer: "Reklama",
+  risk_disclosure: "Ryzyko",
+  unauthorized_advisory: "Doradztwo",
+};
+
+export const MODULE_NAME: Record<AnalysisModule, string> = {
+  finfluencer: "Reklamy osób trzecich",
+  risk_disclosure: "Informacja o ryzyku",
+  unauthorized_advisory: "Doradztwo bez zezwolenia",
 };
 
 export const MODULE_NUMBER: Record<AnalysisModule, number> = {

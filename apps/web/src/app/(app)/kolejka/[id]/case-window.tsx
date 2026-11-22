@@ -54,8 +54,7 @@ import {
   fmtScore,
   fmtTime,
   hostOf,
-  labelText,
-  MODULE_SHORT,
+  MODULE_NAME,
   plural,
   reviewText,
   STATUS_LABEL,
@@ -1070,9 +1069,7 @@ export function CaseWindow({ id }: { id: string }) {
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-semibold text-[22px] text-ink-900 leading-7">{detailTitle(data)}</h1>
-          <Chip>
-            {MODULE_SHORT[data.module]} · {labelText(data.label)}
-          </Chip>
+          <Chip>{MODULE_NAME[data.module]}</Chip>
           <PlatformLabel platform={data.material.platform} className="text-[13px]" />
           <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-700">
             <StatusGlyph status={data.status} />

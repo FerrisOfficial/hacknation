@@ -138,7 +138,7 @@ export function AdRegistry() {
   return (
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <PageHeader
-        title="Reklamy osób trzecich (M1)"
+        title="Reklamy osób trzecich"
         description="Rejestr reklam firm inwestycyjnych publikowanych przez finfluencerów i inne podmioty trzecie. Reklama sama w sobie nie jest naruszeniem; ta z sygnałem naruszenia trafia też do Kolejki."
         actions={
           <Button
