@@ -192,4 +192,3 @@ volumes:
   db-data:
   ollama-models:
   content-store:
-  media:
