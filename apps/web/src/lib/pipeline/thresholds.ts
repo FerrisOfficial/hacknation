@@ -77,7 +77,7 @@ export function thresholdSql(thresholds: Thresholds): SQL<number> {
 }
 
 // Risk score (@/lib/analysis/risk) w SQL: reguły z `details.flags` o score ≥ próg modułu,
-// od najwyższego, risk = 1 − Π(1 − s_k · 0,5^k). Bez score'ów reguł (M1, M3, starsze wyniki) — score.
+// od najwyższego, risk = 1 − Π(1 − s_k · 0,5^k). Bez score'ów reguł (M1, starsze wyniki) — score.
 export function riskScoreSql(thresholds: Thresholds): SQL<number> {
   return sql<number>`coalesce((
     select 1 - exp(sum(ln(greatest(1 - ranked.s * power(${RISK_DECAY}::float8, ranked.rn - 1), 1e-9))))

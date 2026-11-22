@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from ml import knf, risk_llm
-from ml.risk import QUOTE_MAX, Finding, Result, split_paragraphs
+from ml.risk import QUOTE_MAX, Finding, Result, RuleScore, p_violation, split_paragraphs
 
 log = logging.getLogger(__name__)
 
@@ -390,6 +390,15 @@ WEIGHTS: dict[str, float] = {
     "claims": 0.5,
     "disclaimer": 0.6,
 }
+# Waga reguły w jej score (jak `risk.RULE_WEIGHTS` w M2): werdykt 1, przesłanka — jej waga
+# z regresji względem najsilniejszej (oferta = 1). Z tych score'ów backend liczy risk score.
+RULE_WEIGHTS: dict[str, float] = {
+    ADVISORY_RULE: 1.0,
+    **{
+        rule_id: round(WEIGHTS[name] / max(WEIGHTS.values()), 2)
+        for name, rule_id in SIGNAL_RULES.items()
+    },
+}
 # Usługi, o które pytamy LLM w wariancie `hybrid`. Kody z rejestru KNF („Zakres działalności”,
 # art. 69 ust. 2 UoIF): 5 — doradztwo inwestycyjne, 4 — zarządzanie portfelem. Backend porównuje
 # `service` z zakresem zezwolenia podmiotu.
@@ -471,6 +480,18 @@ def _signal(paragraphs: list[str], name: str) -> SignalHit:
 def probability(signals: dict[str, float]) -> float:
     z = BIAS + sum(WEIGHTS[name] * signals.get(name, 0.0) for name in WEIGHTS)
     return 1 / (1 + math.exp(-z))
+
+
+def rule_scores(findings: list[Finding]) -> dict[str, RuleScore]:
+    """Score każdej reguły = waga * P(naruszenie), jak `risk.rule_scores` w M2."""
+    scores: dict[str, RuleScore] = {}
+    for finding in findings:
+        weight = RULE_WEIGHTS.get(finding.rule_id)
+        if weight is None:
+            continue
+        p = p_violation(finding)
+        scores[finding.rule_id] = RuleScore(round(p, 3), weight, round(weight * p, 3))
+    return scores
 
 
 # ─── Dane podmiotu ──────────────────────────────────────────────────────────────────────────────

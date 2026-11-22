@@ -5,6 +5,7 @@ import { advisoryEntity } from "./advisory";
 import { type AnalyzeOutput, analyzeOutputSchema } from "./contract";
 import { buildAnalysisResult } from "./details";
 import { matchByName, normalizeFirmName } from "./entity";
+import { riskScore } from "./risk";
 
 const TEXT =
   "Kowalski Wealth Partners sp. z o.o.\nZarządzamy majątkiem naszych klientów.\nWskażemy, które akcje kupić.";
@@ -125,6 +126,30 @@ describe("moduł 3: doradztwo i rejestr KNF", () => {
   it("błąd modelu: score 0, bez flag", () => {
     const result = build(UNKNOWN, { error: "timeout", findings: [] });
     expect(result).toMatchObject({ score: 0, label: "blad_analizy" });
+  });
+
+  it("risk score jak w M2: noisy-OR z zanikiem po score'ach reguł, werdykt = score wyniku", () => {
+    const ruleScores = {
+      "M3.advisory": { p_violation: 0.8, weight: 1, score: 0.8 },
+      "M3.recommendation": { p_violation: 0.85, weight: 0.7, score: 0.595 },
+    };
+    const scoreOf = (result: ReturnType<typeof build>, ruleId: string) =>
+      readIncidentDetails(result.details).flags.find((f) => f.rule_id === ruleId)?.score;
+
+    const unknown = build(UNKNOWN, { rule_scores: ruleScores });
+    const flags = readIncidentDetails(unknown.details).flags;
+    expect(scoreOf(unknown, "M3.advisory")).toBe(0.8);
+    expect(scoreOf(unknown, "M3.license")).toBeNull();
+    // 1 − (1 − 0,8)·(1 − 0,595·½)
+    expect(riskScore(flags, 0.5, unknown.score)).toBeCloseTo(0.8595, 4);
+    expect(riskScore(flags, 0.7, unknown.score)).toBe(0.8);
+
+    const registered = build({ ...UNKNOWN, in_register: true }, { rule_scores: ruleScores });
+    expect(scoreOf(registered, "M3.advisory")).toBe(registered.score);
+    expect(scoreOf(registered, "M3.recommendation")).toBe(0.119);
+
+    const warned = build({ ...UNKNOWN, on_warning_list: true }, { rule_scores: ruleScores });
+    expect(scoreOf(warned, "M3.advisory")).toBe(warned.score);
   });
 
   it("advisoryEntity nie nadpisuje danych z rejestru", () => {
