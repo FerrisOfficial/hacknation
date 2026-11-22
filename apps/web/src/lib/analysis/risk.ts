@@ -17,7 +17,7 @@ export function riskScore(
   fallback: number,
 ): number {
   const scores = flags.flatMap((flag) => (flag.score === null ? [] : [flag.score]));
-  // M1, M3 i wyniki sprzed score'ów per reguła: bez score'ów reguł zostaje score wyniku.
+  // M1 i wyniki sprzed score'ów per reguła: bez score'ów reguł zostaje score wyniku.
   if (scores.length === 0) return fallback;
   const above = scores.filter((score) => score >= threshold).sort((a, b) => b - a);
   const remaining = above.reduce((acc, score, rank) => acc * (1 - score * RISK_DECAY ** rank), 1);

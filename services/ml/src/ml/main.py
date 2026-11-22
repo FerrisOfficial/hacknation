@@ -412,6 +412,10 @@ def _unauthorized_advisory(request: AnalyzeRequest) -> AnalyzeResponse:
             )
             for f in analysis.findings
         ],
+        rule_scores={
+            rule_id: RuleScoreOut(p_violation=s.p_violation, weight=s.weight, score=s.score)
+            for rule_id, s in advisory.rule_scores(analysis.findings).items()
+        },
         subject=AnalysisSubject(
             name=subject.name,
             identifiers=[KnfIdentifier.model_validate(i) for i in subject.identifiers],

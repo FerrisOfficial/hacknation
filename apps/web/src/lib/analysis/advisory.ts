@@ -83,6 +83,16 @@ function licenseFlag(entity: IncidentEntity, p: number): Flag | null {
   };
 }
 
+// Score'y reguł (risk score jak w M2, @/lib/analysis/risk) idą za score'em wyniku: werdykt
+// `M3.advisory` dostaje score po rejestrze KNF, przesłanki podmiotu z zezwoleniem — × REGISTERED_FACTOR.
+function scoreFlags(flags: readonly Flag[], score: number, registered: boolean): Flag[] {
+  return flags.map((flag) => {
+    if (flag.score === null) return flag;
+    if (flag.rule_id === "M3.advisory") return { ...flag, score };
+    return registered ? { ...flag, score: round(flag.score * REGISTERED_FACTOR) } : flag;
+  });
+}
+
 export type AdvisoryVerdict = { score: number; label: string; flags: Flag[]; summary: string };
 
 // Wynik modelu + rejestr KNF → score, etykieta i flaga `M3.license` (druga na liście).
@@ -102,10 +112,11 @@ export function applyRegistry(
       ]
     : [...flags];
   if (entity.in_register && !entity.on_warning_list) {
+    const score = round(p * REGISTERED_FACTOR);
     return {
-      score: round(p * REGISTERED_FACTOR),
+      score,
       label: label === ADVISORY_POSITIVE ? ADVISORY_ALLOWED : label,
-      flags: withLicense,
+      flags: scoreFlags(withLicense, score, true),
       summary:
         label === ADVISORY_POSITIVE
           ? `${summary} Podmiot ma zezwolenie KNF — usługa dozwolona.`
@@ -113,10 +124,11 @@ export function applyRegistry(
     };
   }
   if (entity.on_warning_list) {
+    const score = round(1 - (1 - p) * WARNING_FACTOR);
     return {
-      score: round(1 - (1 - p) * WARNING_FACTOR),
+      score,
       label: ADVISORY_POSITIVE,
-      flags: withLicense,
+      flags: scoreFlags(withLicense, score, false),
       summary: `${summary} Podmiot jest na liście ostrzeżeń publicznych KNF.`,
     };
   }
@@ -124,7 +136,7 @@ export function applyRegistry(
   return {
     score: round(p),
     label,
-    flags: withLicense,
+    flags: scoreFlags(withLicense, round(p), false),
     summary: unregistered ? `${summary} Brak podmiotu w rejestrze KNF.` : summary,
   };
 }

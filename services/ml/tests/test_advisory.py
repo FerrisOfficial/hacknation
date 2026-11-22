@@ -13,6 +13,7 @@ from ml.advisory import (
     analyze_advisory,
     analyze_advisory_engine,
     extract_subject,
+    rule_scores,
 )
 from ml.main import app
 
@@ -195,6 +196,19 @@ def test_analyze_endpoint_m3(monkeypatch: pytest.MonkeyPatch) -> None:
     assert body["subject"]["name"] == "Kowalski Wealth Partners sp. z o.o."
     assert body["signals"]["offer"] == 0.85
     assert body["findings"][0]["rule_id"] == ADVISORY_RULE
+    scores = body["rule_scores"]
+    assert scores[ADVISORY_RULE]["score"] == round(body["probability"], 3)
+    assert scores["M3.offer"] == {"p_violation": 0.85, "weight": 1.0, "score": 0.85}
+    assert {s["weight"] for s in scores.values()} == {1.0}
+    assert scores["M3.claims"]["score"] == 0
+
+
+def test_rule_scores_follow_findings() -> None:
+    analysis = analyze_advisory(FINFLUENCER)
+    scores = rule_scores(analysis.findings)
+    assert scores[ADVISORY_RULE].score == analysis.probability
+    assert all(s.score <= s.p_violation for s in scores.values())
+    assert set(scores) == {f.rule_id for f in analysis.findings}
 
 
 def test_analyze_endpoint_m3_negative_probability_is_for_label() -> None:

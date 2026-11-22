@@ -74,7 +74,7 @@ Reguły wizualne M2 (4, 5, 6, 8, 13) dla filmów ocenia ten sam moduł M2 w tym 
 - model nie zwraca URL-i, pozycji znaków ani sekund filmu (wyjątek: `frame` wyżej)
 - błąd: `error` z opisem, `findings` puste
 - **M3 dodatkowo:** `subject` — `{ "name", "identifiers": [{ "kind": "NIP", "value" }], "emails", "phones" }`, dane podmiotu z treści oferty; `signals` — `{ "offer": 0.85, "personal": 0.85, … }`, score 0–1 każdej przesłanki (backend zapisuje je w `details.signals`, a kontakt w `details.contact`)
-- **M2 dodatkowo** (poza polami wyżej): `rule_scores` — `{ "3": { "p_violation": 0.99, "weight": 1.0, "score": 0.99 }, … }`, score każdej reguły = `weight × p_violation` (reguły formalne 1 i 2 mają `weight` 0,3); `risk_score` — jedna liczba 0–1 ze wszystkich reguł, **tylko do sortowania** (noisy-OR z zanikiem). Próg porównujemy ze score'ami reguł, nigdy z `risk_score`
+- **M2 i M3 dodatkowo** (poza polami wyżej): `rule_scores` — `{ "3": { "p_violation": 0.99, "weight": 1.0, "score": 0.99 }, … }`, score każdej reguły = `weight × p_violation` (M2: reguły formalne 1 i 2 mają `weight` 0,3; M3: wszystkie reguły 1,0). **Tylko M2:** `risk_score` — jedna liczba 0–1 ze wszystkich reguł, **tylko do sortowania** (noisy-OR z zanikiem). W M2 próg porównujemy ze score'ami reguł, nigdy z `risk_score`; w M3 z `probability`
 
 ## 3. Backend: `analysis_results.details`
 
@@ -115,7 +115,7 @@ Reguły wizualne M2 (4, 5, 6, 8, 13) dla filmów ocenia ten sam moduł M2 w tym 
 ```
 
 - `kind`: `hard` | `suggestion`, z katalogu reguł w kodzie, nie z modelu
-- `score`: score reguły z `rule_scores` (M2). Reguła przekracza próg, gdy `score ≥ flag` modułu — karta incydentu pokazuje jako naruszenia tylko takie reguły. `null` w M1, M3 i w wynikach zapisanych wcześniej
+- `score`: score reguły z `rule_scores` (M2, M3). Reguła przekracza próg, gdy `score ≥ flag` modułu — karta incydentu pokazuje jako naruszenia tylko takie reguły. W M3 `M3.advisory` ma score wyniku po rejestrze KNF, a przesłanki podmiotu z zezwoleniem są × 0,2. `null` w M1, w `M3.license` i w wynikach zapisanych wcześniej
 - `evidence` = `null`, gdy cytatu nie znaleziono w `materials.text`. Dowód z klatki (`frame` w wyjściu modelu) nie jest szukany w tekście: tekstu z ekranu nie ma w `materials.text`
 - `start`, `end`: pozycja cytatu w `materials.text` (`number`); `null`, gdy dowód pochodzi z klatki filmu. Nie podświetlaj `material.text` przy `frame` ≠ `null`
 - `frame`: `null` dla cytatu z tekstu. Dla dowodu z klatki `{ "file": "42000.png", "box": [0.05, 0.94, 0.93, 0.97] }` przepisane z wyjścia modelu. Wtedy `timestamp_s` = `frame.ts` z wyjścia modelu, a `link` prowadzi do tej sekundy filmu
@@ -268,7 +268,7 @@ Wysyłany po zapisie wyniku, gdy score ≥ `alert` danego modułu.
 - `status`: `new` | `in_review` | `postponed` | `confirmed` | `dismissed`
 - `id` incydentu = id wyniku analizy (`analysis_results`), czyli para (materiał, moduł). Jeden materiał może dać do trzech incydentów.
 - `score`: z nim porównujemy próg. W M2 to najwyższy score reguły, więc wynik jest incydentem, gdy **którakolwiek** reguła ma score ≥ próg `flag`.
-- `risk_score`: priorytet do sortowania i liczba pokazywana analitykowi. Liczy go backend przy odczycie z `flags[].score` reguł, które przekraczają aktualny próg `flag` modułu: od najwyższego, `1 − (1 − s1)·(1 − s2·½)·(1 − s3·¼)·…`. Więcej wysokich naruszeń daje wyższy wynik (nigdy niższy niż najwyższe naruszenie), reguły poniżej progu się nie liczą, a zmiana suwaka od razu go zmienia. M1, M3 i wyniki bez score'ów reguł: równy `score`. `risk_score` z ML nie jest używany.
+- `risk_score`: priorytet do sortowania i liczba pokazywana analitykowi. Liczy go backend przy odczycie z `flags[].score` reguł, które przekraczają aktualny próg `flag` modułu: od najwyższego, `1 − (1 − s1)·(1 − s2·½)·(1 − s3·¼)·…`. Więcej wysokich naruszeń daje wyższy wynik (nigdy niższy niż najwyższe naruszenie), reguły poniżej progu się nie liczą, a zmiana suwaka od razu go zmienia. Ten sam wzór w M2 i M3. M1 i wyniki bez score'ów reguł: równy `score`. `risk_score` z ML nie jest używany.
 
 ## Do zrobienia: różnice względem obecnego `main`
 
