@@ -382,6 +382,49 @@
         ],
         "title": "AnalysisFinding"
       },
+      "AnalysisSubject": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Nazwa podmiotu z treści (forma prawna: sp. z o.o., S.A., Ltd…)."
+          },
+          "identifiers": {
+            "items": {
+              "$ref": "#/components/schemas/KnfIdentifier"
+            },
+            "type": "array",
+            "title": "Identifiers",
+            "description": "NIP, KRS, REGON z treści."
+          },
+          "emails": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Emails"
+          },
+          "phones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Phones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "AnalysisSubject"
+      },
       "AnalyzeRequest": {
         "properties": {
           "material_id": {
@@ -500,6 +543,37 @@
             "type": "object",
             "title": "Rule Scores",
             "description": "Score każdej reguły, klucz = id reguły."
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisSubject"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "M3: dane podmiotu z treści oferty (do raportu i rejestru KNF)."
+          },
+          "signals": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Signals",
+            "description": "M3: score 0-1 każdej przesłanki doradztwa."
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Silnik, który policzył wynik."
           },
           "error": {
             "anyOf": [

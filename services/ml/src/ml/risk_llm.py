@@ -115,7 +115,7 @@ def _clip(text: str) -> str:
     return f"{head}\n[…]\n{tail}"
 
 
-def _material_message(text: str) -> str:
+def material_message(text: str) -> str:
     return f'Tekst do oceny:\n"""\n{_clip(text)}\n"""\n\n'
 
 
@@ -157,16 +157,19 @@ def answer_probabilities(top_logprobs: list[dict[str, Any]]) -> dict[Result, flo
     return {result: value / total for result, value in mass.items()}
 
 
-class _Ollama:
-    def __init__(self, url: str, model: str, client: httpx.Client) -> None:
+class Ollama:
+    def __init__(
+        self, url: str, model: str, client: httpx.Client, *, system: str = SYSTEM_PROMPT
+    ) -> None:
         self.url = url
         self.model = model
         self.client = client
+        self.system = system
 
     def chat(self, messages: list[dict[str, str]], **extra: Any) -> dict[str, Any]:
         payload = {
             "model": self.model,
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
+            "messages": [{"role": "system", "content": self.system}, *messages],
             "stream": False,
             **extra,
         }
@@ -179,7 +182,7 @@ class _Ollama:
 
     def classify(self, text: str, rule_id: str) -> dict[Result, float]:
         body = self.chat(
-            [{"role": "user", "content": _material_message(text) + _question(rule_id)}],
+            [{"role": "user", "content": material_message(text) + _question(rule_id)}],
             logprobs=True,
             top_logprobs=20,
             options={"temperature": 0, "num_predict": 1, "num_ctx": NUM_CTX},
@@ -195,7 +198,7 @@ class _Ollama:
     def explain(self, text: str, rule_ids: list[str]) -> dict[str, dict[str, str]]:
         rules = "\n".join(f"Reguła {r}: {RULE_TEXT[r]}" for r in rule_ids)
         prompt = (
-            _material_message(text) + f"Te reguły zostały naruszone:\n{rules}\n\n"
+            material_message(text) + f"Te reguły zostały naruszone:\n{rules}\n\n"
             "Dla każdej podaj DOSŁOWNY fragment tekstu (do 200 znaków), który pokazuje naruszenie, "
             "i jedno krótkie zdanie uzasadnienia po polsku."
         )
@@ -228,7 +231,7 @@ def analyze_risk_disclosure_llm(
     name = model or os.environ.get("OLLAMA_RISK_MODEL") or DEFAULT_MODEL
     http = client or httpx.Client(timeout=TIMEOUT)
     try:
-        ollama = _Ollama(url, name, http)
+        ollama = Ollama(url, name, http)
         requested = [r for r in TEXT_RULES if rules is None or r in rules]
         probabilities = {rule_id: ollama.classify(text, rule_id) for rule_id in requested}
         violated = [r for r, p in probabilities.items() if max(p, key=p.__getitem__) == "violation"]
@@ -367,7 +370,7 @@ def analyze_risk_disclosure_hybrid(
     http = client or httpx.Client(timeout=TIMEOUT)
     findings: list[Finding] = []
     try:
-        ollama = _Ollama(url, name, http)
+        ollama = Ollama(url, name, http)
         for finding in base.findings:
             rule_id = finding.rule_id
             if rule_id not in TEXT_RULES or not applicable(rule_id):
@@ -379,7 +382,7 @@ def analyze_risk_disclosure_hybrid(
                 [
                     {
                         "role": "user",
-                        "content": _material_message(context) + _binary_question(rule_id),
+                        "content": material_message(context) + _binary_question(rule_id),
                     }
                 ],
                 logprobs=True,

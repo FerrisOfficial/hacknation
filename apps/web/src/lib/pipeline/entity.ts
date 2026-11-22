@@ -3,11 +3,14 @@ import { type Brand, brandOfDomain, mentionedBrands } from "@/lib/analysis/brand
 import {
   brandOf,
   type EntityMaterial,
+  entityNip,
   extractNip,
   type KnfEntity,
   type KnfWarning,
+  matchByName,
   matchEntity,
   materialDomain,
+  normalizeFirmName,
   outboundLinks,
   registrableDomain,
   resolveEntity,
@@ -157,4 +160,24 @@ export async function lookupPromotedFirm(
     ),
   ]);
   return { searches, warnings, brands: brandSearches };
+}
+
+// Moduł 3: gdy domena i NIP nie wskazały podmiotu, szukamy w KNF po nazwie firmy z treści oferty.
+// Brak wpisu o tej nazwie = podmiot spoza rejestru (`in_register: false`). Błąd KNF nic nie zmienia.
+export async function refineEntityByName(
+  entity: IncidentEntity,
+  name: string | null | undefined,
+): Promise<IncidentEntity> {
+  if (!name || entity.knf_id !== null || normalizeFirmName(name).length < 4) return entity;
+  const results = await knfSearch(name);
+  if (results === null) return entity;
+  const match = matchByName(results, name);
+  if (!match) return { ...entity, firm_name: entity.firm_name ?? name, in_register: false };
+  return {
+    ...entity,
+    firm_name: match.name,
+    knf_id: match.id,
+    in_register: match.investment_register,
+    nip: entity.nip ?? entityNip(match),
+  };
 }

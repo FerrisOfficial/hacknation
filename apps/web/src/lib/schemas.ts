@@ -263,3 +263,10 @@ export const reportQuerySchema = z.object({
 });
 
 export const reportModuleSchema = z.enum(ANALYSIS_MODULES);
+
+// POST /api/materials/reanalyze: przeliczenie wybranych modułów dla wszystkich materiałów.
+export const reanalyzeBodySchema = z.object({
+  modules: z.array(z.enum(ANALYSIS_MODULES)).min(1).max(ANALYSIS_MODULES.length),
+  // Tylko te materiały (np. najpierw kandydaci); brak = wszystkie.
+  material_ids: z.array(z.string().uuid()).min(1).max(10_000).optional(),
+});

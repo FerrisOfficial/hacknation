@@ -1,5 +1,6 @@
 import type { AnalysisModule, Material } from "@app/db";
 import type { Flag, IncidentDetails, IncidentEntity } from "@/lib/incidents/contract";
+import { advisoryEntity, applyRegistry } from "./advisory";
 import type { AnalysisResultInput, AnalyzeOutput } from "./contract";
 import { buildEvidence } from "./evidence";
 import { findRule } from "./rules";
@@ -96,6 +97,9 @@ export function buildAnalysisResult(
 ): AnalysisResultInput {
   // Przy błędzie modelu kontrakt każe zwrócić puste `findings` — nie ufamy częściowym wynikom.
   const flags = output.error ? [] : buildFlags(module, output, material);
+  if (module === "unauthorized_advisory" && !output.error) {
+    return buildAdvisoryResult(output, flags, advisoryEntity(entity, output.subject));
+  }
   const details: IncidentDetails = {
     summary: output.summary.trim(),
     entity,
@@ -109,6 +113,40 @@ export function buildAnalysisResult(
     // Do sortowania; bez `risk_score` z ML sortujemy po `score`.
     risk_score: output.error ? 0 : (output.risk_score ?? score),
     label: resultLabel(output, flags).slice(0, 100),
+    model: output.model ?? DEFAULT_MODEL_NAME,
+    details,
+  };
+}
+
+// M3: P(doradztwo) z modelu, potem rejestr KNF (`applyRegistry`). Do sortowania ten sam score.
+function buildAdvisoryResult(
+  output: AnalyzeOutput,
+  flags: Flag[],
+  entity: IncidentEntity,
+): AnalysisResultInput {
+  const p = computeScore("unauthorized_advisory", output, flags);
+  const verdict = applyRegistry(
+    p,
+    resultLabel(output, flags),
+    flags,
+    entity,
+    output.summary.trim(),
+  );
+  const details: IncidentDetails = {
+    summary: verdict.summary,
+    entity,
+    flags: verdict.flags,
+    error: null,
+    ...(Object.keys(output.signals).length ? { signals: output.signals } : {}),
+    ...(output.subject && (output.subject.emails.length || output.subject.phones.length)
+      ? { contact: { emails: output.subject.emails, phones: output.subject.phones } }
+      : {}),
+  };
+  return {
+    module: "unauthorized_advisory",
+    score: verdict.score,
+    risk_score: verdict.score,
+    label: verdict.label.slice(0, 100),
     model: output.model ?? DEFAULT_MODEL_NAME,
     details,
   };

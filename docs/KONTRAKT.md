@@ -31,7 +31,7 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
 }
 ```
 
-`module`: `risk_disclosure` | `unauthorized_advisory` (M1 liczy backend bez modelu). W M3 `rules` = `["M3.advisory"]`.
+`module`: `risk_disclosure` | `unauthorized_advisory` (M1 liczy backend bez modelu). W M3 `rules` = `["M3.advisory", "M3.offer", "M3.recommendation", "M3.personal", "M3.paid", "M3.claims", "M3.disclaimer"]` (werdykt i przesłanki doradztwa); `M3.license` (zezwolenie KNF) dokłada backend.
 
 Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym samym `POST /analyze`: backend dodaje je do `rules`, gdy materiał ma wycięte klatki (`materials.metadata.frames.status = "done"`). Klatki serwis ML czyta z dysku po `material_id`, kształt wejścia się nie zmienia. Bez klatek te reguły dostają `n/a`. Plan: [KLATKI.md](KLATKI.md).
 
@@ -58,12 +58,13 @@ Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym sam
 ```
 
 - `result`: `violation` | `ok` | `n/a`
-- `label`: `potencjalne_doradztwo` | `usluga_dozwolona` (M3); w M2 `label` i `probability` = `null`. Etykiety M1 nadaje backend: `reklama` | `wzmianka` | `material_firmy` | `brak_firmy` | `inny_jezyk` | `blad_analizy`
+- `label`: `potencjalne_doradztwo` | `brak_przeslanek` (M3; backend zmienia `potencjalne_doradztwo` na `usluga_dozwolona`, gdy podmiot ma zezwolenie KNF); w M2 `label` i `probability` = `null`. Etykiety M1 nadaje backend: `reklama` | `wzmianka` | `material_firmy` | `brak_firmy` | `inny_jezyk` | `blad_analizy`
 - `quote`: dosłowny fragment `text`, jeden akapit, do 300 znaków, bez parafrazy; obowiązkowy przy `violation`. W regułach wizualnych (4, 5, 6, 13): tekst linii odczytanej przez OCR z klatki `frame`
 - `frame`: tylko reguły wizualne M2, gdy cytat pochodzi z klatki filmu: `{ "ts": 42.0, "file": "42000.png", "box": [0.05, 0.94, 0.93, 0.97] }` — sekunda klatki od początku filmu, plik klatki materiału i ramka tekstu `[x0, y0, x1, y1]` jako ułamki 0–1 szerokości i wysokości klatki. W pozostałych przypadkach `null` (brak pola = `null`). Wartości liczy kod OCR, nie model językowy
 - `confidence`, `probability`: od 0 do 1, wartości ciągłe
 - model nie zwraca URL-i, pozycji znaków ani sekund filmu (wyjątek: `frame` wyżej)
 - błąd: `error` z opisem, `findings` puste
+- **M3 dodatkowo:** `subject` — `{ "name", "identifiers": [{ "kind": "NIP", "value" }], "emails", "phones" }`, dane podmiotu z treści oferty; `signals` — `{ "offer": 0.85, "personal": 0.85, … }`, score 0–1 każdej przesłanki (backend zapisuje je w `details.signals`, a kontakt w `details.contact`)
 - **M2 dodatkowo** (poza polami wyżej): `rule_scores` — `{ "3": { "p_violation": 0.99, "weight": 1.0, "score": 0.99 }, … }`, score każdej reguły = `weight × p_violation` (reguły formalne 1 i 2 mają `weight` 0,3); `risk_score` — jedna liczba 0–1 ze wszystkich reguł, **tylko do sortowania** (noisy-OR z zanikiem). Próg porównujemy ze score'ami reguł, nigdy z `risk_score`
 
 ## 3. Backend: `analysis_results.details`
@@ -271,7 +272,7 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - [ ] M2 w `POST /analyze`: reguły 4, 5, 6, 13 z klatek filmu (OCR + Gemma w module M2), `findings[]` z `frame` (punkty 1–2).
 
 **Backend (`apps/web`)**
-- [x] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory`).
+- [x] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory` + przesłanki i `M3.license`).
 - [x] `analysis_results.details` w kształcie z punktu 3: wyszukanie cytatu w `materials.text` (`start`, `end`; `evidence = null`, gdy nie znaleziono), `timestamp_s` dla filmów, `link`, `entity` z rejestru KNF i listy ostrzeżeń, `score` liczony z wyjścia AI.
 - [x] `GET /api/incidents`: jeden rekord na (materiał, moduł) w kształcie z punktu 4, zamiast grupowania per materiał. Parametry `min_score`, `from`, `to` jak w kontrakcie.
 - [x] `GET /api/incidents/:id` (punkt 5) i `GET /api/incidents/:id/snapshot` (`raw_html` jako `text/html`).

@@ -55,6 +55,19 @@ export type Finding = z.infer<typeof findingSchema>;
 
 const ruleScoreSchema = z.object({ score: probability });
 
+const subjectSchema = z.object({
+  name: z.string().trim().min(1).max(300).nullable().default(null).catch(null),
+  identifiers: z
+    .array(z.object({ kind: z.enum(["KRS", "NIP", "REGON"]), value: z.string().max(20) }))
+    .max(10)
+    .default([])
+    .catch([]),
+  emails: z.array(z.string().max(200)).max(5).default([]).catch([]),
+  phones: z.array(z.string().max(40)).max(5).default([]).catch([]),
+});
+
+export type AnalysisSubject = z.infer<typeof subjectSchema>;
+
 // §2: wyjście modelu. Pojedyncza zła pozycja w `findings` nie unieważnia całej odpowiedzi —
 // odrzucamy tylko ją. `model` (nazwa modelu) jest poza kontraktem i opcjonalne.
 export const analyzeOutputSchema = z.object({
@@ -72,7 +85,7 @@ export const analyzeOutputSchema = z.object({
       }),
     ),
   error: z.string().nullable().default(null),
-  model: z.string().trim().min(1).max(200).optional(),
+  model: z.string().trim().min(1).max(200).nullish(),
   // Poza §2, tylko M2: score każdej reguły (waga * P(naruszenie)) i score do sortowania.
   // Zła pozycja `rule_scores` nie unieważnia odpowiedzi — pomijamy ją.
   rule_scores: z
@@ -88,6 +101,9 @@ export const analyzeOutputSchema = z.object({
       ),
     ),
   risk_score: probability.nullable().default(null).catch(null),
+  // Poza §2, tylko M3: dane podmiotu z treści oferty i score'y przesłanek doradztwa.
+  subject: subjectSchema.nullable().default(null).catch(null),
+  signals: z.record(z.string(), probability).default({}).catch({}),
 });
 
 export type AnalyzeOutput = z.infer<typeof analyzeOutputSchema>;

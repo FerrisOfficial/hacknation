@@ -1,5 +1,13 @@
 import "server-only";
-import { and, type Db, eq, inArray, type ScrapeTrigger, scrapeJobs } from "@app/db";
+import {
+  type AnalysisModule,
+  and,
+  type Db,
+  eq,
+  inArray,
+  type ScrapeTrigger,
+  scrapeJobs,
+} from "@app/db";
 import { type AnalyzeJobData, getBoss, QUEUES, type ScrapeJobData } from "@/lib/queue/boss";
 import { publishEventSafe } from "@/lib/realtime/publish";
 
@@ -59,13 +67,17 @@ export async function enqueueScrape(
 // Zwraca, ile materiałów faktycznie trafiło do kolejki (już czekające nie są dublowane).
 export async function enqueueAnalysis(
   materialIds: readonly string[],
-  options: { force?: boolean } = {},
+  options: { force?: boolean; modules?: AnalysisModule[] } = {},
 ): Promise<number> {
   if (materialIds.length === 0) return 0;
   const boss = await getBoss();
   let queued = 0;
   for (const materialId of materialIds) {
-    const data: AnalyzeJobData = { materialId, force: options.force ?? false };
+    const data: AnalyzeJobData = {
+      materialId,
+      force: options.force ?? false,
+      ...(options.modules ? { modules: options.modules } : {}),
+    };
     if (await boss.send(QUEUES.analyze, data, { singletonKey: materialId })) queued++;
   }
   return queued;

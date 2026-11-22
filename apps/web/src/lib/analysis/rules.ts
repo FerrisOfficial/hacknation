@@ -91,6 +91,68 @@ const RISK_DISCLOSURE_RULES: Rule[] = [
   rule("18", "Nadzór jako argument bezpieczeństwa", `art. 44 ust. 8 ${DEL_2017_565}`, "hard", true),
 ].map((r) => ({ ...r, module: "risk_disclosure" as const }));
 
+// M3: werdykt (`M3.advisory`) i przesłanki doradztwa z art. 76 ustawy o obrocie — każda z cytatem.
+// `M3.license` ocenia backend z rejestru KNF (`@/lib/analysis/advisory`), nie model.
+const UOIF = "ustawy o obrocie instrumentami finansowymi";
+const ADVISORY_RULES: Rule[] = [
+  {
+    id: "M3.advisory",
+    name: "Doradztwo inwestycyjne bez zezwolenia KNF",
+    legalBasis: `art. 69 ust. 2 pkt 5 i art. 76 ${UOIF}`,
+    kind: "hard" as const,
+    textual: true,
+  },
+  {
+    id: "M3.license",
+    name: "Brak zezwolenia KNF na usługi inwestycyjne",
+    legalBasis: `art. 69 ust. 1 i art. 178 ${UOIF}`,
+    kind: "hard" as const,
+    textual: false,
+  },
+  {
+    id: "M3.offer",
+    name: "Oferta doradztwa lub zarządzania majątkiem",
+    legalBasis: `art. 69 ust. 2 pkt 4 i 5 ${UOIF}`,
+    kind: "hard" as const,
+    textual: true,
+  },
+  {
+    id: "M3.recommendation",
+    name: "Rekomendacje dotyczące instrumentów finansowych",
+    legalBasis: `art. 76 oraz art. 2 i 3 ${UOIF}`,
+    kind: "hard" as const,
+    textual: true,
+  },
+  {
+    id: "M3.personal",
+    name: "Rekomendacja dopasowana do sytuacji klienta",
+    legalBasis: `art. 76 ${UOIF}; art. 9 rozporządzenia del. 2017/565`,
+    kind: "hard" as const,
+    textual: true,
+  },
+  {
+    id: "M3.paid",
+    name: "Odpłatna usługa i pozyskiwanie klientów",
+    legalBasis: `art. 69 ust. 1 ${UOIF} (działalność prowadzona zawodowo)`,
+    kind: "suggestion" as const,
+    textual: true,
+  },
+  {
+    id: "M3.claims",
+    name: "Powoływanie się na licencję lub certyfikaty",
+    legalBasis: `art. 69 ${UOIF} — do weryfikacji w rejestrze KNF`,
+    kind: "suggestion" as const,
+    textual: true,
+  },
+  {
+    id: "M3.disclaimer",
+    name: "Zastrzeżenie „to nie jest doradztwo” przy ofercie indywidualnej",
+    legalBasis: `art. 76 ${UOIF} — o charakterze usługi decyduje jej treść`,
+    kind: "suggestion" as const,
+    textual: true,
+  },
+].map((r) => ({ ...r, module: "unauthorized_advisory" as const }));
+
 export const RULES: readonly Rule[] = [
   // M1 nie idzie do modelu — flagę wystawia `@/lib/analysis/finfluencer` z sygnałów reklamy.
   {
@@ -102,14 +164,7 @@ export const RULES: readonly Rule[] = [
     textual: true,
   },
   ...RISK_DISCLOSURE_RULES,
-  {
-    id: "M3.advisory",
-    module: "unauthorized_advisory",
-    name: "Doradztwo inwestycyjne bez zezwolenia KNF",
-    legalBasis: "art. 69 ust. 2 pkt 5 i art. 76 ustawy o obrocie instrumentami finansowymi",
-    kind: "hard",
-    textual: true,
-  },
+  ...ADVISORY_RULES,
 ];
 
 function rule(

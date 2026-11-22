@@ -46,6 +46,9 @@ export type IncidentDetails = {
   entity: IncidentEntity;
   flags: Flag[];
   error: string | null;
+  // M3 (poza §3): kontakt do podmiotu z treści oferty i score 0-1 przesłanek doradztwa.
+  contact?: { emails: string[]; phones: string[] };
+  signals?: Record<string, number>;
 };
 
 // ─── §4–§10: REST i Socket.io ───────────────────────────────────────────────────────────────
@@ -198,6 +201,14 @@ const rawDetailsSchema = z.object({
     )
     .optional(),
   error: nullableText.optional(),
+  contact: z
+    .object({
+      emails: z.array(z.string()).max(5).catch([]),
+      phones: z.array(z.string()).max(5).catch([]),
+    })
+    .optional()
+    .catch(undefined),
+  signals: z.record(z.string(), z.number().min(0).max(1)).optional().catch(undefined),
 });
 
 export function readIncidentDetails(details: unknown): IncidentDetails {
@@ -217,5 +228,7 @@ export function readIncidentDetails(details: unknown): IncidentDetails {
     },
     flags: raw.flags ?? [],
     error: raw.error ?? null,
+    ...(raw.contact ? { contact: raw.contact } : {}),
+    ...(raw.signals ? { signals: raw.signals } : {}),
   };
 }
