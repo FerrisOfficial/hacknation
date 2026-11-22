@@ -75,12 +75,19 @@ async function runChannelCollector(
 
 // Kopie HTML stron z linków do bazy treści (jak strony WWW w @/lib/pipeline/scrape) — bez nich
 // Okno sprawy nie ma kopii strony z dnia pobrania, a M2 nie sprawdzi reguł 7 i 8 dla strony.
+// Błąd zapisu jednej kopii nie przerywa zbioru — strona zostaje bez kopii (`contentRef` null).
 async function storeLinkedPages(collection: YoutubeCollection): Promise<Map<string, string>> {
-  const refs = new Map<string, string>();
-  for (const [url, html] of linkedPageHtml(collection)) {
-    refs.set(url, await putContent(html));
-  }
-  return refs;
+  const stored = await Promise.all(
+    [...linkedPageHtml(collection)].map(async ([url, html]) => {
+      try {
+        return [url, await putContent(html)] as const;
+      } catch (error) {
+        console.error(`[collect] Nie zapisano kopii HTML ${url}:`, error);
+        return null;
+      }
+    }),
+  );
+  return new Map(stored.filter((entry) => entry !== null));
 }
 
 async function summarize(

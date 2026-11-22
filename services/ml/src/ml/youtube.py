@@ -73,6 +73,8 @@ _NOT_FOLLOWED_DOMAINS = (
 )
 
 MAX_LINKED_TEXT = 20_000
+# Kopia HTML strony z linku jedzie w odpowiedzi /collect/youtube — większa strona bez kopii.
+MAX_LINKED_HTML = 2_000_000
 TRANSCRIPT_LANGUAGES = ("pl", "en")
 MAX_WORKERS = 4  # strony z linków w opisie (inne domeny niż YouTube)
 DEFAULT_YOUTUBE_DELAY_S = 3.0
@@ -475,7 +477,7 @@ def scrape_linked_page(url: str, *, client: httpx.Client) -> LinkedPage:
         title=page.title,
         text=page.text[:MAX_LINKED_TEXT],
         content_hash=page.content_hash,
-        html=page.html,
+        html=page.html if len(page.html) <= MAX_LINKED_HTML else None,
     )
 
 
