@@ -64,6 +64,7 @@ import {
   statusLabelFor,
 } from "@/lib/client/format";
 import { useHotkeys } from "@/lib/client/hotkeys";
+import { legalSummaries } from "@/lib/client/legal";
 import {
   buildQueue,
   entityName,
@@ -168,6 +169,7 @@ function MaterialText({
           <mark
             // biome-ignore lint/suspicious/noArrayIndexKey: segmenty są stałe dla danego tekstu
             key={index}
+            data-rule={segment.rule}
             onMouseEnter={() => onActive(segment.rule ?? null)}
             onMouseLeave={() => onActive(null)}
             className={cn(
@@ -516,12 +518,21 @@ function WhyFlagged({
         {violations.map((flag, index) => {
           const time = evidenceTime(flag);
           return (
+            // biome-ignore lint/a11y/useKeyWithClickEvents: skrót myszą; klawiaturą ten sam skok daje przycisk czasu w karcie
             <li
               key={flag.rule_id}
               onMouseEnter={() => onActive(flag.rule_id)}
               onMouseLeave={() => onActive(null)}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("button, a")) return;
+                if (time !== null) return onSeek(time);
+                document
+                  .querySelector(`mark[data-rule="${CSS.escape(flag.rule_id)}"]`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+              title={time !== null ? "Przewiń film do tego miejsca" : "Pokaż cytat w treści"}
               className={cn(
-                "rounded-md bg-surface-1 p-3 transition-colors duration-150",
+                "cursor-pointer rounded-md bg-surface-1 p-3 transition-colors duration-150 hover:ring-1 hover:ring-line-300",
                 active === flag.rule_id && "bg-risk-50",
                 ruleScore(flag) < threshold.flag && "opacity-60",
               )}
@@ -541,7 +552,19 @@ function WhyFlagged({
               {flag.reason ? <p className="mt-1 text-[13px] text-ink-700">{flag.reason}</p> : null}
               <div className="mt-2 flex flex-wrap gap-2">
                 <Tip
-                  label={`${flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}${flag.legal_basis ? `: ${flag.legal_basis}` : ""}`}
+                  label={
+                    <span className="flex w-[300px] flex-col gap-1.5">
+                      <span className="font-medium">
+                        {flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}
+                        {flag.legal_basis ? `: ${flag.legal_basis}` : ""}
+                      </span>
+                      {legalSummaries(flag.legal_basis).map((text) => (
+                        <span key={text} className="text-white/85">
+                          {text}
+                        </span>
+                      ))}
+                    </span>
+                  }
                   className="max-w-full"
                 >
                   <OutlineChip className="h-auto min-h-6 py-1 text-left">
@@ -876,10 +899,12 @@ function DecisionBar({
             type="button"
             role="menuitem"
             onClick={() => onDecide(kind, reason.note)}
-            className="flex h-9 items-center justify-between gap-3 rounded-md px-3 text-left text-ink-900 text-sm hover:bg-surface-hover"
+            className="flex min-h-9 items-start justify-between gap-3 rounded-md px-3 py-2 text-left text-ink-900 text-sm leading-5 hover:bg-surface-hover"
           >
             {reason.label}
-            <Kbd>{index + 1}</Kbd>
+            <span className="mt-px shrink-0">
+              <Kbd>{index + 1}</Kbd>
+            </span>
           </button>
         ))}
       </span>

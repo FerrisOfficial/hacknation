@@ -12,7 +12,6 @@ import {
   Copy,
   Download,
   ExternalLink,
-  Gauge,
   RadioTower,
   Rows3,
   TriangleAlert,
@@ -379,9 +378,7 @@ export function Queue() {
   });
 
   const moduleOptions: { value: QueueParams["module"]; label: string }[] = [
-    { value: "naruszenia", label: "naruszenia" },
-    { value: "wszystkie", label: "wszystko, także reklamy" },
-    { value: "finfluencer", label: "reklamy osób trzecich" },
+    { value: "naruszenia", label: "wszystkie" },
     { value: "risk_disclosure", label: "informacja o ryzyku" },
     { value: "unauthorized_advisory", label: "doradztwo bez zezwolenia" },
   ];
@@ -436,17 +433,6 @@ export function Queue() {
           allValue="wszystkie"
           onChange={(platform) => update({ platform })}
           options={platformOptions}
-        />
-        <FilterSelect
-          icon={<Gauge className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
-          label="Ryzyko"
-          value={params.risk}
-          allValue="wszystkie"
-          onChange={(risk) => update({ risk })}
-          options={[
-            { value: "wszystkie", label: "wszystkie" },
-            { value: "wysokie", label: "wysokie" },
-          ]}
         />
         <FilterSelect
           icon={<Boxes className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
