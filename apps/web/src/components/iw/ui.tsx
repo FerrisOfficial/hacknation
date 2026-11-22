@@ -347,7 +347,7 @@ export function ScoreCell({ score, flag, alert }: { score: number; flag: number;
   const high = score >= alert;
   return (
     <Tip
-      label={`Wynik ${fmtScore(score)}: ${high ? "wysoki, powyżej progu alertu" : "średni, powyżej progu flagi"} ${fmtScore(high ? alert : flag)}.`}
+      label={`Risk score ${fmtScore(score)} (z naruszeń ponad progiem): ${high ? "wysoki, powyżej progu alertu" : "średni, powyżej progu flagi"} ${fmtScore(high ? alert : flag)}.`}
     >
       <span className="inline-flex items-center gap-3">
         <ScoreBar score={score} flag={flag} high={high} />
