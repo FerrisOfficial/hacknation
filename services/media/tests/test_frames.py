@@ -7,7 +7,7 @@ import pytest
 
 from media.config import Settings
 from media.frames import build_items, extract_frames
-from media.youtube import MediaError, canonical_url
+from media.youtube import MediaError, canonical_url, ffmpeg_location
 
 
 def test_build_items_czas_na_ekranie_do_nastepnej_klatki() -> None:
@@ -90,3 +90,17 @@ def test_extract_frames_tylko_zmiany_obrazu(tmp_path: Path) -> None:
     )
     assert extract_frames(video, tmp_path, settings) == [0.0, 3.0]
     assert sorted(path.name for path in tmp_path.glob("*.png")) == ["0.png", "3000.png"]
+
+
+def test_ffmpeg_location_rozwiazuje_nazwe_z_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # yt-dlp bierze `ffmpeg_location` jako ścieżkę: sama nazwa „ffmpeg” = „ffmpeg is not installed”.
+    exe = tmp_path / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+    exe.write_text("")
+    exe.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert Path(ffmpeg_location("ffmpeg") or "") == exe
+    assert ffmpeg_location(str(exe)) == str(exe)
+    monkeypatch.setenv("PATH", "")
+    assert ffmpeg_location("ffmpeg") is None

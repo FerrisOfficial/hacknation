@@ -1,6 +1,7 @@
 """Pobranie filmu z YouTube przez yt-dlp: mp4 do 720p z dźwiękiem, do odtwarzania w Oknie sprawy."""
 
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -39,6 +40,12 @@ def canonical_url(url: str) -> str:
     return f"https://www.youtube.com/watch?v={video_id}"
 
 
+def ffmpeg_location(ffmpeg: str) -> str | None:
+    """Ścieżka do ffmpeg dla yt-dlp. yt-dlp traktuje `ffmpeg_location` jako ścieżkę, nie szuka
+    samej nazwy („ffmpeg”) w PATH — wtedy uznaje, że ffmpeg nie ma. None = yt-dlp szuka w PATH."""
+    return shutil.which(ffmpeg) or (ffmpeg if Path(ffmpeg).exists() else None)
+
+
 def download_video(url: str, workdir: Path, settings: Settings) -> dict[str, Any]:
     """Pobiera film do `workdir/video.mp4`. Zwraca metadane yt-dlp (czas, rozdzielczość)."""
     height = settings.max_height
@@ -53,7 +60,7 @@ def download_video(url: str, workdir: Path, settings: Settings) -> dict[str, Any
                 "merge_output_format": "mp4",
                 "postprocessors": [{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}],
                 "outtmpl": str(workdir / "video.%(ext)s"),
-                "ffmpeg_location": settings.ffmpeg,
+                "ffmpeg_location": ffmpeg_location(settings.ffmpeg),
                 "noplaylist": True,
                 "quiet": True,
                 "no_warnings": True,
