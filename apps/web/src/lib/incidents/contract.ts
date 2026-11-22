@@ -24,6 +24,9 @@ export type Flag = {
   kind: RuleKind;
   result: FlagResult;
   confidence: number;
+  // Score reguły (waga * P(naruszenie)) — reguła przekracza próg, gdy score ≥ próg `flag` modułu.
+  // null = brak score'u per reguła (M1, M3, starsze wyniki).
+  score: number | null;
   reason: string;
   evidence: Evidence | null;
 };
@@ -51,6 +54,8 @@ export type IncidentListItem = {
   id: string;
   module: AnalysisModule;
   score: number;
+  // Priorytet do sortowania (M2: risk_score z ML; bez niego = score).
+  risk_score: number;
   label: string;
   summary: string;
   firm_name: string | null;
@@ -67,6 +72,7 @@ export type IncidentDetail = {
   id: string;
   module: AnalysisModule;
   score: number;
+  risk_score: number;
   label: string;
   status: ReviewStatus;
   created_at: string;
@@ -131,6 +137,7 @@ const flagSchema = z.object({
   kind: z.enum(["hard", "suggestion"]).catch("hard"),
   result: z.enum(["violation", "ok", "n/a"]),
   confidence: z.number().min(0).max(1).catch(0),
+  score: z.number().min(0).max(1).nullable().catch(null),
   reason: z.string().catch(""),
   evidence: evidenceSchema.nullable().catch(null),
 });

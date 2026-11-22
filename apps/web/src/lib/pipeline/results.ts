@@ -43,11 +43,18 @@ export async function saveAnalysisResults(
         ? []
         : await tx
             .insert(analysisResults)
-            .values(results.map((result) => ({ ...result, materialId: material.id })))
+            .values(
+              results.map(({ risk_score, ...result }) => ({
+                ...result,
+                riskScore: risk_score ?? null,
+                materialId: material.id,
+              })),
+            )
             .onConflictDoUpdate({
               target: [analysisResults.materialId, analysisResults.module],
               set: {
                 score: excludedScore,
+                riskScore: excludedRiskScore,
                 label: excludedLabel,
                 details: excludedDetails,
                 model: excludedModel,
@@ -83,6 +90,7 @@ export async function saveAnalysisResults(
 }
 
 const excludedScore = sql.raw(`excluded."score"`);
+const excludedRiskScore = sql.raw(`excluded."risk_score"`);
 const excludedLabel = sql.raw(`excluded."label"`);
 const excludedDetails = sql.raw(`excluded."details"`);
 const excludedModel = sql.raw(`excluded."model"`);

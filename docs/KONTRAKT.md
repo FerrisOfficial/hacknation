@@ -64,6 +64,7 @@ Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym sam
 - `confidence`, `probability`: od 0 do 1, wartości ciągłe
 - model nie zwraca URL-i, pozycji znaków ani sekund filmu (wyjątek: `frame` wyżej)
 - błąd: `error` z opisem, `findings` puste
+- **M2 dodatkowo** (poza polami wyżej): `rule_scores` — `{ "3": { "p_violation": 0.99, "weight": 1.0, "score": 0.99 }, … }`, score każdej reguły = `weight × p_violation` (reguły formalne 1 i 2 mają `weight` 0,3); `risk_score` — jedna liczba 0–1 ze wszystkich reguł, **tylko do sortowania** (noisy-OR z zanikiem). Próg porównujemy ze score'ami reguł, nigdy z `risk_score`
 
 ## 3. Backend: `analysis_results.details`
 
@@ -87,6 +88,7 @@ Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym sam
       "kind": "hard",
       "result": "violation",
       "confidence": 0.8,
+      "score": 0.8,
       "reason": "string",
       "evidence": {
         "quote": "string",
@@ -103,6 +105,7 @@ Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym sam
 ```
 
 - `kind`: `hard` | `suggestion`, z katalogu reguł w kodzie, nie z modelu
+- `score`: score reguły z `rule_scores` (M2). Reguła przekracza próg, gdy `score ≥ flag` modułu — karta incydentu pokazuje jako naruszenia tylko takie reguły. `null` w M1, M3 i w wynikach zapisanych wcześniej
 - `evidence` = `null`, gdy cytatu nie znaleziono w `materials.text`. Dowód z klatki (`frame` w wyjściu modelu) nie jest szukany w tekście: tekstu z ekranu nie ma w `materials.text`
 - `start`, `end`: pozycja cytatu w `materials.text` (`number`); `null`, gdy dowód pochodzi z klatki filmu. Nie podświetlaj `material.text` przy `frame` ≠ `null`
 - `frame`: `null` dla cytatu z tekstu. Dla dowodu z klatki `{ "file": "42000.png", "box": [0.05, 0.94, 0.93, 0.97] }` przepisane z wyjścia modelu. Wtedy `timestamp_s` = `frame.ts` z wyjścia modelu, a `link` prowadzi do tej sekundy filmu
@@ -110,7 +113,7 @@ Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym sam
 
 ## 4. `GET /api/incidents`
 
-Parametry: `module`, `from`, `to`, `platform`, `min_score`, `status`, `page`
+Parametry: `module`, `from`, `to`, `platform`, `min_score`, `status`, `sort` (`risk` — domyślnie, najwyższy `risk_score` pierwszy; `date` — najnowsze pierwsze), `page`
 
 ```json
 {
@@ -119,6 +122,7 @@ Parametry: `module`, `from`, `to`, `platform`, `min_score`, `status`, `page`
       "id": "uuid",
       "module": "risk_disclosure",
       "score": 0.8,
+      "risk_score": 0.9,
       "label": "naruszenie",
       "summary": "string",
       "firm_name": "string | null",
@@ -226,14 +230,16 @@ Wysyłany po zapisie wyniku, gdy score ≥ `alert` danego modułu.
 - `platform` (enum w `packages/db/src/schema.ts`): `web` | `facebook` | `instagram` | `tiktok` | `youtube` | `x` | `linkedin` | `telegram`
 - `status`: `new` | `in_review` | `confirmed` | `dismissed`
 - `id` incydentu = id wyniku analizy (`analysis_results`), czyli para (materiał, moduł). Jeden materiał może dać do trzech incydentów.
+- `score`: z nim porównujemy próg. W M2 to najwyższy score reguły, więc wynik jest incydentem, gdy **którakolwiek** reguła ma score ≥ próg `flag`.
+- `risk_score`: priorytet do sortowania (M2: z ML; M1, M3 i starsze wyniki: równy `score`). Nie porównujemy go z progiem.
 
 ## Do zrobienia: różnice względem obecnego `main`
 
 Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 
 **AI (`services/ml`)**
-- [ ] `POST /analyze` zwraca kształt z punktu 2: `findings[]` per reguła (`result`, `confidence`, `quote`, `reason`) oraz `label`, `probability`, `summary`. Wejście jak w punkcie 1 — jeden moduł i lista reguł na wywołanie.
-- [ ] `pnpm api:generate` w tym samym PR.
+- [x] `POST /analyze` zwraca kształt z punktu 2: `findings[]` per reguła (`result`, `confidence`, `quote`, `reason`) oraz `label`, `probability`, `summary` — M2 (13 reguł tekstowych, #25), z `rule_scores` i `risk_score`.
+- [x] `pnpm api:generate` w tym samym PR.
 - [ ] `POST /media/frames`: pobranie filmu z YouTube i wycięcie klatek (osobna warstwa, bez OCR), plan w [KLATKI.md](KLATKI.md).
 - [ ] M2 w `POST /analyze`: reguły 4, 5, 6, 13 z klatek filmu (OCR + Gemma w module M2), `findings[]` z `frame` (punkty 1–2).
 
@@ -258,7 +264,7 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 
 ## Ustalenia implementacyjne (REST, punkty 4–10)
 
-- **Incydent = wynik ze `score ≥ flag` modułu.** `GET /api/incidents` i trend pokazują tylko takie wyniki, więc zmiana progu `flag` od razu zmienia listę. `min_score` zawęża dodatkowo. Sortowanie: najnowsze pierwsze.
+- **Incydent = wynik ze `score ≥ flag` modułu.** `GET /api/incidents` i trend pokazują tylko takie wyniki, więc zmiana progu `flag` od razu zmienia listę. `min_score` zawęża dodatkowo. W M2 `score` = najwyższy score reguły, więc próg działa na regułach: incydent, gdy którakolwiek reguła ≥ próg. Sortowanie: domyślnie po `risk_score` (priorytet przeglądu), `sort=date` — najnowsze pierwsze.
 - **Poza kontraktem, opcjonalnie:** `page_size` (domyślnie 25, max 200). `module`, `platform`, `status` przyjmują też listy po przecinku (`?status=new,in_review`).
 - **Typy pól:** w `entity` każde pole może być `null`, gdy moduł go nie ustalił. `summary` to zawsze string (pusty, gdy brak). `precision` i `recall` są `null`, gdy nie da się ich policzyć (brak oznaczonych rekordów).
 - **`PATCH /api/incidents/:id`** zwraca szczegół incydentu po zmianie (kształt z punktu 5).

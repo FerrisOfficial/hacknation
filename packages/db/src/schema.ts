@@ -167,7 +167,11 @@ export const analysisResults = pgTable(
       .references(() => materials.id, { onDelete: "cascade" }),
     module: analysisModule("module").notNull(),
     // 0–1: prawdopodobieństwo naruszenia. Próg z panelu kalibracji porównujemy z tą wartością.
+    // M2: najwyższy score reguły (`rule_scores` z serwisu ML), czyli incydent = któraś reguła ≥ próg.
     score: real("score").notNull(),
+    // 0–1: priorytet do sortowania listy incydentów (M2: `risk_score` z ML, ze wszystkich reguł).
+    // Nie porównujemy go z progiem. null = brak (M1, M3, starsze wyniki) — sortujemy wtedy po score.
+    riskScore: real("risk_score"),
     label: text("label").notNull(),
     // Szczegóły modułu: znalezione frazy, firma inwestycyjna, brakujące elementy informacji o ryzyku…
     details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
