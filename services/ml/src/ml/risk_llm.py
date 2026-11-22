@@ -255,6 +255,12 @@ def analyze_risk_disclosure_llm(
 
 # --- Wariant łączony: regex decyduje, czy reguła dotyczy; Bielik ocenia naruszenie -------------
 
+# Reguły rozstrzygane bez LLM, wynikiem regexa. W ewaluacji na 47 stronach LLM dawał w nich same
+# fałszywe alarmy (0 trafień, 15 fałszywych): 10 — mylił „cała strona po angielsku” z „ostrzeżenie
+# w innym języku”, 17 i 18 — „podlegamy nadzorowi KNF” z sugerowaniem aprobaty i bezpieczeństwa
+# (także z przykładami w prompcie), 9 — oceniał jako niezrozumiałe teksty, które nie są ostrzeżeniem.
+REGEX_ONLY_RULES = frozenset({"9", "10", "17", "18"})
+
 # Reguły oceniane na całym tekście (dotyczą materiału jako całości, nie konkretnego miejsca).
 _GLOBAL_RULES = frozenset({"1", "2"})
 WINDOW_RADIUS = 2  # akapity przed i po znalezionym miejscu
@@ -272,8 +278,8 @@ def _window(text: str, quote: str | None) -> str:
 
 
 # Krótkie przykłady dla reguł, w których model najczęściej się mylił (ewaluacja na 50 stronach):
-# „zyskaj dostęp” brane za obietnicę zysku, nagłówki brane za prognozy i ulgi, „podlegamy nadzorowi
-# KNF” brane za sugerowanie aprobaty. Przykłady nie są cytatami z ocenianych stron.
+# „zyskaj dostęp” brane za obietnicę zysku, nagłówki brane za prognozy i ulgi.
+# Przykłady nie są cytatami z ocenianych stron.
 RULE_EXAMPLES: dict[str, list[tuple[str, str]]] = {
     "3": [
         ("Zyskaj pełną kontrolę nad swoimi inwestycjami.", "NIE"),
@@ -297,16 +303,6 @@ RULE_EXAMPLES: dict[str, list[tuple[str, str]]] = {
         ),
         ("Inwestuj bez podatku od zysków kapitałowych!", "TAK"),
         ("Co roku zmniejszaj swój podatek dzięki naszemu kontu emerytalnemu.", "TAK"),
-    ],
-    "17": [
-        ("Jesteśmy firmą inwestycyjną działającą pod nadzorem KNF.", "NIE"),
-        ("Prospekt emisyjny został zatwierdzony przez KNF.", "NIE"),
-        ("Produkt sprawdzony i rekomendowany przez Komisję Nadzoru Finansowego.", "TAK"),
-    ],
-    "18": [
-        ("Podlegamy nadzorowi KNF i uczestniczymy w systemie rekompensat dla inwestorów.", "NIE"),
-        ("Licencjonowany i regulowany przez CySEC.", "NIE"),
-        ("Twoje pieniądze są u nas w pełni bezpieczne, bo nadzoruje nas KNF.", "TAK"),
     ],
 }
 
@@ -359,12 +355,10 @@ def analyze_risk_disclosure_hybrid(
     warning = by_rule.get("10") or analyze_risk_disclosure(text, ["10"]).findings[0]
 
     def applicable(rule_id: str) -> bool:
+        if rule_id in REGEX_ONLY_RULES:
+            return False
         if rule_id == "9":
             return warning.result != "n/a"
-        if rule_id == "10":
-            # Język rozstrzyga detektor (regex) — model mylił „cała strona po angielsku”
-            # z „ostrzeżenie w innym języku niż przekaz”.
-            return False
         finding = by_rule[rule_id]
         return finding.result != "n/a"
 

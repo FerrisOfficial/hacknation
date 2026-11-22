@@ -70,7 +70,9 @@ _FEATURES: dict[str, list[tuple[re.Pattern[str], float]]] = {
         (_p(r"(?:zysk|zwrot|zarobi|zarabia|dochód|stopa zwrotu)\w*[^.\n]{0,50}\d+(?:[.,]\d+)?\s?%"), 0.9),
         (_p(r"\b(?:zarabiaj|zarób|zarobisz|zarobić|pomnóż|podwój)\b"), 0.8),
         # „Zyskaj dostęp / kontrolę / pewność siebie” to nie obietnica zysku — tylko z kwotą lub zyskiem.
-        (_p(r"\bzyska(?:j|sz|cie)\b[^.\n]{0,40}(?:\d|\bzł\b|PLN|odset|zysk|dochod|zwrot|premi|bonus)"), 0.8),
+        (_p(r"\bzyska(?:j|sz|cie)\b[^.\n]{0,80}(?:\d|\bzł\b|PLN|odset|zysk|dochod|zwrot|premi|bonus)"), 0.8),
+        # Prezentacja stóp zwrotu („Stopa zwrotu za 1 rok: 30,93%”) to też informacja o zysku.
+        (_p(r"\bstop\w+\s+zwrotu\s+za\b"), 0.8),
         (_p(r"\bbez ryzyka\b|\bwoln\w+ od ryzyka\b|\bpewn\w+ zysk\w*"), 0.9),
         # Samo słowo („Zyski nie są gwarantowane”, „ESG w służbie zysków”) jest poniżej progu „dotyczy”.
         (_p(r"\b(?:zysk\w*|stop\w+ zwrotu|rentowność|dochod\w*|oprocentowani\w*)\b"), 0.25),
@@ -391,7 +393,10 @@ def _evaluate(
             )  # fmt: skip
         case "10":
             warning = best("risk_warning")
-            main_lang = _language(text)
+            # Język przekazu bez akapitów z ostrzeżeniem — długie ostrzeżenie po angielsku
+            # przeważałoby nad krótszym polskim tekstem strony.
+            message = "\n".join(p.text for p in paragraphs if p.features["risk_warning"] is None)
+            main_lang = _language(message or text)
             warn_lang = _language(paragraphs[warning.paragraph].text) if warning else None
             mismatch = main_lang is not None and warn_lang is not None and main_lang != warn_lang
             return _decide(
