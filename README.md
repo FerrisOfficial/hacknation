@@ -6,6 +6,16 @@
 
 System monitoringu internetu dla UKNF (HackNation 2026, zadanie **#InvestWatch — na straży inwestorów!**). Sam wyszukuje materiały o usługach inwestycyjnych, ocenia je trzema modułami i pokazuje analitykowi alerty z dowodami. Działa w całości lokalnie, na Docker Compose.
 
+## Szybki start dla jury
+
+Jedna komenda, tylko Docker. Startuje z danymi demo, bez modelu, GPU i konfiguracji:
+
+```bash
+git clone https://github.com/FerrisOfficial/hacknation.git && cd hacknation && cp .env.example .env && docker compose up --build web
+```
+
+Otwórz **http://localhost:3000/hacknation**. Pierwszy build trwa kilkanaście minut, kolejne starty kilkanaście sekund.
+
 ## Uruchomienie
 
 Wymagany jest tylko Docker z Compose v2. Dashboard: **http://localhost:3000/hacknation**
