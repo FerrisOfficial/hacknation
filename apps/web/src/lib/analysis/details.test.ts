@@ -42,9 +42,17 @@ describe("katalog reguł", () => {
     expect(new Set(RULES.map((r) => `${r.module}:${r.id}`)).size).toBe(RULES.length);
   });
 
-  it("wejście modelu: M1 i M3 jedna reguła, M2 bez reguł wizualnych", () => {
+  it("wejście modelu: M1 jedna reguła, M3 werdykt i przesłanki bez rejestru, M2 bez wizualnych", () => {
     expect(requestedRuleIds("finfluencer")).toEqual(["M1.ad"]);
-    expect(requestedRuleIds("unauthorized_advisory")).toEqual(["M3.advisory"]);
+    expect(requestedRuleIds("unauthorized_advisory")).toEqual([
+      "M3.advisory",
+      "M3.offer",
+      "M3.recommendation",
+      "M3.personal",
+      "M3.paid",
+      "M3.claims",
+      "M3.disclaimer",
+    ]);
     expect(requestedRuleIds("risk_disclosure")).toContain("3");
     expect(requestedRuleIds("risk_disclosure")).not.toContain("4");
   });
@@ -150,7 +158,7 @@ describe("buildAnalysisResult", () => {
       "unauthorized_advisory",
       output({ label: "potencjalne_doradztwo", probability: 0.66, model: "gemma4:e2b" }),
       MATERIAL,
-      ENTITY,
+      { ...ENTITY, in_register: false, knf_id: null },
     );
     expect(advisory).toMatchObject({ score: 0.66, model: "gemma4:e2b" });
   });

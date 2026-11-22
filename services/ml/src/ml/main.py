@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.routing import APIRoute
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
-from ml import knf, risk, risk_llm, risk_visual, youtube
+from ml import advisory, knf, risk, risk_llm, risk_visual, youtube
 from ml.model import Label, predict_sentiment
 from ml.scraper import ScrapeError, scrape
 
@@ -238,6 +238,17 @@ class RuleScoreOut(BaseModel):
     score: float = Field(ge=0, le=1, description="weight * p_violation — wkład do risk_score.")
 
 
+class AnalysisSubject(BaseModel):
+    name: str | None = Field(
+        description="Nazwa podmiotu z treści (forma prawna: sp. z o.o., S.A., Ltd…)."
+    )
+    identifiers: list[KnfIdentifier] = Field(
+        default_factory=list, description="NIP, KRS, REGON z treści."
+    )
+    emails: list[str] = Field(default_factory=list)
+    phones: list[str] = Field(default_factory=list)
+
+
 class AnalyzeResponse(BaseModel):
     material_id: str
     label: str | None = Field(description="M1/M3; w M2 null.")
@@ -265,6 +276,13 @@ class AnalyzeResponse(BaseModel):
     rule_scores: dict[str, RuleScoreOut] = Field(
         default_factory=dict, description="Score każdej reguły, klucz = id reguły."
     )
+    subject: AnalysisSubject | None = Field(
+        default=None, description="M3: dane podmiotu z treści oferty (do raportu i rejestru KNF)."
+    )
+    signals: dict[str, float] = Field(
+        default_factory=dict, description="M3: score 0-1 każdej przesłanki doradztwa."
+    )
+    model: str | None = Field(default=None, description="Silnik, który policzył wynik.")
     error: str | None = None
 
 
@@ -325,9 +343,41 @@ def _risk_disclosure_text(text: str, rules: list[str] | None) -> risk.RiskAnalys
     return risk.RiskAnalysis(findings=findings, summary=risk.summarize(findings))
 
 
+def _unauthorized_advisory(request: AnalyzeRequest) -> AnalyzeResponse:
+    unknown = sorted(set(request.rules) - set(advisory.RULE_IDS))
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Nieznane reguły M3: {', '.join(unknown)}")
+    analysis = advisory.analyze_advisory_engine(request.text, request.rules or None)
+    positive = analysis.label == advisory.POSITIVE_LABEL
+    subject = analysis.subject
+    return AnalyzeResponse(
+        material_id=request.material_id,
+        label=analysis.label,
+        probability=round(analysis.probability if positive else 1 - analysis.probability, 3),
+        summary=analysis.summary,
+        findings=[
+            AnalysisFinding(
+                rule_id=f.rule_id, result=f.result, confidence=f.confidence,
+                quote=f.quote, reason=f.reason,
+            )
+            for f in analysis.findings
+        ],
+        subject=AnalysisSubject(
+            name=subject.name,
+            identifiers=[KnfIdentifier.model_validate(i) for i in subject.identifiers],
+            emails=list(subject.emails),
+            phones=list(subject.phones),
+        ),
+        signals=analysis.signals,
+        model=f"services/ml advisory ({analysis.engine})",
+    )  # fmt: skip
+
+
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     """Ocena materiału przez jeden moduł AI: wynik każdej reguły z cytatem (KONTRAKT.md §2)."""
+    if request.module == "unauthorized_advisory":
+        return _unauthorized_advisory(request)
     if request.module != "risk_disclosure":
         return AnalyzeResponse(
             material_id=request.material_id, label=None, probability=None, summary="",

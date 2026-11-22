@@ -180,6 +180,23 @@ export interface components {
             /** @description Tylko reguły wizualne z klatek filmu (KONTRAKT.md §2). */
             frame?: components["schemas"]["FindingFrame"] | null;
         };
+        /** AnalysisSubject */
+        AnalysisSubject: {
+            /**
+             * Name
+             * @description Nazwa podmiotu z treści (forma prawna: sp. z o.o., S.A., Ltd…).
+             */
+            name: string | null;
+            /**
+             * Identifiers
+             * @description NIP, KRS, REGON z treści.
+             */
+            identifiers?: components["schemas"]["KnfIdentifier"][];
+            /** Emails */
+            emails?: string[];
+            /** Phones */
+            phones?: string[];
+        };
         /** AnalyzeRequest */
         AnalyzeRequest: {
             /** Material Id */
@@ -235,6 +252,20 @@ export interface components {
             rule_scores?: {
                 [key: string]: components["schemas"]["RuleScoreOut"];
             };
+            /** @description M3: dane podmiotu z treści oferty (do raportu i rejestru KNF). */
+            subject?: components["schemas"]["AnalysisSubject"] | null;
+            /**
+             * Signals
+             * @description M3: score 0-1 każdej przesłanki doradztwa.
+             */
+            signals?: {
+                [key: string]: number;
+            };
+            /**
+             * Model
+             * @description Silnik, który policzył wynik.
+             */
+            model?: string | null;
             /** Error */
             error?: string | null;
         };

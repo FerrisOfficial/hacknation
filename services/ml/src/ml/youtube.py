@@ -258,7 +258,8 @@ def _hits(info: object, limit: int) -> list[SearchHit]:
 
 
 _CHANNEL_URL_RE = re.compile(
-    r"^https://(?:www\.|m\.)?youtube\.com/(?:@[\w.\-]+|channel/UC[\w-]{22}|c/[\w.\-]+|user/[\w.\-]+)"
+    # Handle z polską literą bywa zakodowany: „@MarcinIwu%C4%87FBO”.
+    r"^https://(?:www\.|m\.)?youtube\.com/(?:@(?:[\w.\-]|%[0-9A-Fa-f]{2})+|channel/UC[\w-]{22}|c/[\w.\-]+|user/[\w.\-]+)"
 )
 
 

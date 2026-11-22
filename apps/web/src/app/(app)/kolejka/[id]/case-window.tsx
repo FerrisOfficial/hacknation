@@ -615,14 +615,75 @@ function WhyFlagged({
   );
 }
 
+// Moduł 3: przesłanki doradztwa inwestycyjnego (art. 76 ustawy o obrocie) — score 0-1 każdej.
+// Kolejność = waga w modelu; pasek tylko w szarości, wysoka przesłanka pogrubiona (R6, R12).
+const ADVISORY_SIGNALS: { key: string; label: string; hint: string }[] = [
+  { key: "offer", label: "Oferta doradztwa / zarządzania", hint: "usługa dla klientów" },
+  { key: "personal", label: "Dopasowanie do klienta", hint: "potrzeby i sytuacja klienta" },
+  { key: "recommendation", label: "Rekomendacje instrumentów", hint: "kup / sprzedaj / trzymaj" },
+  { key: "paid", label: "Odpłatność, konsultacje", hint: "pozyskiwanie klientów" },
+  { key: "claims", label: "Powołanie na uprawnienia", hint: "licencja, certyfikat" },
+  { key: "disclaimer", label: "„To nie jest doradztwo”", hint: "przy ofercie indywidualnej" },
+];
+
+function AdvisorySignals({ detail }: { detail: UiDetail }) {
+  const signals = detail.details.signals;
+  if (detail.module !== "unauthorized_advisory" || !signals) return null;
+  const entity = detail.details.entity;
+  const registry =
+    entity.on_warning_list === true
+      ? "na liście ostrzeżeń KNF"
+      : entity.in_register === true
+        ? "ma zezwolenie KNF"
+        : entity.in_register === false
+          ? "brak w rejestrze KNF"
+          : "rejestr KNF: nie ustalono";
+  return (
+    <Card className="p-4">
+      <SectionTitle>Przesłanki doradztwa</SectionTitle>
+      <p className="mt-1 text-[13px] text-ink-600">
+        Art. 76 ustawy o obrocie: rekomendacja dotycząca instrumentów finansowych, przygotowana dla
+        konkretnego klienta. Podmiot: {registry}.
+      </p>
+      <ul className="mt-3 flex flex-col gap-2.5">
+        {ADVISORY_SIGNALS.map(({ key, label, hint }) => {
+          const value = signals[key] ?? 0;
+          const strong = value >= 0.5;
+          return (
+            <li key={key}>
+              <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                <span className={cn(strong ? "font-medium text-ink-900" : "text-ink-600")}>
+                  {label} <span className="text-ink-500 text-xs">· {hint}</span>
+                </span>
+                <span className={cn("tnum", strong ? "text-ink-900" : "text-ink-500")}>
+                  {fmtScore(value)}
+                </span>
+              </div>
+              <div className="mt-1 h-1 rounded-full bg-line-200" aria-hidden="true">
+                <span
+                  className={cn("block h-1 rounded-full", strong ? "bg-ink-900" : "bg-ink-500")}
+                  style={{ width: `${value * 100}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
 function EntityCard({ detail, related }: { detail: UiDetail; related: string | null }) {
   const entity = detail.details.entity;
   const name = entity.firm_name ?? entity.advertiser;
   if (!name) return null;
+  const contact = detail.details.contact;
   const facts = [
     entity.advertiser && entity.firm_name ? `publikuje: ${entity.advertiser}` : null,
     entity.nip ? `NIP ${entity.nip}` : null,
     entity.domain,
+    ...(contact?.emails ?? []),
+    ...(contact?.phones ?? []),
   ].filter(Boolean);
   return (
     <Card className="p-4">
@@ -1117,6 +1178,7 @@ export function CaseWindow({ id }: { id: string }) {
             onActive={setActive}
             onSeek={onSeek}
           />
+          <AdvisorySignals detail={data} />
           <EntityCard detail={data} related={related} />
           <HistoryCard detail={data} threshold={threshold} />
         </div>

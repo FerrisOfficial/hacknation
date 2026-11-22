@@ -69,7 +69,8 @@ const LABELS: Record<string, string> = {
   inny_jezyk: "inny język",
   blad_analizy: "błąd analizy",
   potencjalne_doradztwo: "potencjalne doradztwo",
-  usluga_dozwolona: "usługa dozwolona",
+  usluga_dozwolona: "usługa dozwolona (zezwolenie KNF)",
+  brak_przeslanek: "brak przesłanek doradztwa",
   naruszenie: "naruszenie",
 };
 

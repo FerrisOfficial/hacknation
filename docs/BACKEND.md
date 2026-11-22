@@ -103,6 +103,16 @@ Moduł ma znaleźć reklamę firmy inwestycyjnej publikowaną przez kogoś inneg
 - **Tempo:** harmonogram puszcza `SCHEDULER_BATCH` źródeł na minutę (domyślnie 1, od najdawniej scrapowanych), a kolektor pyta YouTube po kolei, z przerwą `YOUTUBE_DELAY_S` (domyślnie 3 s ± 50%) przed każdym zapytaniem i bez dalszych zapytań po pierwszym HTTP 429. Przy szybszym tempie YouTube odpowiada HTTP 429 — takie zadanie kończy się błędem „YouTube ogranicza zapytania”, a nie pustym wynikiem.
 - **Limit:** po `MATERIALS_LIMIT` materiałów w bazie (domyślnie 2000, 0 = bez limitu) harmonogram przestaje kolejkować źródła. Ręczne uruchomienie i API działają dalej.
 
+### Moduł 3: doradztwo bez zezwolenia
+
+Doradztwo inwestycyjne (art. 76 ustawy o obrocie, [materialy-uknf/doradztwo-inwestycyjne.md](materialy-uknf/doradztwo-inwestycyjne.md)) to rekomendacja dotycząca instrumentów finansowych, przygotowana dla konkretnego klienta. Model sprawdza z treści, czy ktoś oferuje taką usługę, a backend sprawdza w rejestrze KNF, czy ma do niej zezwolenie.
+
+1. **Przesłanki** (`services/ml/src/ml/advisory.py`, każda z dosłownym cytatem): `M3.offer` (doradztwo, zarządzanie majątkiem, wealth management, family office, sygnały transakcyjne, mentoring), `M3.recommendation` (kup/sprzedaj/trzymaj instrumenty, portfel modelowy), `M3.personal` (dopasowanie do sytuacji i celów klienta, konsultacja 1:1), `M3.paid` (abonament, success fee, „umów konsultację”), `M3.claims` (licencja, certyfikat, CFA), `M3.disclaimer` („to nie jest doradztwo” przy ofercie indywidualnej). Zastrzeżenia („nie stanowi rekomendacji ani doradztwa”), pytania z FAQ i cytaty przepisów nie są przesłanką. Kredyty, ubezpieczenia i doradztwo podatkowe są wyłączone.
+2. **P(doradztwo)** (`M3.advisory`): regresja logistyczna na score'ach przesłanek. Sama oferta albo same rekomendacje dają P < 0,5, a oferta z dopasowaniem do klienta i rekomendacjami daje P > 0,8. Przy `M3_ENGINE=hybrid` trzy główne przesłanki ocenia też LLM (Bielik, P(TAK) z logprobs, średnia z regexem). Model jest pytany tylko wtedy, gdy regex daje P ≥ 0,12. Gdy LLM zawiedzie, wynik liczy sam regex.
+3. **Podmiot:** nazwa z formą prawną (sp. z o.o., S.A., Ltd…), NIP/KRS/REGON, e-mail i telefon z treści (`subject` w odpowiedzi ML). Gdy domena i NIP nie wskazały podmiotu w KNF, backend szuka po nazwie (`refineEntityByName`, nazwa bez formy prawnej musi się zgadzać).
+4. **Rejestr KNF** (`lib/analysis/advisory.ts`, flaga `M3.license`): przy aktualnym wpisie w rejestrze usług inwestycyjnych usługa jest dozwolona (`usluga_dozwolona`, score = P × 0,2). Podmiot z listy ostrzeżeń publicznych dostaje score = 1 − (1 − P) × 0,4. Podmiot spoza rejestru przy P ≥ 0,3 dostaje naruszenie „brak zezwolenia”, a score = P.
+5. **Źródła:** `POST /api/sources/m3` (token `COLLECTOR_TOKEN`) zakłada frazy YouTube (`lib/m3-sources.ts`: sygnały VIP, mentoring, konsultacje 1:1, wealth management, family office) — wszystkie filmy, z linkami z opisu. Przeliczenie M3 dla wszystkich materiałów bez ruszania wyników M1 i M2: `POST /api/materials/reanalyze` z `{ "modules": ["unauthorized_advisory"] }`.
+
 ## Zdarzenia Socket.io
 
 ```ts

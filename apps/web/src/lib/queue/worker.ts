@@ -59,6 +59,7 @@ export async function startWorker(): Promise<void> {
         await runAnalysis(db, job.data.materialId, {
           force: job.data.force ?? false,
           signal: job.signal,
+          modules: job.data.modules,
         });
       } catch (error) {
         if (error instanceof MlError && !error.retryable) {

@@ -259,3 +259,25 @@ export function resolveEntity(material: EntityMaterial, lookup: KnfLookup): Inci
     on_warning_list: lookup.warnings === null || !hasKey ? null : warning !== null,
   };
 }
+
+// Nazwa bez formy prawnej i interpunkcji: „Kowalski Wealth Partners sp. z o.o.” → „kowalskiwealthpartners”.
+export function normalizeFirmName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(
+      /\b(sp\.?\s?z\s?o\.?\s?o\.?|spółka z ograniczoną odpowiedzialnością|s\.?\s?a\.?|spółka akcyjna|sp\.?\s?k\.?|sp\.?\s?j\.?|ltd\.?|limited|llc|gmbh|ag)(?![\p{L}\d])/gu,
+      "",
+    )
+    .replace(/[^\p{L}\d]/gu, "");
+}
+
+// Moduł 3: podmiot z wyników wyszukiwarki KNF o tej samej nazwie co firma z treści oferty.
+// Pierwszeństwo ma aktualny wpis w rejestrze usług inwestycyjnych.
+export function matchByName(entities: readonly KnfEntity[], name: string): KnfEntity | null {
+  const wanted = normalizeFirmName(name);
+  if (wanted.length < 4) return null;
+  const matching = entities.filter((entity) =>
+    [entity.name, ...entity.former_names].some((n) => normalizeFirmName(n) === wanted),
+  );
+  return matching.find((entity) => entity.investment_register) ?? matching[0] ?? null;
+}

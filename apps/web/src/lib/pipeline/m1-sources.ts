@@ -2,6 +2,7 @@ import "server-only";
 import { type Db, type Material, sources } from "@app/db";
 import type { AnalysisResultInput } from "@/lib/analysis/contract";
 import { channelUrlOf, m1SearchSourceRows, youtubeChannelSourceRow } from "@/lib/m1-sources";
+import { m3SearchSourceRows } from "@/lib/m3-sources";
 
 // Zapis źródeł modułu 1. Harmonogram (`enqueueDueSources`) podejmuje je sam: źródło bez
 // `last_scraped_at` jest „do zrobienia” przy najbliższym ticku, potem co `interval_minutes`.
@@ -37,4 +38,19 @@ export async function followAdvertiserChannel(
     .onConflictDoNothing({ target: sources.url })
     .returning({ id: sources.id });
   return added.length > 0;
+}
+
+// Frazy modułu 3 (`@/lib/m3-sources`): jak frazy M1 — nowe dopisuje, istniejącym odświeża config.
+export async function seedM3Sources(db: Db): Promise<{ sources: number }> {
+  const rows = m3SearchSourceRows();
+  for (const row of rows) {
+    await db
+      .insert(sources)
+      .values(row)
+      .onConflictDoUpdate({
+        target: sources.url,
+        set: { name: row.name, config: row.config, intervalMinutes: row.intervalMinutes },
+      });
+  }
+  return { sources: rows.length };
 }

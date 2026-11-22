@@ -1,4 +1,5 @@
 import "server-only";
+import type { AnalysisModule } from "@app/db";
 import { PgBoss, type Queue } from "pg-boss";
 
 // Kolejka zadań: pg-boss (open source) na tej samej bazie Postgres — bez dodatkowej usługi typu
@@ -11,7 +12,7 @@ import { PgBoss, type Queue } from "pg-boss";
 export const QUEUES = {
   // Jedno uruchomienie scrapera dla źródła. data: { scrapeJobId }
   scrape: "scrape-source",
-  // Analiza materiału przez moduły AI w serwisie ML. data: { materialId, force? }
+  // Analiza materiału przez moduły AI w serwisie ML. data: { materialId, force?, modules? }
   analyze: "analyze-material",
   // Pobranie filmu YouTube i klatek przez serwis media. data: { materialId }
   video: "download-video",
@@ -20,7 +21,8 @@ export const QUEUES = {
 } as const;
 
 export type ScrapeJobData = { scrapeJobId: string };
-export type AnalyzeJobData = { materialId: string; force?: boolean };
+// `modules`: tylko te moduły (np. przeliczenie M3 po zmianie modelu); brak = wszystkie.
+export type AnalyzeJobData = { materialId: string; force?: boolean; modules?: AnalysisModule[] };
 export type VideoJobData = { materialId: string };
 
 const QUEUE_OPTIONS: Record<(typeof QUEUES)[keyof typeof QUEUES], Omit<Queue, "name">> = {
