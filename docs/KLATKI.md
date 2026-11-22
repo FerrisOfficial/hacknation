@@ -9,7 +9,7 @@
 | Pobieranie filmów i wycinanie klatek: osobny serwis `services/media` (`POST /videos`: yt-dlp, ffmpeg), opis w [services/media/README.md](../services/media/README.md) | ✅ |
 | Reguła 7 dla filmów (ostrzeżenie tylko w rozwijanym opisie): `services/ml/src/ml/risk_video.py`, wejście `video` w `POST /analyze` | ✅ testy w `tests/test_risk_video.py` |
 | Backend: kolejka `download-video`, reguły 4, 5, 6, 8, 13 w `rules`, `GET /api/incidents/:id/frames/:file` i `/video` | ✅ |
-| Dowód z klatki (`evidence.frame`) i podgląd klatki w UI | ❌ brak |
+| Dowód z klatki (`evidence.frame`) i podgląd klatki w UI: okno sprawy (`FrameShot` w `apps/web/src/app/(app)/kolejka/[id]/case-window.tsx`) | ✅ |
 | Strony WWW: reguły 7 i 8 z renderu zapisanego HTML-a w Chromium (Playwright): `services/ml/src/ml/risk_web.py`, wejście `page` w `POST /analyze` (KONTRAKT.md §1) | ✅ testy w `tests/test_risk_web.py` |
 | Strony WWW: reguły 4, 5, 6, 13 z renderu | ❌ osobne zadanie |
 

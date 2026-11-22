@@ -118,7 +118,8 @@ Wszystkie zależności są open source. Kod projektu linkuje tylko biblioteki na
 | Ollama | MIT |
 | Obrazy bazowe: `node`, `python` (Debian), `postgres`, `ollama/ollama` | licencje projektów (MIT, PSF, PostgreSQL, MIT) + pakiety Debiana |
 | Bielik-PL-11B v3.0 Instruct (SpeakLeash) | Apache 2.0 |
-| Biome, Ruff, Pyright, Vitest, pytest | MIT |
+| Ruff, Pyright, Vitest, pytest | MIT |
+| Biome | MIT lub Apache 2.0 |
 
 ## Dokumentacja
 
