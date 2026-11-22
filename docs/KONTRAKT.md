@@ -6,14 +6,14 @@ Przy sprzeczności z [BACKEND.md](BACKEND.md) wygrywa ten plik. Endpointy, któr
 
 ## Kto co dostarcza
 
-- **AI** (`services/ml`): `result`, `confidence`, `quote`, `reason` dla każdej reguły oraz `label`, `probability` i `summary` dla materiału — w modułach 2 i 3. **Moduł 1 nie używa AI**: backend liczy go regułami (firma z rejestru KNF w linkach materiału + sygnały reklamy), szczegóły w [BACKEND.md](BACKEND.md#modu%C5%82-1-bez-ai).
+- **AI** (`services/ml`): `result`, `confidence`, `quote`, `reason` dla każdej reguły oraz `label`, `probability` i `summary` dla materiału — w modułach 2 i 3. W regułach wizualnych M2 (4, 5, 6, 13, z klatek filmu) także `frame` (klatka i ramka cytatu). **Moduł 1 nie używa AI**: backend liczy go regułami (firma z rejestru KNF w linkach materiału + sygnały reklamy), szczegóły w [BACKEND.md](BACKEND.md#modu%C5%82-1-bez-ai).
 - **Backend** (`apps/web/src/app/api`): wszystko pozostałe — pozycje cytatu (`start`, `end`), `timestamp_s`, `link`, dane z katalogu reguł (`rule_name`, `legal_basis`, `kind`), dane z rejestru KNF, `score`, endpointy, progi i alert.
 - **UI**: korzysta tylko z punktów 4–10.
 
 ## Czego potrzebuje UI
 
 - **Lista incydentów:** `id, module, score, label, summary, firm_name` albo `advertiser`, `platform, url, created_at, status`. Filtry: moduł, zakres dat, platforma, `min_score`, status.
-- **Szczegół incydentu:** wszystko z listy, a do tego `material.text` i `published_at`; `entity` (`knf_id, in_register, nip, domain, on_warning_list`); `flags[]` (`rule_id, rule_name, legal_basis, kind, result, confidence, reason`) z `evidence` (`quote, start, end, timestamp_s, link`); `raw_html` z dnia scrapingu (M2 i M3); zmiana statusu `new | in_review | confirmed | dismissed`.
+- **Szczegół incydentu:** wszystko z listy, a do tego `material.text` i `published_at`; `entity` (`knf_id, in_register, nip, domain, on_warning_list`); `flags[]` (`rule_id, rule_name, legal_basis, kind, result, confidence, reason`) z `evidence` (`quote, start, end, timestamp_s, link, frame`), a dla dowodu z klatki filmu obraz klatki z zaznaczoną ramką; `raw_html` z dnia scrapingu (M2 i M3); zmiana statusu `new | in_review | confirmed | dismissed`.
 - **Wykres trendu:** liczba incydentów powyżej progu na dzień, z podziałem na moduły.
 - **Panel kalibracji:** próg każdego modułu (odczyt i zapis); dla wybranego progu liczba oflagowanych oraz TP, FP, FN, TN, precyzja i pełność, liczone z rekordów `confirmed` i `dismissed`.
 - **Alert:** zdarzenie `incident.high_risk` z polami `{ id, module, score, summary, url }`.
@@ -33,6 +33,8 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
 
 `module`: `risk_disclosure` | `unauthorized_advisory` (M1 liczy backend bez modelu). W M3 `rules` = `["M3.advisory"]`.
 
+Reguły wizualne M2 (4, 5, 6, 13) dla filmów ocenia ten sam moduł M2 w tym samym `POST /analyze`: backend dodaje je do `rules`, gdy materiał ma wycięte klatki (`materials.metadata.frames.status = "done"`). Klatki serwis ML czyta z dysku po `material_id`, kształt wejścia się nie zmienia. Bez klatek te reguły dostają `n/a`. Plan: [KLATKI.md](KLATKI.md).
+
 ## 2. Model AI: wyjście
 
 ```json
@@ -47,7 +49,8 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
       "result": "violation",
       "confidence": 0.8,
       "quote": "string | null",
-      "reason": "string"
+      "reason": "string",
+      "frame": null
     }
   ],
   "error": null
@@ -56,9 +59,10 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
 
 - `result`: `violation` | `ok` | `n/a`
 - `label`: `potencjalne_doradztwo` | `usluga_dozwolona` (M3); w M2 `label` i `probability` = `null`. Etykiety M1 nadaje backend: `reklama` | `wzmianka` | `material_firmy` | `brak_firmy` | `inny_jezyk` | `blad_analizy`
-- `quote`: dosłowny fragment `text`, jeden akapit, do 300 znaków, bez parafrazy; obowiązkowy przy `violation`
+- `quote`: dosłowny fragment `text`, jeden akapit, do 300 znaków, bez parafrazy; obowiązkowy przy `violation`. W regułach wizualnych (4, 5, 6, 13): tekst linii odczytanej przez OCR z klatki `frame`
+- `frame`: tylko reguły wizualne M2, gdy cytat pochodzi z klatki filmu: `{ "ts": 42.0, "file": "42000.png", "box": [0.05, 0.94, 0.93, 0.97] }` — sekunda klatki od początku filmu, plik klatki materiału i ramka tekstu `[x0, y0, x1, y1]` jako ułamki 0–1 szerokości i wysokości klatki. W pozostałych przypadkach `null` (brak pola = `null`). Wartości liczy kod OCR, nie model językowy
 - `confidence`, `probability`: od 0 do 1, wartości ciągłe
-- model nie zwraca URL-i, pozycji znaków ani sekund filmu
+- model nie zwraca URL-i, pozycji znaków ani sekund filmu (wyjątek: `frame` wyżej)
 - błąd: `error` z opisem, `findings` puste
 
 ## 3. Backend: `analysis_results.details`
@@ -89,7 +93,8 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
         "start": 0,
         "end": 0,
         "timestamp_s": null,
-        "link": "string"
+        "link": "string",
+        "frame": null
       }
     }
   ],
@@ -98,7 +103,9 @@ Model AI zwraca ocenę reguł, pewność, cytat i uzasadnienie. Backend dokłada
 ```
 
 - `kind`: `hard` | `suggestion`, z katalogu reguł w kodzie, nie z modelu
-- `evidence` = `null`, gdy cytatu nie znaleziono w `materials.text`
+- `evidence` = `null`, gdy cytatu nie znaleziono w `materials.text`. Dowód z klatki (`frame` w wyjściu modelu) nie jest szukany w tekście: tekstu z ekranu nie ma w `materials.text`
+- `start`, `end`: pozycja cytatu w `materials.text` (`number`); `null`, gdy dowód pochodzi z klatki filmu. Nie podświetlaj `material.text` przy `frame` ≠ `null`
+- `frame`: `null` dla cytatu z tekstu. Dla dowodu z klatki `{ "file": "42000.png", "box": [0.05, 0.94, 0.93, 0.97] }` przepisane z wyjścia modelu. Wtedy `timestamp_s` = `frame.ts` z wyjścia modelu, a `link` prowadzi do tej sekundy filmu
 - `link`: WWW `url + "#:~:text=" + encodeURIComponent(quote).replace(/-/g, "%2D")`, YouTube `url + "&t=" + sekundy + "s"`
 
 ## 4. `GET /api/incidents`
@@ -151,6 +158,8 @@ Parametry: `module`, `from`, `to`, `platform`, `min_score`, `status`, `page`
 ```
 
 Kopia strony: `GET /api/incidents/:id/snapshot` zwraca `raw_html` jako `text/html`.
+
+Klatka filmu (dowód reguł wizualnych): `GET /api/incidents/:id/frames/:file` zwraca obraz jako `image/png`, `:file` = `evidence.frame.file`. 404, gdy materiał nie ma takiej klatki.
 
 ## 6. `PATCH /api/incidents/:id`
 
@@ -226,6 +235,8 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - [ ] `POST /analyze` zwraca kształt z punktu 2: `findings[]` per reguła (`result`, `confidence`, `quote`, `reason`) oraz `label`, `probability`, `summary`. Wejście jak w punkcie 1 — jeden moduł i lista reguł na wywołanie.
 - [ ] `pnpm api:generate` w tym samym PR.
 - [ ] Wagi reguł M2 (`RULE_WEIGHTS` w `services/ml/src/ml/risk.py`): zdecydować, czy trenujemy je na oznaczonych fragmentach (regresja logistyczna, razem z kalibracją `confidence`), czy zostawiamy obecne, ustawione ręcznie (0,3 dla reguł 1 i 2, 1,0 dla pozostałych).
+- [ ] `POST /media/frames`: pobranie filmu z YouTube i wycięcie klatek (osobna warstwa, bez OCR), plan w [KLATKI.md](KLATKI.md).
+- [ ] M2 w `POST /analyze`: reguły 4, 5, 6, 13 z klatek filmu (OCR + Gemma w module M2), `findings[]` z `frame` (punkty 1–2).
 
 **Backend (`apps/web`)**
 - [x] Katalog reguł w kodzie: `rule_id` → `rule_name`, `legal_basis`, `kind` (M2: 18 reguł z [materialy-uknf/kryteria-informacji-o-ryzyku.md](materialy-uknf/kryteria-informacji-o-ryzyku.md), M1: `M1.ad`, M3: `M3.advisory`).
@@ -239,6 +250,12 @@ Backend z PR #19 i obecny `POST /analyze` mają inny kształt. Do przerobienia:
 - [x] Zdarzenie Socket.io `incident.high_risk` (punkt 10), wysyłane, gdy `score ≥ alert` modułu. Typy w `apps/web/src/lib/realtime/events.ts`.
 - [x] Usunięte stare ścieżki: `GET/PUT /thresholds`, `PATCH /results/:id`, zdarzenie `alert`.
 - [x] Aktualizacja [BACKEND.md](BACKEND.md).
+- [ ] Kolejka `extract-frames` → `POST /media/frames`; reguły 4, 5, 6, 13 w `rules` M2 dla filmów z klatkami (punkt 1).
+- [ ] Dowód z klatki: `evidence.frame`, `start`/`end` = `null`, `timestamp_s` = `frame.ts` (punkt 3); typy w `lib/analysis/contract.ts` i `lib/incidents/contract.ts`.
+- [ ] `GET /api/incidents/:id/frames/:file` (punkt 5).
+
+**UI**
+- [ ] Szczegół incydentu: przy `evidence.frame` ≠ `null` obraz klatki z zaznaczoną ramką `box` zamiast podświetlenia w `material.text`.
 
 ## Ustalenia implementacyjne (REST, punkty 4–10)
 
