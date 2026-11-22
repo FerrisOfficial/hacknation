@@ -14,8 +14,6 @@ import type {
 // Status „Odłożony” (R6, R7): nowa wartość enumu `review_status`.
 export type UiStatus = ReviewStatus | "postponed";
 
-export const UI_STATUSES = ["new", "in_review", "postponed", "confirmed", "dismissed"] as const;
-
 // Autor decyzji (R16). Bez logowania backend może zwracać stałego użytkownika z env.
 export type Reviewer = { id: string; name: string; role: string | null };
 

@@ -8,8 +8,10 @@ w tekście przesłanek, że ktoś oferuje taką usługę:
 1. tekst → akapity, w każdym akapicie score przesłanki (oferta usługi, rekomendacje dotyczące
    instrumentów, dopasowanie do klienta, odpłatność, powoływanie się na uprawnienia, zastrzeżenie
    „to nie jest doradztwo” przy ofercie indywidualnej) z fraz regex,
-2. P(doradztwo) = regresja logistyczna na score'ach przesłanek: sama wzmianka o akcjach albo
-   o zarządzaniu majątkiem nie wystarcza, dopiero oferta + dopasowanie do klienta + instrumenty,
+2. P(doradztwo) = jawny warunek z art. 76: oferta usługi I (rekomendacje instrumentów LUB
+   dopasowanie do klienta), czyli min(oferta, max(rekomendacje, dopasowanie)). Sama wzmianka
+   o akcjach albo o zarządzaniu majątkiem nie wystarcza. Pozostałe przesłanki (odpłatność,
+   uprawnienia, zastrzeżenie) to osobne reguły z cytatem — podnoszą risk score (noisy-OR jak w M2),
 3. w wariancie `hybrid` werdykt wydaje LLM (Bielik, P(TAK) z logprobs) na dwa pytania: czy autor
    oferuje doradztwo inwestycyjne (art. 69 ust. 2 pkt 5) i czy oferuje zarządzanie portfelem (pkt 4);
    P = max z obu, regex zostaje bramką (LLM tylko przy przesłankach) i źródłem cytatów,
@@ -20,7 +22,6 @@ Moduł zwraca też dane podmiotu z treści (nazwa, NIP/KRS/REGON, e-mail, telefo
 """
 
 import logging
-import math
 import os
 import re
 from dataclasses import dataclass, field
@@ -377,19 +378,12 @@ _REASONS: dict[str, str] = {
     "disclaimer": "Zastrzeżenie „to nie jest doradztwo” stoi obok oferty indywidualnej — o charakterze usługi decyduje jej treść.",
 }
 
-# Regresja logistyczna na score'ach przesłanek. Bez oferty i dopasowania do klienta P < 0,5:
-# finfluencer piszący „kupuję akcje X” to nie doradztwo, a strona wealth managera z ofertą
-# „indywidualnej strategii” i umawianiem konsultacji — już tak. Wagi dobrane ręcznie na
-# przykładach z testów; do potwierdzenia na danych UKNF.
-BIAS = -3.2
-WEIGHTS: dict[str, float] = {
-    "offer": 2.3,
-    "recommendation": 1.6,
-    "personal": 1.7,
-    "paid": 0.9,
-    "claims": 0.5,
-    "disclaimer": 0.6,
-}
+# Warunek doradztwa (art. 76 u.o.o.i.f.): oferta usługi I (rekomendacje instrumentów LUB
+# dopasowanie do klienta). „I” = min, „LUB” = max — bez wag, analityk widzi, które przesłanki
+# zdecydowały. Finfluencer piszący „kupuję akcje X” nie ma oferty → P = 0, a strona wealth
+# managera z ofertą „indywidualnej strategii” — już tak.
+REQUIRED = "offer"
+ANY_OF: tuple[str, ...] = ("recommendation", "personal")
 # Waga reguły w jej score (jak `risk.RULE_WEIGHTS` w M2). Z tych score'ów backend liczy risk score.
 RULE_WEIGHTS: dict[str, float] = {ADVISORY_RULE: 1.0, **dict.fromkeys(SIGNAL_RULES.values(), 1.0)}
 # Usługi, o które pytamy LLM w wariancie `hybrid`. Kody z rejestru KNF („Zakres działalności”,
@@ -402,7 +396,7 @@ SERVICE_NAMES: dict[str, str] = {
 }
 # LLM pytamy tylko, gdy regex widzi choć trochę przesłanek — strona brokera bez oferty doradczej
 # nie musi czekać na model.
-LLM_GATE = 0.12
+LLM_GATE = 0.3  # bez oferty usługi nie ma doradztwa, więc model nie jest potrzebny
 
 
 @dataclass(frozen=True)
@@ -471,8 +465,7 @@ def _signal(paragraphs: list[str], name: str) -> SignalHit:
 
 
 def probability(signals: dict[str, float]) -> float:
-    z = BIAS + sum(WEIGHTS[name] * signals.get(name, 0.0) for name in WEIGHTS)
-    return 1 / (1 + math.exp(-z))
+    return min(signals.get(REQUIRED, 0.0), max(signals.get(name, 0.0) for name in ANY_OF))
 
 
 def rule_scores(findings: list[Finding]) -> dict[str, RuleScore]:
@@ -576,7 +569,9 @@ def _findings(
         )
     if ADVISORY_RULE in requested:
         present_names = [n for n in SIGNAL_RULES if signals[n] >= SIGNAL_MIN and n != "disclaimer"]
-        strongest = max(present_names, key=lambda n: WEIGHTS[n] * signals[n], default=None)
+        # Cytat werdyktu z przesłanek warunku (oferta, rekomendacje, dopasowanie), nie z odpłatności.
+        core = [n for n in present_names if n in (REQUIRED, *ANY_OF)]
+        strongest = max(core or present_names, key=lambda n: signals[n], default=None)
         if strongest is None and llm:
             # LLM rozpoznał usługę, a przesłanki regex są słabe — cytat z najmocniejszej z nich.
             quoted = [n for n in SIGNAL_RULES if hits[n].quote and n != "disclaimer"]
@@ -759,7 +754,7 @@ def analyze_advisory_engine(text: str, rules: list[str] | None = None) -> Adviso
     base = analyze_advisory(text, rules)
     if os.environ.get("M3_ENGINE", "rules") != "hybrid":
         return base
-    if base.probability < LLM_GATE:
+    if base.signals[REQUIRED] < LLM_GATE:
         return base
     try:
         return analyze_advisory(text, rules, llm=llm_signals(text))

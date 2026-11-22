@@ -6,7 +6,7 @@ import type { ModuleThreshold, ThresholdSettings } from "@/lib/analysis/modules"
 import { withBasePath } from "@/lib/base-path";
 import type { Calibration, Trend } from "@/lib/incidents/contract";
 import type { SourceCreateInput, SourceUpdateInput } from "@/lib/schemas";
-import type { Me, UiDetail, UiList, UiStatus } from "./contract-ui";
+import type { UiDetail, UiList, UiStatus } from "./contract-ui";
 import { daysAgoIso } from "./format";
 import { isViolationItem } from "./queue";
 
@@ -66,16 +66,6 @@ export const keys = {
   sources: ["sources"] as const,
   me: ["me"] as const,
 };
-
-// GET /api/me (zmiana kontraktu dla UI). Bez endpointu nawigacja nie pokazuje użytkownika.
-export function useMe() {
-  return useQuery({
-    queryKey: keys.me,
-    queryFn: () => request<Me>("/api/me"),
-    retry: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-}
 
 export function videoUrl(id: string): string {
   return withBasePath(`/api/incidents/${encodeURIComponent(id)}/video`);

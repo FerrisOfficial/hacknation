@@ -91,12 +91,6 @@ export function flagThresholds(settings: ThresholdSettings): Thresholds {
   };
 }
 
-export const DEFAULT_THRESHOLDS: Thresholds = {
-  finfluencer: DEFAULT_THRESHOLD,
-  risk_disclosure: DEFAULT_THRESHOLD,
-  unauthorized_advisory: DEFAULT_THRESHOLD,
-};
-
 // Poziom ryzyka względem progu modułu: poniżej progu — niski (nieflagowany), górna połowa
 // przedziału [próg, 1] — wysoki, reszta — średni. Przesunięcie progu w panelu kalibracji
 // przesuwa więc też granicę „wysokiego ryzyka”.

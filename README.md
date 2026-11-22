@@ -37,7 +37,7 @@ Przykładowe materiały dotyczą wymyślonych firm z domenami `.example`. Tryb d
 | **Silnik zbierania** | wyszukiwanie i kanały YouTube (opisy, transkrypcje, klatki), strony WWW z linków pod filmami, rejestr i lista ostrzeżeń KNF | harmonogram w kolejce pg-boss, deduplikacja po hashu treści, opcjonalne proxy i losowe przerwy |
 | **M1 — finfluencerzy** | reklam firm z rejestru KNF publikowanych przez osoby trzecie | reguły (marka, kod polecający, zachęta); kanał z reklamą jest potem obserwowany na stałe |
 | **M2 — informacja o ryzyku** | materiałów firm z rejestru KNF | 18 reguł UKNF (art. 44 rozp. 2017/565), każda z cytatem albo klatką filmu jako dowodem; reguły wizualne (czcionka, kontrast, czas ekspozycji) liczone z OCR klatek; w trybie `hybrid` naruszenia ocenia Bielik |
-| **M3 — nieautoryzowane doradztwo** | ofert doradztwa (art. 76 u.o.o.i.f.) od podmiotów bez zezwolenia KNF | przesłanki z reguł łączy funkcja logistyczna z wagami ustalonymi ręcznie (nietrenowana, do kalibracji na danych UKNF); w trybie `hybrid` werdykt wydaje Bielik |
+| **M3 — nieautoryzowane doradztwo** | ofert doradztwa (art. 76 u.o.o.i.f.) od podmiotów bez zezwolenia KNF | jawny warunek z art. 76, bez wag: P = min(oferta, max(rekomendacje, dopasowanie do klienta)), każda przesłanka z cytatem; w trybie `hybrid` werdykt wydaje Bielik |
 
 **Dashboard:** kolejka incydentów z filtrami (data, źródło, ryzyko, moduł), zmiana statusu, trend, teczka podmiotu, okno sprawy (film, klatki, kopia HTML), raporty i powiadomienia o wysokim ryzyku na żywo (Socket.io). **Kalibracja:** próg dla każdego modułu, a jego zmiana od razu przelicza FP/FN, precyzję i pełność na decyzjach analityka.
 

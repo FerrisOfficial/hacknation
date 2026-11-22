@@ -68,24 +68,6 @@ export const PLATFORM_LABEL: Record<Platform, string> = {
 // Platformy zbierane w tej wersji (YouTube i strony WWW). Pozostałe zostają w enumie bazy.
 export const ACTIVE_PLATFORMS = ["youtube", "web"] as const satisfies readonly Platform[];
 
-// Etykiety z wyjścia modelu i z modułu 1 (docs/KONTRAKT.md §2).
-const LABELS: Record<string, string> = {
-  reklama: "reklama przez osobę trzecią",
-  wzmianka: "wzmianka o firmie",
-  material_firmy: "materiał firmy",
-  brak_firmy: "bez rozpoznanej firmy",
-  inny_jezyk: "inny język",
-  blad_analizy: "błąd analizy",
-  potencjalne_doradztwo: "potencjalne doradztwo",
-  usluga_dozwolona: "usługa dozwolona (zezwolenie KNF)",
-  brak_przeslanek: "brak przesłanek doradztwa",
-  naruszenie: "naruszenie",
-};
-
-export function labelText(label: string): string {
-  return LABELS[label] ?? label.replaceAll("_", " ");
-}
-
 const time = new Intl.DateTimeFormat("pl-PL", {
   hour: "2-digit",
   minute: "2-digit",
@@ -165,20 +147,6 @@ export function plural(n: number, one: string, few: string, many: string): strin
   const lastTwo = n % 100;
   if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return few;
   return many;
-}
-
-export function initials(name: string): string {
-  const parts = name
-    .replace(/[^\p{L}\s]/gu, " ")
-    .trim()
-    .split(/\s+/);
-  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
-}
-
-// „Marta K.” z „Marta Kowalska”; krótsze imiona zostają bez zmian.
-export function shortName(reviewer: Reviewer): string {
-  const [first, last] = reviewer.name.trim().split(/\s+/);
-  return last ? `${first} ${last[0]}.` : reviewer.name;
 }
 
 // Tekst decyzji do tooltipa i metadanych: „W trakcie, Marta K. od 09:02”.
