@@ -1,6 +1,7 @@
 "use client";
 
-import { RefreshCw, TriangleAlert } from "lucide-react";
+import { Plus, RefreshCw, TriangleAlert } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { PlatformLabel } from "@/components/iw/icons";
 import {
@@ -11,10 +12,50 @@ import {
   ErrorNote,
   PageHeader,
   Skeleton,
+  Tip,
 } from "@/components/iw/ui";
-import { type SourceItem, sourceHasError, useRunSource, useSources } from "@/lib/client/api";
+import {
+  type SourceItem,
+  sourceHasError,
+  useRunSource,
+  useSources,
+  useUpdateSource,
+} from "@/lib/client/api";
 import { fmtRelative, hostOf, plural } from "@/lib/client/format";
 import { cn } from "@/lib/utils";
+import { AddSource, INTERVAL_OPTIONS } from "./add-source";
+
+// Harmonogram źródła do zmiany w miejscu (PATCH /api/sources/:id, intervalMinutes).
+function IntervalSelect({ source }: { source: SourceItem }) {
+  const update = useUpdateSource();
+  const current = source.intervalMinutes === null ? "manual" : String(source.intervalMinutes);
+  const known = INTERVAL_OPTIONS.some((option) => option.value === current);
+  return (
+    <select
+      aria-label={`Jak często skanować: ${source.name}`}
+      value={current}
+      disabled={update.isPending}
+      onChange={(event) => {
+        const value = event.target.value;
+        update.mutate(
+          { id: source.id, intervalMinutes: value === "manual" ? null : Number(value) },
+          {
+            onSuccess: () => toast.success(`Zmieniono harmonogram: ${source.name}`),
+            onError: (error) => toast.error(error.message),
+          },
+        );
+      }}
+      className="h-8 rounded-md border border-line-300 bg-surface-0 px-2 text-ink-900 text-sm hover:border-ink-400"
+    >
+      {known ? null : <option value={current}>{interval(source.intervalMinutes)}</option>}
+      {INTERVAL_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function interval(minutes: number | null): string {
   if (minutes === null) return "ręcznie";
@@ -71,6 +112,7 @@ function State({ source }: { source: SourceItem }) {
 export function Sources() {
   const sources = useSources();
   const run = useRunSource();
+  const [adding, setAdding] = useState(false);
   const items = sources.data?.items ?? [];
   const failed = items.filter(sourceHasError).length;
   const active = items.filter((source) => source.active).length;
@@ -79,8 +121,20 @@ export function Sources() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <PageHeader
         title="Źródła"
-        description="System pobiera źródła według harmonogramu. Tu widać ich stan i można ponowić pobranie. Konfiguracja techniczna jest poza produktem."
+        description="System pobiera źródła według harmonogramu. Tu dodasz źródło, zmienisz, jak często je skanować, i ponowisz pobranie."
+        actions={
+          adding ? undefined : (
+            <Button
+              variant="primary"
+              icon={<Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />}
+              onClick={() => setAdding(true)}
+            >
+              Dodaj źródło
+            </Button>
+          )
+        }
       />
+      <AddSource open={adding} setOpen={setAdding} />
       {sources.data ? (
         <div className="flex gap-2">
           <Chip>
@@ -99,7 +153,7 @@ export function Sources() {
         <Skeleton className="h-60 w-full" />
       ) : items.length === 0 ? (
         <EmptyState illustration="systemy-inf" title="Brak źródeł">
-          Źródła dodaje zespół techniczny przez API (POST /api/sources).
+          Dodaj pierwsze źródło przyciskiem „Dodaj źródło”.
         </EmptyState>
       ) : (
         <Card className="overflow-hidden">
@@ -136,11 +190,19 @@ export function Sources() {
                     <td className="tnum px-4 py-3 text-right text-ink-900">
                       {source.materialsCount}
                     </td>
-                    <td className="tnum px-4 py-3 text-right text-ink-900">
-                      {interval(source.intervalMinutes)}
+                    <td className="px-4 py-3 text-right">
+                      <IntervalSelect source={source} />
                     </td>
                     <td className="max-w-[320px] px-4 py-3 text-[13px]">
-                      <State source={source} />
+                      <Tip
+                        label={
+                          source.lastJob
+                            ? `Ostatnie zadanie: ${source.lastJob.status}, ${fmtRelative(source.lastJob.createdAt)}${source.nextRunAt ? ` · następne ${fmtRelative(source.nextRunAt)}` : ""}`
+                            : "Jeszcze nie pobierano"
+                        }
+                      >
+                        <State source={source} />
+                      </Tip>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button
@@ -157,7 +219,7 @@ export function Sources() {
                           })
                         }
                       >
-                        Ponów
+                        {run.isPending && run.variables === source.id ? "Ponawiam…" : "Ponów"}
                       </Button>
                     </td>
                   </tr>

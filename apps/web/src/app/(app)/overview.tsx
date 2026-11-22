@@ -16,6 +16,7 @@ import {
   SectionTitle,
   Skeleton,
   Tabs,
+  Tip,
 } from "@/components/iw/ui";
 import { ANALYSIS_MODULES, type ModuleThreshold } from "@/lib/analysis/modules";
 import {
@@ -27,6 +28,7 @@ import {
   useSources,
   useThresholds,
   useTrend,
+  useViolationCount,
 } from "@/lib/client/api";
 import type { UiStatus } from "@/lib/client/contract-ui";
 import {
@@ -40,6 +42,7 @@ import {
   STATUS_LABEL,
 } from "@/lib/client/format";
 import { useHotkeys } from "@/lib/client/hotkeys";
+import { isEscalated } from "@/lib/client/queue";
 import { cn } from "@/lib/utils";
 import { TrendChart } from "./trend-chart";
 
@@ -98,14 +101,17 @@ function ModuleCard({
   module: AnalysisModule;
   threshold: ModuleThreshold | undefined;
 }) {
-  const fresh = useIncidents({ module: [module], status: ["new"], page_size: 1 });
+  const ads = module === "finfluencer";
+  const fresh = useIncidents({ module: [module], status: ["new"], page_size: ads ? 200 : 1 });
   const high = useIncidents(
     { module: [module], status: ["new"], min_score: threshold?.alert, page_size: 1 },
-    threshold !== undefined,
+    threshold !== undefined && !ads,
   );
-  const highCount = high.data?.total;
+  // M1 to rejestr reklam (R18): zamiast „wysokie” liczba reklam z sygnałem naruszenia.
+  const escalated = fresh.data?.items.filter(isEscalated).length;
+  const second = ads ? escalated : high.data?.total;
   return (
-    <Card className="flex flex-col gap-4 p-4">
+    <Card className="flex flex-col gap-4 p-4 transition-colors duration-150 hover:border-line-300 hover:bg-surface-1">
       <div className="flex gap-3">
         <Illustration name={ILLUSTRATION[module]} size={32} />
         <div>
@@ -122,31 +128,41 @@ function ModuleCard({
           ) : (
             <Skeleton className="h-8 w-10" />
           )}
-          <p className="text-[13px] text-ink-600">nowych</p>
+          <p className="text-[13px] text-ink-600">{ads ? "nowych reklam" : "nowych"}</p>
         </div>
         <div>
-          {highCount !== undefined ? (
-            <p
-              className={cn(
-                "tnum font-semibold text-[28px] leading-8",
-                highCount > 0 ? "text-risk-700" : "text-ink-500",
-              )}
+          {second !== undefined ? (
+            <Tip
+              label={
+                ads
+                  ? "Reklamy firm spoza rejestru KNF albo z listy ostrzeżeń: trafiają też do Kolejki."
+                  : `Nowe materiały z wynikiem od progu alertu${threshold ? ` ${fmtScore(threshold.alert)}` : ""} w górę. Przy nich system wysyła alert na żywo.`
+              }
             >
-              {highCount}
-            </p>
+              <p
+                className={cn(
+                  "tnum font-semibold text-[28px] leading-8",
+                  second > 0 ? (ads ? "text-warning-800" : "text-risk-700") : "text-ink-500",
+                )}
+              >
+                {second}
+              </p>
+            </Tip>
           ) : (
             <Skeleton className="h-8 w-10" />
           )}
           <p className="text-[13px] text-ink-600">
-            wysokie{threshold ? `, ≥ ${fmtScore(threshold.alert)}` : ""}
+            {ads
+              ? "z sygnałem naruszenia"
+              : `wysokie${threshold ? `, ≥ ${fmtScore(threshold.alert)}` : ""}`}
           </p>
         </div>
       </div>
       <Link
-        href={`/kolejka?modul=${MODULE_NUMBER[module]}`}
+        href={ads ? "/reklamy" : `/kolejka?modul=${MODULE_NUMBER[module]}`}
         className="mt-auto inline-flex items-center gap-1 font-medium text-[13px] text-primary-700 hover:underline"
       >
-        Pokaż w Kolejce
+        {ads ? "Otwórz rejestr reklam" : "Pokaż w Kolejce"}
         <ArrowRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
       </Link>
     </Card>
@@ -180,7 +196,7 @@ export function Overview() {
   const [range, setRange] = useState<TrendRange>("7d");
   const thresholds = useThresholds();
   const sources = useSources();
-  const open = useIncidents({ status: ["new"], page_size: 1 });
+  const open = useViolationCount({ status: ["new"] });
   const weekFrom = daysAgoIso(6);
   const trend = useTrend(range);
 
@@ -202,8 +218,8 @@ export function Overview() {
         actions={
           <ButtonLink href="/kolejka" variant="primary" shortcut="Enter">
             Otwórz Kolejkę
-            {open.data
-              ? ` · ${open.data.total} ${plural(open.data.total, "nowy", "nowe", "nowych")}`
+            {open !== undefined
+              ? ` · ${open} ${plural(open, "nowe naruszenie", "nowe naruszenia", "nowych naruszeń")}`
               : ""}
           </ButtonLink>
         }

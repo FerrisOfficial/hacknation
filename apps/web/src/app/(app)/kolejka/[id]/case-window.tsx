@@ -13,6 +13,7 @@ import {
   History,
   RadioTower,
   Scale,
+  TriangleAlert,
   Video,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +30,7 @@ import {
   Chip,
   EmptyState,
   ErrorNote,
+  Kbd,
   OutlineChip,
   SectionTitle,
   Skeleton,
@@ -58,11 +60,14 @@ import {
   reviewText,
   STATUS_LABEL,
   shortName,
+  statusLabelFor,
 } from "@/lib/client/format";
 import { useHotkeys } from "@/lib/client/hotkeys";
 import {
   buildQueue,
   entityName,
+  escalationText,
+  isEscalated,
   queueFilters,
   queueSearch,
   readQueueParams,
@@ -78,6 +83,13 @@ type Decision = "confirmed" | "dismissed" | "postponed";
 const DECISION_TEXT: Record<Decision, string> = {
   confirmed: "Potwierdzono naruszenie",
   dismissed: "Oznaczono jako fałszywy alarm",
+  postponed: "Odłożono",
+};
+
+// Moduł 1: decyzja „czy to reklama firmy inwestycyjnej przez osobę trzecią” (R18).
+const AD_DECISION_TEXT: Record<Decision, string> = {
+  confirmed: "Dodano do rejestru reklam",
+  dismissed: "Oznaczono: to nie reklama",
   postponed: "Odłożono",
 };
 
@@ -438,14 +450,32 @@ function WhyFlagged({
   onSeek: (seconds: number) => void;
 }) {
   const [showOk, setShowOk] = useState(false);
-  const high = detail.score >= threshold.alert;
+  // Risk score (backend, @/lib/analysis/risk) z naruszeń ponad progiem flagi; próg porównujemy
+  // z wynikiem każdego naruszenia osobno.
+  const ads = detail.module === "finfluencer";
+  const risk = detail.risk_score ?? detail.score;
+  // M1: wynik to pewność, że to reklama — bez kategorii ryzyka i bez koloru (R18).
+  const high = !ads && risk >= threshold.alert;
+  const escalated = ads && isEscalated({ module: detail.module, ...detail.details.entity });
+  const ruleScore = (flag: UiFlag) => flag.score ?? flag.confidence;
+  // Naruszenie = reguła ze score ≥ próg flagi (ten sam score decyduje o liście i o risk score);
+  // reguły bez score'u (M1) — według etykiety modelu.
+  const isViolation = (flag: UiFlag) =>
+    flag.score === null ? flag.result === "violation" : flag.score >= threshold.flag;
   const violations = detail.details.flags
-    .filter((flag) => flag.result === "violation")
-    .sort((a, b) => b.confidence - a.confidence);
-  const rest = detail.details.flags.filter((flag) => flag.result !== "violation");
+    .filter(isViolation)
+    .sort((a, b) => ruleScore(b) - ruleScore(a));
+  const aboveFlag = violations.filter((flag) => ruleScore(flag) >= threshold.flag).length;
+  const rest = detail.details.flags.filter((flag) => !isViolation(flag));
   return (
     <Card className="p-4">
-      <SectionTitle>Dlaczego oflagowano</SectionTitle>
+      <SectionTitle>{ads ? "Dlaczego to reklama" : "Dlaczego oflagowano"}</SectionTitle>
+      {escalated ? (
+        <p className="mt-2 flex items-start gap-2 rounded-md bg-warning-100 px-3 py-2 text-[13px] text-warning-800">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+          Sygnał naruszenia: {escalationText(detail.details.entity)}.
+        </p>
+      ) : null}
       <p className="mt-2 flex items-baseline gap-2">
         <span
           className={cn(
@@ -453,36 +483,23 @@ function WhyFlagged({
             high ? "text-risk-700" : "text-ink-900",
           )}
         >
-          {fmtScore(detail.score)}
+          {fmtScore(risk)}
         </span>
         <span className={cn("text-sm", high ? "text-risk-700" : "text-ink-600")}>
-          {high ? "wysokie" : "średnie"}
+          {ads ? "pewność, że to reklama" : `risk score · ${high ? "wysokie" : "średnie"}`}
         </span>
       </p>
-      <div className="relative mt-3 mb-9 h-1 rounded-full bg-line-200" aria-hidden="true">
-        <span
-          className={cn(
-            "absolute inset-y-0 left-0 rounded-full",
-            high ? "bg-risk-700" : "bg-ink-500",
-          )}
-          style={{ width: `${detail.score * 100}%` }}
-        />
-        {[
-          { value: threshold.flag, label: `próg flagi ${fmtScore(threshold.flag)}` },
-          { value: threshold.alert, label: `alert ${fmtScore(threshold.alert)}` },
-        ].map((tick) => (
-          <span
-            key={tick.label}
-            className="absolute -top-1"
-            style={{ left: `${tick.value * 100}%` }}
-          >
-            <span className="block h-3 w-px bg-ink-900" />
-            <span className="absolute top-4 -translate-x-1/2 whitespace-nowrap text-[11px] text-ink-600">
-              {tick.label}
-            </span>
-          </span>
-        ))}
-      </div>
+      {ads ? (
+        <p className="mt-1 mb-3 text-[13px] text-ink-600">
+          Reklama firmy inwestycyjnej publikowana przez osobę trzecią trafia do rejestru reklam. To
+          nie jest naruszenie samo w sobie.
+        </p>
+      ) : null}
+      <p className={cn("mt-1 mb-3 text-[13px] text-ink-600", ads && "hidden")}>
+        Z naruszeń ponad próg flagi {fmtScore(threshold.flag)}: {aboveFlag}{" "}
+        {plural(aboveFlag, "naruszenie", "naruszenia", "naruszeń")}. Im więcej wysokich, tym wyżej;
+        naruszenia poniżej progu się nie liczą (alert od {fmtScore(threshold.alert)}).
+      </p>
       {detail.details.error ? (
         <p className="mb-3 rounded-md bg-warning-100 px-3 py-2 text-[13px] text-warning-800">
           Analiza zgłosiła błąd: {detail.details.error}
@@ -502,6 +519,7 @@ function WhyFlagged({
               className={cn(
                 "rounded-md bg-surface-1 p-3 transition-colors duration-150",
                 active === flag.rule_id && "bg-risk-50",
+                ruleScore(flag) < threshold.flag && "opacity-60",
               )}
             >
               <p className="font-medium text-ink-900 text-sm">
@@ -531,10 +549,19 @@ function WhyFlagged({
                     {flag.legal_basis || "podstawa prawna do uzupełnienia"}
                   </OutlineChip>
                 </Tip>
-                <Tip label="Pewność modelu dla tej reguły">
-                  <OutlineChip>
+                <Tip label="Wynik naruszenia, porównywany z progiem flagi i alertu">
+                  <OutlineChip
+                    className={cn(
+                      ruleScore(flag) >= threshold.alert && "border-risk-700 text-risk-700",
+                    )}
+                  >
                     <Gauge className="size-3.5 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
-                    <span className="tnum">{fmtScore(flag.confidence)}</span>
+                    <span className="tnum">{fmtScore(ruleScore(flag))}</span>
+                    {ruleScore(flag) >= threshold.alert
+                      ? " · ponad alert"
+                      : ruleScore(flag) >= threshold.flag
+                        ? " · ponad próg"
+                        : " · poniżej progu"}
                   </OutlineChip>
                 </Tip>
                 {time !== null && detail.material.platform === "youtube" ? (
@@ -749,70 +776,117 @@ function HistoryCard({ detail, threshold }: { detail: UiDetail; threshold: Modul
 
 // ─── Pasek decyzji ──────────────────────────────────────────────────────────────────────────
 
+type Menu = "dismissed" | "postponed" | null;
+
+// Panel powodu po klawiszu 2 (Fałszywy alarm) i 3 (Odłóż): w otwartym panelu 1–3 wybiera powód.
+function reasonsFor(menu: Exclude<Menu, null>, ads: boolean): { label: string; note?: string }[] {
+  if (menu === "postponed")
+    return POSTPONE_REASONS.map((reason) => ({ label: reason, note: reason }));
+  return ads
+    ? [
+        { label: "bez powodu" },
+        { label: "to treść edukacyjna, nie reklama", note: "treść edukacyjna" },
+        { label: "brak związku z firmą", note: "brak związku z firmą" },
+      ]
+    : [
+        { label: "bez powodu" },
+        {
+          label: "informacja o ryzyku jest, model jej nie widzi",
+          note: "informacja o ryzyku jest",
+        },
+        {
+          label: "materiał nie dotyczy usług inwestycyjnych",
+          note: "nie dotyczy usług inwestycyjnych",
+        },
+      ];
+}
+
 function DecisionBar({
+  ads,
   status,
   pending,
-  postponeOpen,
-  setPostponeOpen,
+  blocked,
+  menu,
+  setMenu,
   onDecide,
 }: {
+  ads: boolean;
   status: UiStatus;
   pending: boolean;
-  postponeOpen: boolean;
-  setPostponeOpen: (open: boolean) => void;
+  // Powód, dla którego potwierdzenie jest wyłączone (brak kopii, R4), albo null.
+  blocked: string | null;
+  menu: Menu;
+  setMenu: (menu: Menu) => void;
   onDecide: (decision: Decision, note?: string) => void;
 }) {
+  const panel = (kind: Exclude<Menu, null>) =>
+    menu === kind ? (
+      <span
+        role="menu"
+        className="absolute top-full left-0 z-40 mt-1 flex w-80 flex-col rounded-lg border border-line-200 bg-surface-0 p-1 shadow-lg"
+      >
+        <span className="px-3 pt-1.5 pb-1 text-ink-600 text-xs">
+          {kind === "postponed" ? "Dlaczego odkładasz?" : "Powód (opcjonalnie)"} · Esc zamyka
+        </span>
+        {reasonsFor(kind, ads).map((reason, index) => (
+          <button
+            key={reason.label}
+            type="button"
+            role="menuitem"
+            onClick={() => onDecide(kind, reason.note)}
+            className="flex h-9 items-center justify-between gap-3 rounded-md px-3 text-left text-ink-900 text-sm hover:bg-surface-hover"
+          >
+            {reason.label}
+            <Kbd>{index + 1}</Kbd>
+          </button>
+        ))}
+      </span>
+    ) : null;
+
+  const confirm = (
+    <Button
+      variant="primary"
+      shortcut="1"
+      aria-pressed={status === "confirmed"}
+      disabled={pending || Boolean(blocked)}
+      onClick={() => onDecide("confirmed")}
+    >
+      {ads ? "To reklama" : "Potwierdź naruszenie"}
+    </Button>
+  );
   return (
     <div className="relative flex flex-wrap items-center gap-3 rounded-lg bg-surface-1 px-3 py-2.5">
-      <Button
-        variant="primary"
-        shortcut="1"
-        aria-pressed={status === "confirmed"}
-        disabled={pending}
-        onClick={() => onDecide("confirmed")}
-      >
-        Potwierdź naruszenie
-      </Button>
-      <Button
-        shortcut="2"
-        aria-pressed={status === "dismissed"}
-        disabled={pending}
-        onClick={() => onDecide("dismissed")}
-      >
-        Fałszywy alarm
-      </Button>
+      {blocked ? <Tip label={blocked}>{confirm}</Tip> : <Tip label="Skrót: 1">{confirm}</Tip>}
       <span className="relative">
-        <Button
-          shortcut="3"
-          aria-pressed={status === "postponed"}
-          aria-expanded={postponeOpen}
-          disabled={pending}
-          onClick={() => setPostponeOpen(!postponeOpen)}
-        >
-          Odłóż
-        </Button>
-        {postponeOpen ? (
-          <span
-            role="menu"
-            className="absolute top-full left-0 z-40 mt-1 flex w-72 flex-col rounded-lg border border-line-200 bg-surface-0 p-1 shadow-lg"
+        <Tip label="Skrót: 2, potem powód 1–3">
+          <Button
+            shortcut="2"
+            aria-pressed={status === "dismissed"}
+            aria-expanded={menu === "dismissed"}
+            disabled={pending}
+            onClick={() => setMenu(menu === "dismissed" ? null : "dismissed")}
           >
-            {POSTPONE_REASONS.map((reason, index) => (
-              <button
-                key={reason}
-                type="button"
-                role="menuitem"
-                onClick={() => onDecide("postponed", reason)}
-                className="flex h-9 items-center justify-between rounded-md px-3 text-left text-ink-900 text-sm hover:bg-surface-hover"
-              >
-                {reason}
-                <span className="text-ink-600 text-xs">Shift+{index + 1}</span>
-              </button>
-            ))}
-          </span>
-        ) : null}
+            {ads ? "To nie reklama" : "Fałszywy alarm"}
+          </Button>
+        </Tip>
+        {panel("dismissed")}
+      </span>
+      <span className="relative">
+        <Tip label="Skrót: 3, potem powód 1–3">
+          <Button
+            shortcut="3"
+            aria-pressed={status === "postponed"}
+            aria-expanded={menu === "postponed"}
+            disabled={pending}
+            onClick={() => setMenu(menu === "postponed" ? null : "postponed")}
+          >
+            Odłóż
+          </Button>
+        </Tip>
+        {panel("postponed")}
       </span>
       <p className="ml-auto text-[13px] text-ink-600">
-        Decyzja dotyczy tylko tego materiału. Potem toast z Cofnij i następny.
+        {blocked ?? "Decyzja dotyczy tylko tego materiału. Potem toast z Cofnij i następny."}
       </p>
     </div>
   );
@@ -831,7 +905,7 @@ export function CaseWindow({ id }: { id: string }) {
   const setStatus = useSetStatus();
   const [active, setActive] = useState<string | null>(null);
   const [seek, setSeek] = useState<{ t: number; n: number } | null>(null);
-  const [postponeOpen, setPostponeOpen] = useState(false);
+  const [menu, setMenu] = useState<Menu>(null);
   const opened = useRef<string | null>(null);
 
   const flat = buildQueue(list.data?.items ?? [], params, thresholds.data).flatMap(
@@ -877,7 +951,7 @@ export function CaseWindow({ id }: { id: string }) {
   function decide(status: Decision, note?: string) {
     const current = detail.data;
     if (!current || setStatus.isPending) return;
-    setPostponeOpen(false);
+    setMenu(null);
     const target = next ?? previous;
     setStatus
       .mutateAsync({ id, status, note })
@@ -888,7 +962,7 @@ export function CaseWindow({ id }: { id: string }) {
           note: current.review_note ?? null,
         };
         showDecisionToast(
-          `${DECISION_TEXT[status]}${note ? ` (${note})` : ""}: ${detailTitle(current)}`,
+          `${(current.module === "finfluencer" ? AD_DECISION_TEXT : DECISION_TEXT)[status]}${note ? ` (${note})` : ""}: ${detailTitle(current)}`,
           undo,
         );
         if (target && target.id !== id) go(target);
@@ -897,16 +971,27 @@ export function CaseWindow({ id }: { id: string }) {
       .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Błąd"));
   }
 
+  // Bez kopii z dnia pobrania nie ma czego dołączyć do sprawy (R4): potwierdzenie wyłączone.
+  const material = detail.data?.material;
+  const blockedReason =
+    material && !material.has_snapshot && !material.has_video && !material.text.trim()
+      ? "Brak kopii materiału z dnia pobrania: nie da się udokumentować naruszenia. Odłóż albo oznacz."
+      : null;
+
+  function pick(index: number) {
+    if (!menu || !detail.data) return false;
+    const reason = reasonsFor(menu, detail.data.module === "finfluencer")[index];
+    if (reason) decide(menu, reason.note);
+    return true;
+  }
+
   useHotkeys({
-    "1": () => decide("confirmed"),
-    "2": () => decide("dismissed"),
-    "3": () => setPostponeOpen(!postponeOpen),
-    "!": () => decide("postponed", POSTPONE_REASONS[0]),
-    "@": () => decide("postponed", POSTPONE_REASONS[1]),
-    "#": () => decide("postponed", POSTPONE_REASONS[2]),
+    "1": () => pick(0) || (blockedReason === null && decide("confirmed")),
+    "2": () => pick(1) || setMenu(menu === "dismissed" ? null : "dismissed"),
+    "3": () => pick(2) || setMenu(menu === "postponed" ? null : "postponed"),
     j: () => go(next),
     k: () => go(previous),
-    Escape: () => (postponeOpen ? setPostponeOpen(false) : router.push(`/kolejka${suffix}`)),
+    Escape: () => (menu ? setMenu(null) : router.push(`/kolejka${suffix}`)),
     "ctrl+z": undo,
   });
 
@@ -991,7 +1076,10 @@ export function CaseWindow({ id }: { id: string }) {
           <PlatformLabel platform={data.material.platform} className="text-[13px]" />
           <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-700">
             <StatusGlyph status={data.status} />
-            {reviewText(data)}
+            {reviewText(data).replace(
+              STATUS_LABEL[data.status],
+              statusLabelFor(data.status, data.module),
+            )}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-ink-600">
@@ -1050,10 +1138,12 @@ export function CaseWindow({ id }: { id: string }) {
       </div>
 
       <DecisionBar
+        ads={data.module === "finfluencer"}
         status={data.status}
         pending={setStatus.isPending}
-        postponeOpen={postponeOpen}
-        setPostponeOpen={setPostponeOpen}
+        blocked={blockedReason}
+        menu={menu}
+        setMenu={setMenu}
         onDecide={decide}
       />
 

@@ -5,8 +5,10 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tansta
 import type { ModuleThreshold, ThresholdSettings } from "@/lib/analysis/modules";
 import { withBasePath } from "@/lib/base-path";
 import type { Calibration, Trend } from "@/lib/incidents/contract";
+import type { SourceCreateInput, SourceUpdateInput } from "@/lib/schemas";
 import type { Me, UiDetail, UiList, UiStatus } from "./contract-ui";
 import { daysAgoIso } from "./format";
+import { isViolationItem } from "./queue";
 
 // Klient REST dla dashboardu: docs/KONTRAKT.md §4–§9 oraz /api/sources (poza kontraktem, bez zmian).
 // Przeglądarka woła tylko route handlery Next.js, nigdy FastAPI.
@@ -96,6 +98,13 @@ export function useIncidents(filters: IncidentFilters, enabled = true) {
     enabled,
     staleTime: 15_000,
   });
+}
+
+// Liczba incydentów Kolejki naruszeń (R18): M2, M3 i M1 z sygnałem naruszenia. Filtr M1 liczymy
+// na kliencie, bo eskalacja zależy od pól podmiotu, więc pobieramy do 200 wierszy zamiast `total`.
+export function useViolationCount(filters: IncidentFilters, enabled = true): number | undefined {
+  const query = useIncidents({ ...filters, page_size: 200 }, enabled);
+  return query.data?.items.filter(isViolationItem).length;
 }
 
 export function useIncident(id: string, enabled = true) {
@@ -237,5 +246,26 @@ export function useRunSource() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.sources });
     },
+  });
+}
+
+export function useCreateSource() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SourceCreateInput) =>
+      request<unknown>("/api/sources", { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.sources }),
+  });
+}
+
+export function useUpdateSource() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...change }: { id: string } & SourceUpdateInput) =>
+      request<unknown>(`/api/sources/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(change),
+      }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.sources }),
   });
 }

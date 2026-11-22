@@ -67,6 +67,33 @@ export const sourceUpdateSchema = z
 
 export type SourceUpdateInput = z.infer<typeof sourceUpdateSchema>;
 
+// Formularz „Dodaj źródło” na ekranie Źródła: fraza YouTube albo strona WWW i harmonogram.
+// Po walidacji UI mapuje go na `sourceCreateSchema` (POST /api/sources).
+export const SOURCE_INTERVALS = ["15", "60", "360", "720", "1440", "manual"] as const;
+
+export const sourceAddFormSchema = z
+  .object({
+    kind: z.enum(["youtube_search", "web_page"]),
+    target: z.string().trim().min(2, "Wpisz frazę albo adres (min. 2 znaki)").max(2000),
+    name: z.string().trim().max(200),
+    interval: z.enum(SOURCE_INTERVALS),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === "web_page" && !httpUrl.safeParse(value.target).success) {
+      ctx.addIssue({ code: "custom", path: ["target"], message: "Podaj adres strony http(s)://" });
+    }
+  });
+
+export type SourceAddForm = z.infer<typeof sourceAddFormSchema>;
+
+export function sourceAddToCreate(form: SourceAddForm): SourceCreateInput {
+  const intervalMinutes = form.interval === "manual" ? null : Number(form.interval);
+  const name = form.name || undefined;
+  return form.kind === "web_page"
+    ? { kind: "web_page", url: form.target, platform: "web", name, intervalMinutes, runNow: true }
+    : { kind: "youtube_search", query: form.target, name, intervalMinutes, runNow: true };
+}
+
 // ─── Wyniki, alerty, kalibracja ─────────────────────────────────────────────────────────────
 
 // PATCH /api/incidents/:id (docs/KONTRAKT.md §6). `review_note`: powód przy Odłóż / Fałszywy

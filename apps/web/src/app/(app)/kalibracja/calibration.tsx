@@ -131,7 +131,8 @@ function Slider({
   alert: number;
   onChange: (value: number) => void;
 }) {
-  const stacked = Math.abs(alert - saved) < LABELS_APART;
+  const same = Math.abs(saved - alert) < 0.005;
+  const stacked = !same && Math.abs(alert - saved) < LABELS_APART;
   return (
     <div className="relative pt-7 pb-6">
       <span
@@ -186,21 +187,29 @@ function Slider({
         {[saved, alert].some((x) => x > 1 - EDGE_HIDE) ? null : (
           <span className="absolute right-0">1,00</span>
         )}
-        <span className={cn("absolute", anchor(alert))} style={{ left: `${alert * 100}%` }}>
-          próg alertu {fmtScore(alert)}
-        </span>
-        <span
-          className={cn("absolute", anchor(saved), stacked && "top-4")}
-          style={{ left: `${saved * 100}%` }}
-        >
-          zapisany {fmtScore(saved)}
-        </span>
+        {same ? (
+          <span className={cn("absolute", anchor(saved))} style={{ left: `${saved * 100}%` }}>
+            zapisany i próg alertu {fmtScore(saved)}
+          </span>
+        ) : (
+          <>
+            <span className={cn("absolute", anchor(alert))} style={{ left: `${alert * 100}%` }}>
+              próg alertu {fmtScore(alert)}
+            </span>
+            <span
+              className={cn("absolute", anchor(saved), stacked && "top-4")}
+              style={{ left: `${saved * 100}%` }}
+            >
+              zapisany {fmtScore(saved)}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function Matrix({ data }: { data: CalibrationData | undefined }) {
+function Matrix({ data, ads }: { data: CalibrationData | undefined; ads: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <Card className="p-4">
@@ -222,8 +231,10 @@ function Matrix({ data }: { data: CalibrationData | undefined }) {
           <thead>
             <tr className="text-ink-600">
               <th className="py-1 text-left font-normal" />
-              <th className="py-1 text-right font-normal">Potwierdzony</th>
-              <th className="py-1 text-right font-normal">Fałszywy alarm</th>
+              <th className="py-1 text-right font-normal">{ads ? "Reklama" : "Potwierdzony"}</th>
+              <th className="py-1 text-right font-normal">
+                {ads ? "Nie reklama" : "Fałszywy alarm"}
+              </th>
             </tr>
           </thead>
           <tbody className="text-ink-900">
@@ -334,6 +345,7 @@ function ModuleCalibration({
   const after = useCalibration(module, candidate);
   const save = useSaveThreshold();
   const n = MODULE_NUMBER[module];
+  const ads = module === "finfluencer";
   const changed = candidate !== threshold.flag;
   const flaggedBefore = before.data?.flagged;
   const flaggedAfter = after.data?.flagged;
@@ -353,7 +365,8 @@ function ModuleCalibration({
       <Card className="px-5 pt-5 pb-3">
         <p className="font-semibold text-ink-900 text-lg">{headline}</p>
         <p className="mt-1 text-[13px] text-ink-600">
-          Liczone na {labeled ?? "…"} decyzjach analityków (Potwierdzony i Fałszywy alarm).
+          Liczone na {labeled ?? "…"} decyzjach analityków (
+          {ads ? "To reklama i To nie reklama" : "Potwierdzony i Fałszywy alarm"}).
         </p>
         <Slider
           value={candidate}
@@ -376,14 +389,14 @@ function ModuleCalibration({
       {before.error ? <ErrorNote error={before.error} /> : null}
       <div className="grid grid-cols-4 gap-4">
         <Metric
-          title="Fałszywe alarmy (FP)"
+          title={ads ? "Nie-reklamy w rejestrze (FP)" : "Fałszywe alarmy (FP)"}
           before={before.data?.fp}
           after={after.data?.fp}
           digits={0}
           labeled={labeled}
         />
         <Metric
-          title="Przeoczone naruszenia (FN)"
+          title={ads ? "Przeoczone reklamy (FN)" : "Przeoczone naruszenia (FN)"}
           before={before.data?.fn}
           after={after.data?.fn}
           digits={0}
@@ -391,7 +404,11 @@ function ModuleCalibration({
         />
         <Metric
           title="Precyzja"
-          hint="Jaka część oflagowanych materiałów to potwierdzone naruszenia."
+          hint={
+            ads
+              ? "Jaka część wykrytych materiałów to potwierdzone reklamy."
+              : "Jaka część oflagowanych materiałów to potwierdzone naruszenia."
+          }
           before={before.data?.precision}
           after={after.data?.precision}
           digits={2}
@@ -399,7 +416,11 @@ function ModuleCalibration({
         />
         <Metric
           title="Pełność"
-          hint="Jaką część potwierdzonych naruszeń próg wyłapuje."
+          hint={
+            ads
+              ? "Jaką część potwierdzonych reklam próg wyłapuje."
+              : "Jaką część potwierdzonych naruszeń próg wyłapuje."
+          }
           before={before.data?.recall}
           after={after.data?.recall}
           digits={2}
@@ -435,7 +456,7 @@ function ModuleCalibration({
       </div>
 
       <div className="grid grid-cols-[360px_minmax(0,1fr)] items-start gap-4">
-        <Matrix data={after.data} />
+        <Matrix data={after.data} ads={ads} />
         <DropList module={module} saved={threshold.flag} candidate={candidate} />
       </div>
     </div>
@@ -449,7 +470,7 @@ export function Calibration() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-5">
       <PageHeader
         title="Kalibracja"
-        description="Próg flagi decyduje, co trafia do Kolejki. FP i FN liczymy z decyzji analityków."
+        description="Próg flagi decyduje, co trafia do Kolejki (M2, M3) i do rejestru reklam (M1). FP i FN liczymy z decyzji analityków."
         actions={
           <Tabs
             label="Moduł"

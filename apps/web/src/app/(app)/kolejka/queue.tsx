@@ -1,16 +1,19 @@
 "use client";
 
-import type { AnalysisModule, Platform } from "@app/db";
+import type { Platform } from "@app/db";
 import {
+  ArrowDownUp,
   ArrowRight,
   Boxes,
   Calendar,
   ChevronDown,
   ChevronRight,
   Copy,
+  Download,
   ExternalLink,
   Gauge,
   RadioTower,
+  Rows3,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -20,6 +23,7 @@ import { PlatformLabel } from "@/components/iw/icons";
 import { RegistryChip } from "@/components/iw/registry";
 import {
   Avatar,
+  Button,
   Chip,
   EmptyState,
   ErrorNote,
@@ -33,7 +37,7 @@ import {
   Tip,
 } from "@/components/iw/ui";
 import type { ThresholdSettings } from "@/lib/analysis/modules";
-import { useIncidents, useThresholds } from "@/lib/client/api";
+import { useIncidents, useThresholds, useViolationCount } from "@/lib/client/api";
 import type { UiListItem } from "@/lib/client/contract-ui";
 import {
   ACTIVE_PLATFORMS,
@@ -46,6 +50,9 @@ import {
 import { useHotkeys } from "@/lib/client/hotkeys";
 import {
   buildQueue,
+  entityName,
+  escalationText,
+  isEscalated,
   materialTitle,
   type QueueGroup,
   type QueueParams,
@@ -103,6 +110,9 @@ function Row({
             {materialTitle(item)}
           </span>
           <span className="block truncate text-[13px] text-ink-600">
+            {isEscalated(item) ? (
+              <span className="font-medium text-warning-800">{escalationText(item)} · </span>
+            ) : null}
             {PLATFORM_LABEL[item.platform]} · wykryto {fmtRelative(item.created_at)}
             {fresh ? " · alert na żywo" : ""}
             {decided && (item.reviewed_by || item.reviewed_at)
@@ -148,7 +158,12 @@ function Row({
         </span>
         <Chip>{MODULE_SHORT[item.module]}</Chip>
         <PlatformLabel platform={item.platform} className="w-[104px] text-[13px]" />
-        <ScoreCell score={item.score} flag={threshold.flag} alert={threshold.alert} />
+        <ScoreCell
+          score={item.risk_score ?? item.score}
+          flag={threshold.flag}
+          alert={threshold.alert}
+          confidence={item.module === "finfluencer"}
+        />
       </Link>
     </li>
   );
@@ -164,6 +179,7 @@ function Group({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(true);
+  if (group.key === "__wszystkie") return <ul className="flex flex-col">{children}</ul>;
   const n = group.items.length;
   const count =
     view === "otwarte"
@@ -208,16 +224,60 @@ function Group({
   );
 }
 
+function csvCell(value: string | number | null | undefined): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  return /[";\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+// Zestawienie potwierdzonych naruszeń (Z7): CSV ze średnikiem i BOM, otwiera się w Excelu.
+function exportConfirmed(items: UiListItem[]) {
+  const header = [
+    "podmiot",
+    "modul",
+    "tytul",
+    "platforma",
+    "url",
+    "wykryto",
+    "wynik",
+    "decyzja",
+    "autor",
+    "kiedy",
+    "powod",
+  ];
+  const rows = items.map((item) => [
+    entityName(item),
+    MODULE_SHORT[item.module],
+    item.title ?? item.summary,
+    PLATFORM_LABEL[item.platform],
+    item.url,
+    item.created_at,
+    (item.risk_score ?? item.score).toFixed(2).replace(".", ","),
+    item.status,
+    item.reviewed_by?.name,
+    item.reviewed_at,
+    item.review_note,
+  ]);
+  const text = [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([`\uFEFF${text}`], { type: "text/csv;charset=utf-8" }));
+  link.download = `potwierdzone-naruszenia-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function useViewCount(params: QueueParams, view: QueueView): number | undefined {
+  const scoped = params.module === "naruszenia";
+  const total = useIncidents({ ...queueFilters(params, view), page_size: 1 }, !scoped);
+  const violations = useViolationCount(queueFilters(params, view), scoped);
+  return scoped ? violations : total.data?.total;
+}
+
 function useViewCounts(params: QueueParams) {
-  const open = useIncidents({ ...queueFilters(params, "otwarte"), page_size: 1 });
-  const postponed = useIncidents({ ...queueFilters(params, "odlozone"), page_size: 1 });
-  const confirmed = useIncidents({ ...queueFilters(params, "potwierdzone"), page_size: 1 });
-  const dismissed = useIncidents({ ...queueFilters(params, "falszywe"), page_size: 1 });
   return {
-    otwarte: open.data?.total,
-    odlozone: postponed.data?.total,
-    potwierdzone: confirmed.data?.total,
-    falszywe: dismissed.data?.total,
+    otwarte: useViewCount(params, "otwarte"),
+    odlozone: useViewCount(params, "odlozone"),
+    potwierdzone: useViewCount(params, "potwierdzone"),
+    falszywe: useViewCount(params, "falszywe"),
   };
 }
 
@@ -235,6 +295,11 @@ export function Queue() {
   const groups = buildQueue(list.data?.items ?? [], params, thresholds.data);
   const flat = groups.flatMap((group) => group.items);
   const suffix = queueSearch(params);
+  const filtersActive =
+    params.date !== "wszystko" ||
+    params.platform !== "wszystkie" ||
+    params.risk !== "wszystkie" ||
+    (params.module !== "naruszenia" && params.module !== "wszystkie");
 
   function update(next: Partial<QueueParams>) {
     router.replace(`${pathname}${queueSearch({ ...params, ...next })}`, { scroll: false });
@@ -250,8 +315,9 @@ export function Queue() {
     },
   });
 
-  const moduleOptions: { value: AnalysisModule | "wszystkie"; label: string }[] = [
-    { value: "wszystkie", label: "wszystkie" },
+  const moduleOptions: { value: QueueParams["module"]; label: string }[] = [
+    { value: "naruszenia", label: "naruszenia (M2, M3, M1 z sygnałem)" },
+    { value: "wszystkie", label: "wszystkie, z reklamami M1" },
     { value: "finfluencer", label: "1" },
     { value: "risk_disclosure", label: "2" },
     { value: "unauthorized_advisory", label: "3" },
@@ -266,7 +332,7 @@ export function Queue() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <PageHeader
         title="Kolejka"
-        description="Pogrupowane po podmiocie · najwyższe ryzyko na górze"
+        description="Potencjalne naruszenia. Reklamy osób trzecich bez sygnału naruszenia są w rejestrze Reklamy (M1)."
         actions={
           <span className="flex items-center gap-2 text-[13px] text-ink-600">
             <Kbd>Enter</Kbd> otwórz <Kbd>J</Kbd> następny <Kbd>K</Kbd> poprzedni
@@ -323,10 +389,35 @@ export function Queue() {
           icon={<Boxes className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
           label="Moduł"
           value={params.module}
-          allValue="wszystkie"
+          allValue="naruszenia"
           onChange={(module) => update({ module })}
           options={moduleOptions}
         />
+        <span className="ml-auto flex gap-2">
+          <FilterSelect
+            icon={<ArrowDownUp className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
+            label="Sortuj"
+            value={params.sort}
+            allValue="ryzyko"
+            onChange={(sort) => update({ sort })}
+            options={[
+              { value: "ryzyko", label: "ryzyko" },
+              { value: "najnowsze", label: "najnowsze" },
+              { value: "najstarsze", label: "najstarsze" },
+            ]}
+          />
+          <FilterSelect
+            icon={<Rows3 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
+            label="Grupuj"
+            value={params.grouping}
+            allValue="podmiot"
+            onChange={(grouping) => update({ grouping })}
+            options={[
+              { value: "podmiot", label: "podmiot" },
+              { value: "brak", label: "bez grupowania" },
+            ]}
+          />
+        </span>
       </div>
 
       {list.error ? <ErrorNote error={list.error} /> : null}
@@ -338,14 +429,34 @@ export function Queue() {
           <Skeleton className="h-14 w-full" />
         </div>
       ) : flat.length === 0 ? (
-        <EmptyState
-          illustration="rodo"
-          title={params.view === "otwarte" ? "Wszystko przejrzane" : "Brak materiałów w tym widoku"}
-        >
-          {params.view === "otwarte"
-            ? "Nowe materiały powyżej progu pojawią się tutaj same."
-            : "Zmień filtry albo zakładkę."}
-        </EmptyState>
+        filtersActive ? (
+          <EmptyState illustration="archiwum" title="Nic nie pasuje do filtrów">
+            <Button
+              className="mt-2"
+              onClick={() =>
+                update({
+                  date: "wszystko",
+                  platform: "wszystkie",
+                  risk: "wszystkie",
+                  module: "naruszenia",
+                })
+              }
+            >
+              Wyczyść filtry
+            </Button>
+          </EmptyState>
+        ) : (
+          <EmptyState
+            illustration="rodo"
+            title={
+              params.view === "otwarte" ? "Wszystko przejrzane" : "Brak materiałów w tym widoku"
+            }
+          >
+            {params.view === "otwarte"
+              ? "Nowe materiały powyżej progu pojawią się tutaj same."
+              : "Zmień zakładkę albo zakres dat."}
+          </EmptyState>
+        )
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map((group) => (
@@ -367,6 +478,20 @@ export function Queue() {
               })}
             </Group>
           ))}
+          {params.view === "potwierdzone" ? (
+            <div className="flex items-center gap-3">
+              <Button
+                variant="primary"
+                icon={<Download className="size-4" strokeWidth={1.5} aria-hidden="true" />}
+                onClick={() => exportConfirmed(flat)}
+              >
+                Eksportuj potwierdzone ({flat.length})
+              </Button>
+              <span className="text-[13px] text-ink-600">
+                CSV z danymi podmiotu, URL, wynikiem i autorem decyzji (Z7).
+              </span>
+            </div>
+          ) : null}
           <p className="text-[13px] text-ink-600">
             Pokazano {flat.length} z {list.data.total}
             {list.data.total > flat.length && params.risk === "wszystkie"

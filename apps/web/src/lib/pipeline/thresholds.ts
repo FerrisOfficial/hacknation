@@ -15,6 +15,7 @@ import {
   type ThresholdSettings,
   type Thresholds,
 } from "@/lib/analysis/modules";
+import { RISK_DECAY } from "@/lib/analysis/risk";
 
 type Reader = Pick<Db, "select">;
 
@@ -73,6 +74,24 @@ export function thresholdSql(thresholds: Thresholds): SQL<number> {
     (module) => sql`when ${module} then ${thresholds[module]}::real`,
   );
   return sql<number>`(case ${analysisResults.module}::text ${sql.join(cases, sql` `)} end)`;
+}
+
+// Risk score (@/lib/analysis/risk) w SQL: reguły z `details.flags` o score ≥ próg modułu,
+// od najwyższego, risk = 1 − Π(1 − s_k · 0,5^k). Bez score'ów reguł (M1, M3, starsze wyniki) — score.
+export function riskScoreSql(thresholds: Thresholds): SQL<number> {
+  return sql<number>`coalesce((
+    select 1 - exp(sum(ln(greatest(1 - ranked.s * power(${RISK_DECAY}::float8, ranked.rn - 1), 1e-9))))
+    from (
+      select (flag->>'score')::float8 as s,
+        row_number() over (order by (flag->>'score')::float8 desc) as rn
+      from jsonb_array_elements(coalesce(${analysisResults.details}->'flags', '[]'::jsonb)) as flag
+      where jsonb_typeof(flag->'score') = 'number'
+        and (flag->>'score')::float8 >= ${thresholdSql(thresholds)}
+    ) as ranked
+  ), case when exists (
+    select 1 from jsonb_array_elements(coalesce(${analysisResults.details}->'flags', '[]'::jsonb)) as flag
+    where jsonb_typeof(flag->'score') = 'number'
+  ) then 0 else ${analysisResults.score} end)::float8`;
 }
 
 // Granica wysokiego ryzyka (zgodnie z riskLevel w @/lib/analysis/modules): (próg + 1) / 2.
