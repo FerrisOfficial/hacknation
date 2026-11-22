@@ -22,7 +22,7 @@ export const DEFAULT_MODEL_NAME = "services/ml";
 
 export function buildFlags(
   module: AnalysisModule,
-  output: Pick<AnalyzeOutput, "findings">,
+  output: Pick<AnalyzeOutput, "findings" | "rule_scores">,
   material: DetailsMaterial,
 ): Flag[] {
   const seen = new Set<string>();
@@ -39,6 +39,8 @@ export function buildFlags(
         kind: rule.kind,
         result: finding.result,
         confidence: round(finding.confidence),
+        // Score reguły z ML (M2) — z nim karta incydentu porównuje próg. null = moduł bez score'ów.
+        score: rule.id in output.rule_scores ? round(output.rule_scores[rule.id] ?? 0) : null,
         reason: finding.reason,
         evidence: buildEvidence(material, finding.quote),
       },
@@ -46,13 +48,13 @@ export function buildFlags(
   });
 }
 
-// Score 0–1 = prawdopodobieństwo naruszenia, z nim porównujemy progi `flag` i `alert`.
+// Score 0–1, z nim porównujemy progi `flag` i `alert` (lista, trend, kalibracja, alert).
 // M1, M3: `probability` etykiety modelu (dla etykiety negatywnej 1 − probability).
-// M2 (i M1/M3 bez `probability`): noisy-OR pewności naruszonych reguł — każde kolejne naruszenie
-// podnosi score, reguły `suggestion` z wagą 0,5.
+// M2 z `rule_scores`: najwyższy score reguły — incydent, gdy którakolwiek reguła ≥ próg.
+// Bez `rule_scores` (starsze odpowiedzi): noisy-OR pewności naruszonych reguł, `suggestion` × 0,5.
 export function computeScore(
   module: AnalysisModule,
-  output: Pick<AnalyzeOutput, "label" | "probability" | "error">,
+  output: Pick<AnalyzeOutput, "label" | "probability" | "error" | "rule_scores">,
   flags: readonly Flag[],
 ): number {
   if (output.error) return 0;
@@ -60,6 +62,11 @@ export function computeScore(
   if (positive && output.label !== null && output.probability !== null) {
     return round(output.label === positive ? output.probability : 1 - output.probability);
   }
+  // Tylko reguły z katalogu modułu — id spoza katalogu (halucynacja modelu) pomijamy.
+  const ruleScores = Object.entries(output.rule_scores)
+    .filter(([ruleId]) => findRule(module, ruleId))
+    .map(([, score]) => score);
+  if (ruleScores.length > 0) return round(Math.max(...ruleScores));
   const clean = flags
     .filter((flag) => flag.result === "violation")
     .reduce(
@@ -95,9 +102,12 @@ export function buildAnalysisResult(
     flags,
     error: output.error,
   };
+  const score = computeScore(module, output, flags);
   return {
     module,
-    score: computeScore(module, output, flags),
+    score,
+    // Do sortowania; bez `risk_score` z ML sortujemy po `score`.
+    risk_score: output.error ? 0 : (output.risk_score ?? score),
     label: resultLabel(output, flags).slice(0, 100),
     model: output.model ?? DEFAULT_MODEL_NAME,
     details,

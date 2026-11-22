@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
-import type { IncidentEntity } from "@/lib/incidents/contract";
+import { type IncidentEntity, readIncidentDetails } from "@/lib/incidents/contract";
 import { type AnalyzeOutput, analyzeOutputSchema } from "./contract";
 import { buildAnalysisResult } from "./details";
 import { RULES, requestedRuleIds } from "./rules";
@@ -51,7 +51,7 @@ describe("katalog reguł", () => {
 });
 
 describe("buildAnalysisResult", () => {
-  it("M2: flagi z katalogu, dowód z pozycjami, score noisy-OR, label „naruszenie”", () => {
+  it("M2 bez rule_scores (stara odpowiedź): flagi z katalogu, dowód, score noisy-OR", () => {
     const result = buildAnalysisResult(
       "risk_disclosure",
       output({
@@ -99,6 +99,7 @@ describe("buildAnalysisResult", () => {
           kind: "hard",
           result: "violation",
           confidence: 0.8,
+          score: null,
           reason: "Brak ryzyka.",
           evidence: {
             quote: "nawet 20% rocznie",
@@ -166,5 +167,75 @@ describe("buildAnalysisResult", () => {
     );
     expect(result).toMatchObject({ score: 0, label: "blad_analizy" });
     expect(result.details).toMatchObject({ flags: [], error: "timeout" });
+  });
+
+  it("M2 z rule_scores: score = najwyższy score reguły (próg na regułach), risk_score do sortowania", () => {
+    const result = buildAnalysisResult(
+      "risk_disclosure",
+      output({
+        findings: [
+          {
+            rule_id: "3",
+            result: "violation",
+            confidence: 0.53,
+            quote: "nawet 20% rocznie",
+            reason: "",
+          },
+          { rule_id: "2", result: "violation", confidence: 0.55, quote: null, reason: "" },
+        ],
+        rule_scores: {
+          "3": { p_violation: 0.53, weight: 1, score: 0.53 },
+          "2": { p_violation: 0.55, weight: 0.3, score: 0.165 },
+          "99": { p_violation: 1, weight: 1, score: 1 },
+          "16": { score: 7 },
+        },
+        risk_score: 0.6,
+      }),
+      MATERIAL,
+      ENTITY,
+    );
+    // Noisy-OR dawałby 1 − 0,47 · 0,45 ≈ 0,79; teraz liczy się najwyższa reguła z katalogu.
+    expect(result.score).toBe(0.53);
+    expect(result.risk_score).toBe(0.6);
+    expect(readIncidentDetails(result.details).flags.map((f) => [f.rule_id, f.score])).toEqual([
+      ["3", 0.53],
+      ["2", 0.165],
+    ]);
+  });
+
+  it("M2: sama reguła formalna (2) nie robi incydentu przy progu 0,5", () => {
+    const result = buildAnalysisResult(
+      "risk_disclosure",
+      output({
+        findings: [{ rule_id: "2", result: "violation", confidence: 0.55, quote: null }],
+        rule_scores: { "2": { score: 0.165 }, "3": { score: 0.1 } },
+        risk_score: 0.2,
+      }),
+      MATERIAL,
+      ENTITY,
+    );
+    expect(result.score).toBe(0.165);
+    expect(result.score).toBeLessThan(0.5);
+  });
+
+  it("M2: błąd modelu daje score i risk_score 0", () => {
+    const result = buildAnalysisResult(
+      "risk_disclosure",
+      output({ error: "timeout", rule_scores: { "3": { score: 0.9 } }, risk_score: 0.9 }),
+      MATERIAL,
+      ENTITY,
+    );
+    expect(result.score).toBe(0);
+    expect(result.risk_score).toBe(0);
+  });
+
+  it("bez risk_score z ML: risk_score = score", () => {
+    const result = buildAnalysisResult(
+      "risk_disclosure",
+      output({ rule_scores: { "3": { score: 0.7 } } }),
+      MATERIAL,
+      ENTITY,
+    );
+    expect(result.risk_score).toBe(0.7);
   });
 });

@@ -41,6 +41,15 @@ describe("readIncidentDetails", () => {
     });
     expect(details.flags).toHaveLength(1);
     expect(details.flags[0]?.evidence?.start).toBe(10);
+    // Flaga zapisana przed score'ami per reguła: score = null.
+    expect(details.flags[0]?.score).toBeNull();
+  });
+
+  it("czyta score reguły z flagi", () => {
+    const details = readIncidentDetails({
+      flags: [{ rule_id: "3", result: "violation", confidence: 0.9, score: 0.87 }],
+    });
+    expect(details.flags[0]?.score).toBe(0.87);
   });
 
   it("rozumie stary kształt sprzed kontraktu", () => {
@@ -116,6 +125,9 @@ describe("incidentsQuerySchema", () => {
       min_score: 0.7,
       page: 2,
       page_size: 25,
+      sort: "risk",
     });
+    expect(incidentsQuerySchema.parse({ sort: "date" }).sort).toBe("date");
+    expect(incidentsQuerySchema.safeParse({ sort: "score" }).success).toBe(false);
   });
 });

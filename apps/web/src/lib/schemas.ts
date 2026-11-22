@@ -184,6 +184,8 @@ export const incidentsQuerySchema = z.object({
   from: dateParam,
   to: dateParam,
   min_score: z.coerce.number().min(0).max(1).optional(),
+  // risk: najpierw najwyższy risk_score (priorytet przeglądu), date: najnowsze pierwsze.
+  sort: z.enum(["risk", "date"]).default("risk"),
   page: z.coerce.number().int().min(1).default(1),
   page_size: z.coerce.number().int().min(1).max(200).default(25),
 });

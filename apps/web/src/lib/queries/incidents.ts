@@ -22,7 +22,11 @@ import type { IncidentsQuery } from "@/lib/schemas";
 import { resultConditions } from "./results";
 
 // Incydent = wynik jednego modułu AI dla materiału (wiersz `analysis_results`) ze score ≥ próg
-// `flag` modułu. Kształty odpowiedzi: docs/KONTRAKT.md §4–§6.
+// `flag` modułu (M2: któraś reguła ≥ próg). Kolejność: risk_score (priorytet) albo data.
+// Kształty odpowiedzi: docs/KONTRAKT.md §4–§6.
+
+// Priorytet do sortowania: risk_score z ML, a bez niego (M1, M3, starsze wyniki) score.
+const prioritySql = sql<number>`coalesce(${analysisResults.riskScore}, ${analysisResults.score})`;
 
 export async function listIncidentItems(
   db: Db,
@@ -50,6 +54,7 @@ export async function listIncidentItems(
         id: analysisResults.id,
         module: analysisResults.module,
         score: analysisResults.score,
+        priority: prioritySql,
         label: analysisResults.label,
         details: analysisResults.details,
         status: analysisResults.status,
@@ -61,8 +66,9 @@ export async function listIncidentItems(
       .innerJoin(materials, eq(materials.id, analysisResults.materialId))
       .where(where)
       .orderBy(
-        desc(analysisResults.createdAt),
-        desc(analysisResults.score),
+        ...(query.sort === "date"
+          ? [desc(analysisResults.createdAt), desc(analysisResults.score)]
+          : [desc(prioritySql), desc(analysisResults.createdAt)]),
         desc(analysisResults.id),
       )
       .limit(query.page_size)
@@ -81,6 +87,7 @@ export async function listIncidentItems(
         id: row.id,
         module: row.module,
         score: roundScore(row.score),
+        risk_score: roundScore(row.priority),
         label: row.label,
         summary: details.summary,
         firm_name: details.entity.firm_name,
@@ -119,6 +126,7 @@ export async function getIncidentDetail(db: Db, id: string): Promise<IncidentDet
     id: result.id,
     module: result.module,
     score: roundScore(result.score),
+    risk_score: roundScore(result.riskScore ?? result.score),
     label: result.label,
     status: result.status,
     created_at: result.createdAt.toISOString(),

@@ -9,7 +9,10 @@ import { ANALYSIS_MODULES } from "./modules";
 
 export const analysisResultInputSchema = z.object({
   module: z.enum(ANALYSIS_MODULES),
+  // Do progu: incydent, gdy score ≥ próg `flag` modułu (M2: najwyższy score reguły).
   score: z.number().min(0).max(1),
+  // Do sortowania listy incydentów (M2: `risk_score` z ML). Brak = sortujemy po `score`.
+  risk_score: z.number().min(0).max(1).nullable().optional(),
   label: z.string().trim().min(1).max(100),
   model: z.string().trim().min(1).max(200),
   details: z.record(z.string(), z.unknown()).default({}),
@@ -50,6 +53,8 @@ export const findingSchema = z.object({
 
 export type Finding = z.infer<typeof findingSchema>;
 
+const ruleScoreSchema = z.object({ score: probability });
+
 // §2: wyjście modelu. Pojedyncza zła pozycja w `findings` nie unieważnia całej odpowiedzi —
 // odrzucamy tylko ją. `model` (nazwa modelu) jest poza kontraktem i opcjonalne.
 export const analyzeOutputSchema = z.object({
@@ -68,6 +73,21 @@ export const analyzeOutputSchema = z.object({
     ),
   error: z.string().nullable().default(null),
   model: z.string().trim().min(1).max(200).optional(),
+  // Poza §2, tylko M2: score każdej reguły (waga * P(naruszenie)) i score do sortowania.
+  // Zła pozycja `rule_scores` nie unieważnia odpowiedzi — pomijamy ją.
+  rule_scores: z
+    .record(z.string(), z.unknown())
+    .default({})
+    .catch({})
+    .transform((items) =>
+      Object.fromEntries(
+        Object.entries(items).flatMap(([ruleId, item]) => {
+          const parsed = ruleScoreSchema.safeParse(item);
+          return parsed.success ? [[ruleId, parsed.data.score]] : [];
+        }),
+      ),
+    ),
+  risk_score: probability.nullable().default(null).catch(null),
 });
 
 export type AnalyzeOutput = z.infer<typeof analyzeOutputSchema>;

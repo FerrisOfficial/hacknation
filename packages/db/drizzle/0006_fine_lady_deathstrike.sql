@@ -1,0 +1,1 @@
+ALTER TABLE "analysis_results" ADD COLUMN "risk_score" real;

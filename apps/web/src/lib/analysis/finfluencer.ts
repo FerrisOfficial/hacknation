@@ -579,6 +579,7 @@ function m1Flag(
     kind: rule?.kind ?? "hard",
     result,
     confidence,
+    score: null,
     reason,
     evidence: m1Evidence(material, quote),
   };
