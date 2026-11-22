@@ -271,10 +271,53 @@ def _window(text: str, quote: str | None) -> str:
     return _clip(text)
 
 
+# Krótkie przykłady dla reguł, w których model najczęściej się mylił (ewaluacja na 50 stronach):
+# „zyskaj dostęp” brane za obietnicę zysku, nagłówki brane za prognozy i ulgi, „podlegamy nadzorowi
+# KNF” brane za sugerowanie aprobaty. Przykłady nie są cytatami z ocenianych stron.
+RULE_EXAMPLES: dict[str, list[tuple[str, str]]] = {
+    "3": [
+        ("Zyskaj pełną kontrolę nad swoimi inwestycjami.", "NIE"),
+        ("Zyski nie są gwarantowane — możesz stracić część kapitału.", "NIE"),
+        ("W tym przewodniku wyjaśniamy, jak działają obligacje.", "NIE"),
+        ("Zarabiaj do 8% rocznie. Inwestowanie wiąże się z ryzykiem utraty kapitału.", "NIE"),
+        ("Zarabiaj do 8% rocznie — otwórz konto już dziś!", "TAK"),
+        ("Pomnóż swoje oszczędności dzięki naszym funduszom akcyjnym.", "TAK"),
+    ],
+    "15": [
+        ("Pobierz raport: Perspektywy rynkowe na 2027 rok", "NIE"),
+        ("Limit wpłat ustalany jest na podstawie prognozowanego wynagrodzenia.", "NIE"),
+        ("W przyszłym roku nasz fundusz przyniesie co najmniej 12%.", "TAK"),
+    ],
+    "16": [
+        ("Przeczytaj artykuł: jak rozliczyć IKZE w zeznaniu rocznym", "NIE"),
+        (
+            "Wpłaty na IKZE odliczysz od dochodu. Skutki podatkowe zależą od Twojej sytuacji "
+            "i mogą się zmienić.",
+            "NIE",
+        ),
+        ("Inwestuj bez podatku od zysków kapitałowych!", "TAK"),
+        ("Co roku zmniejszaj swój podatek dzięki naszemu kontu emerytalnemu.", "TAK"),
+    ],
+    "17": [
+        ("Jesteśmy firmą inwestycyjną działającą pod nadzorem KNF.", "NIE"),
+        ("Prospekt emisyjny został zatwierdzony przez KNF.", "NIE"),
+        ("Produkt sprawdzony i rekomendowany przez Komisję Nadzoru Finansowego.", "TAK"),
+    ],
+    "18": [
+        ("Podlegamy nadzorowi KNF i uczestniczymy w systemie rekompensat dla inwestorów.", "NIE"),
+        ("Licencjonowany i regulowany przez CySEC.", "NIE"),
+        ("Twoje pieniądze są u nas w pełni bezpieczne, bo nadzoruje nas KNF.", "TAK"),
+    ],
+}
+
+
 def _binary_question(rule_id: str) -> str:
+    examples = RULE_EXAMPLES.get(rule_id, [])
+    shown = "".join(f"- „{text}” → {answer}\n" for text, answer in examples)
     return (
         f"Reguła {rule_id}: {RULE_TEXT[rule_id]}\n"
-        "Czy tekst narusza tę regułę? Odpowiedz jednym słowem: TAK (narusza) albo NIE (spełnia)."
+        + (f"Przykłady:\n{shown}" if shown else "")
+        + "Czy tekst narusza tę regułę? Odpowiedz jednym słowem: TAK (narusza) albo NIE (spełnia)."
     )
 
 
@@ -318,6 +361,10 @@ def analyze_risk_disclosure_hybrid(
     def applicable(rule_id: str) -> bool:
         if rule_id == "9":
             return warning.result != "n/a"
+        if rule_id == "10":
+            # Język rozstrzyga detektor (regex) — model mylił „cała strona po angielsku”
+            # z „ostrzeżenie w innym języku niż przekaz”.
+            return False
         finding = by_rule[rule_id]
         return finding.result != "n/a"
 
