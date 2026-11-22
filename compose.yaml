@@ -131,6 +131,9 @@ services:
       ANALYZE_CONCURRENCY: ${ANALYZE_CONCURRENCY:-1}
       MATERIALS_LIMIT: ${MATERIALS_LIMIT:-2000}
       SCHEDULER_BATCH: ${SCHEDULER_BATCH:-1}
+      # Tryb startu (README): quick — zbiór demo, harmonogram wstrzymany; full — źródła M1/M3
+      # zbierają od razu, plus zbiór demo z decyzjami do Kalibracji.
+      IVE_MODE: ${IVE_MODE:-quick}
       # Autor decyzji w dashboardzie (GET /api/me) — logowania nie ma.
       UI_USER_NAME: ${UI_USER_NAME:-Analityk UKNF}
       UI_USER_ROLE: ${UI_USER_ROLE:-analityk}

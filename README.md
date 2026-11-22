@@ -13,27 +13,45 @@ System monitoringu internetu dla UKNF (zadanie **#InvestWatch — na straży inw
 
 ## Quick Start
 
-**Wymagania:** Docker z Compose v2 (Windows: Docker Desktop z WSL 2).
+Wymagania: Docker z Compose v2 (Windows: Docker Desktop z WSL 2). Dashboard w obu trybach: **http://localhost:3000/hacknation**.
 
-| Tryb | Model | Sprzęt |
-|---|---|---|
-| `rules` (domyślny) | brak | bez GPU; tylko obrazy kontenerów |
-| `hybrid` | Bielik-PL-11B Q8_0, ok. 12 GB dysku | najlepiej GPU NVIDIA z VRAM na cały model, bez GPU działa na CPU (wolno); mniej pamięci: kwantyzacja Q4_K_M ok. 7 GB ([services/ml/README.md](services/ml/README.md)) |
+### Tryb szybki: dane demo, bez sieci i bez modelu
 
 ```bash
 cp .env.example .env
+docker compose up --build web
+```
+
+Pierwsza budowa obrazów trwa kilkanaście minut, kolejne starty kilkanaście sekund. Przy pierwszym starcie baza dostaje zbiór demo: 54 fikcyjne materiały (M1, M2, M3) z wynikami, dowodami i decyzjami analityka. Działają Przegląd, Kolejka, okno sprawy, Reklamy, Kalibracja (FP/FN od razu) i Źródła. Harmonogram jest wstrzymany, więc system nic nie pobiera z internetu. Włączysz go w zakładce Źródła.
+
+### Tryb pełny: prawdziwe zbieranie i LLM
+
+```bash
+cp .env.example .env
+# w .env: IVE_MODE=full, M2_ENGINE=hybrid, M3_ENGINE=hybrid
 docker compose up --build
 ```
 
-Dashboard: http://localhost:3000/hacknation. Domyślnie M2 i M3 działają na regułach (`M2_ENGINE=rules`, `M3_ENGINE=rules`) i stos nie pobiera modelu.
+Na Linuksie i Macu zamiast edycji `.env`: `IVE_MODE=full M2_ENGINE=hybrid M3_ENGINE=hybrid docker compose up --build`.
+
+Po starcie nic nie trzeba klikać:
+1. `ollama-pull` pobiera Bielika-PL-11B (ok. 12 GB, raz, do wolumenu). Do końca pobierania M2 i M3 oceniają materiały samymi regułami.
+2. Źródła M1 (frazy reklamowe dla marek z rejestru KNF) i M3 (frazy doradztwa) zakładają się same, a harmonogram od razu szuka w YouTube i na stronach z opisów filmów. Pierwsze materiały są w bazie po ok. minucie.
+3. Nowe materiały przechodzą przez analizę. Wysokie ryzyko pojawia się jako powiadomienie na żywo.
+4. Kalibracja działa od pierwszej minuty na zbiorze demo z decyzjami analityka, a nowe decyzje z Kolejki dochodzą do niego.
+
+Tryb pełny potrzebuje internetu (YouTube, rejestr KNF). LLM liczy jedno zapytanie naraz, więc bez GPU analiza materiału trwa kilkadziesiąt sekund.
+
+| Wymagania sprzętowe | Szybki | Pełny |
+|---|---|---|
+| GPU | niepotrzebne | zalecane NVIDIA z VRAM na model (Q8_0 ok. 12 GB); bez GPU działa na CPU, wolno |
+| Dysk na model | 0 | ok. 12 GB (Q4_K_M: ok. 7 GB, [services/ml/README.md](services/ml/README.md)) |
 
 | Wariant | Komenda / ustawienie |
 |---|---|
-| Z LLM (Bielik-PL-11B, ok. 12 GB, pobierany raz do wolumenu) | `M2_ENGINE=hybrid`, `M3_ENGINE=hybrid` w `.env` |
 | GPU NVIDIA | `docker compose -f compose.yaml -f compose.gpu.yaml up --build` |
-| Bez Ollamy | `docker compose up --build web` |
-| Reset bazy i modelu | `docker compose down -v` |
-| Ollama na hoście (Mac, GPU Apple) | `OLLAMA_URL=http://host.docker.internal:11434` |
+| Ollama na hoście (Mac, GPU Apple) | `OLLAMA_URL=http://host.docker.internal:11434` w `.env` |
+| Zmiana trybu albo reset danych | `docker compose down -v`, potem start od nowa (zbiór demo trafia tylko do pustej bazy) |
 
 ### Usługi
 
