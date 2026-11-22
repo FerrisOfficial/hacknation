@@ -130,12 +130,36 @@ def test_hybrid_engine_uses_llm(monkeypatch: pytest.MonkeyPatch) -> None:
         return_value=httpx.Response(200, json=_logprobs("NIE"))
     )
     analysis = analyze_advisory_engine(WEALTH)
-    assert route.call_count == 3
+    # Dwa pytania: doradztwo inwestycyjne i zarządzanie portfelem.
+    assert route.call_count == 2
     sent = json.loads(route.calls[0].request.content)
-    assert "art. 76" in sent["messages"][0]["content"]
+    assert "art. 76" in sent["messages"][1]["content"]
     assert analysis.engine == "hybrid"
-    # LLM przeczy trzem głównym przesłankom → P spada względem samego regexa.
-    assert analysis.probability < analyze_advisory(WEALTH).probability
+    # Werdykt wydaje LLM: NIE na obie usługi → brak doradztwa mimo przesłanek regex.
+    assert analysis.probability < 0.5
+    assert analysis.label == NEGATIVE_LABEL
+    assert analysis.service is None
+    assert set(analysis.llm) == {"advisory", "portfolio"}
+
+
+@respx.mock
+def test_hybrid_llm_verdict_names_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("M3_ENGINE", "hybrid")
+    monkeypatch.setenv("OLLAMA_URL", "http://ollama.test")
+    respx.post("http://ollama.test/api/chat").mock(
+        side_effect=[
+            httpx.Response(200, json=_logprobs("NIE")),  # doradztwo
+            httpx.Response(200, json=_logprobs("TAK")),  # zarządzanie portfelem
+        ]
+    )
+    analysis = analyze_advisory_engine(WEALTH)
+    assert analysis.label == POSITIVE_LABEL
+    assert analysis.service == "portfolio"
+    assert analysis.probability == analysis.llm["portfolio"]
+    verdict = next(f for f in analysis.findings if f.rule_id == ADVISORY_RULE)
+    assert verdict.result == "violation"
+    assert verdict.quote is not None and verdict.quote in WEALTH
+    assert "zarządzanie portfelem" in verdict.reason
 
 
 @respx.mock
