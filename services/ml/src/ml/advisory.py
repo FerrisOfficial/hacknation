@@ -479,18 +479,39 @@ _PHONE_RE = re.compile(
 _NAME_STOP = frozenset({"w", "i", "oraz", "przez", "z", "na", "do", "od", "the", "and", "of"})
 
 
+# Stanowisko albo opis przed nazwą firmy („Dyrektorem Finansowym Mennicy Polskiej S.A.”,
+# „Partner w Kowalski sp. z o.o.”) — te słowa nie należą do nazwy, a cała wzmianka to zwykle
+# biogram autora, nie podmiot oferty.
+_ROLE_RE = re.compile(
+    r"^(?:dyrektor|prezes|wiceprezes|członk|założyciel|współzałożyciel|partner|pracow|analityk|"
+    r"zarząd|doradc|ekspert|szef|kierown|menedżer|manager|ceo|cfo|cio|head|był|jest|obecnie|"
+    r"wcześniej|finansow|inwestycyjn|spółk|firm|grup|klient)",
+    re.IGNORECASE,
+)
+# Dane firmy stoją zwykle w stopce strony albo na końcu opisu filmu.
+_FOOTER_SHARE = 0.35
+
+
 def extract_subject(text: str) -> Subject:
-    names: list[str] = []
+    scores: dict[str, float] = {}
+    footer_from = len(text) * (1 - _FOOTER_SHARE)
     for match in _COMPANY_RE.finditer(text):
         words = match.group(1).split()
-        # Nazwa zaczyna się od słowa z wielkiej litery, bez spójników na początku.
-        while words and (words[0].lower() in _NAME_STOP or not words[0][:1].isupper()):
+        role = False
+        # Nazwa zaczyna się od słowa z wielkiej litery, bez spójników i stanowisk na początku.
+        while words and (
+            words[0].lower() in _NAME_STOP or not words[0][:1].isupper() or _ROLE_RE.match(words[0])
+        ):
+            role = role or bool(_ROLE_RE.match(words[0]))
             words.pop(0)
         if not words:
             continue
         name = f"{' '.join(words)} {match.group(0)[len(match.group(1)) :].strip()}"
-        names.append(re.sub(r"\s+", " ", name).strip())
-    name = max(set(names), key=names.count) if names else None
+        name = re.sub(r"\s+", " ", name).strip()
+        # Wzmianka w biogramie waży mniej niż nazwa w stopce albo powtórzona.
+        weight = (0.3 if role else 1.0) + (1.0 if match.start() >= footer_from else 0.0)
+        scores[name] = scores.get(name, 0.0) + weight
+    name = max(scores, key=scores.__getitem__) if scores and max(scores.values()) >= 1 else None
     emails = tuple(dict.fromkeys(m.group(0).lower() for m in _EMAIL_RE.finditer(text)))[:3]
     phones = tuple(
         dict.fromkeys(re.sub(r"[\s-]", " ", m.group(0)) for m in _PHONE_RE.finditer(text))

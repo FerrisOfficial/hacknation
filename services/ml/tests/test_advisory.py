@@ -188,3 +188,16 @@ def test_analyze_endpoint_m3_unknown_rule() -> None:
         json={"material_id": "m1", "module": "unauthorized_advisory", "text": "x", "rules": ["3"]},
     )
     assert response.status_code == 422
+
+
+def test_subject_skips_author_bio() -> None:
+    text = (
+        "Autor był wcześniej Dyrektorem Finansowym Mennicy Polskiej S.A.\n"
+        "Kurs inwestowania dla początkujących.\n"
+        "FinCrafters sp. z o.o., ul. Prosta 1, Warszawa"
+    )
+    assert extract_subject(text).name == "FinCrafters sp. z o.o."
+    assert (
+        extract_subject("Był Prezesem Zarządu Banku XYZ S.A. przez 10 lat. " * 1 + "x" * 200).name
+        is None
+    )
