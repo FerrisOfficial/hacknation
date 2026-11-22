@@ -7,7 +7,7 @@ System monitoringu internetu dla UKNF (zadanie **#InvestWatch — na straży inw
 - **Silnik zbierania:** wyszukiwanie i kanały YouTube (opisy, transkrypcje, klatki filmów), strony WWW z linków pod filmami, rejestr i lista ostrzeżeń KNF. Harmonogram w kolejce pg-boss, deduplikacja po hashu treści, opcjonalny proxy i losowe przerwy między zapytaniami.
 - **M1 — finfluencerzy:** reklamy firm z rejestru KNF publikowane przez osoby trzecie. Kanał, w którym znaleziono reklamę, jest potem obserwowany na stałe.
 - **M2 — informacja o ryzyku:** 18 reguł UKNF (art. 44 rozp. 2017/565) dla materiałów firm z rejestru KNF. Każde naruszenie ma cytat albo klatkę filmu jako dowód. Reguły wizualne (rozmiar czcionki, kontrast, czas ekspozycji ostrzeżenia) liczone są z OCR klatek.
-- **M3 — nieautoryzowane doradztwo:** przesłanki doradztwa inwestycyjnego (art. 76 u.o.o.i.f.) u podmiotów bez zezwolenia KNF. Prawdopodobieństwo liczy regresja logistyczna, a w trybie `hybrid` werdykt wydaje LLM.
+- **M3 — nieautoryzowane doradztwo:** przesłanki doradztwa inwestycyjnego (art. 76 u.o.o.i.f.) u podmiotów bez zezwolenia KNF. Werdykt to jawny warunek z art. 76: oferta usługi i (rekomendacje instrumentów albo dopasowanie do klienta), każda przesłanka z cytatem. Risk score łączy reguły noisy-OR z zanikiem, jak w M2. W trybie `hybrid` werdykt wydaje LLM.
 - **Dashboard:** kolejka incydentów z filtrami (data, źródło, ryzyko, moduł), zmiana statusu, trend incydentów, teczka podmiotu, okno sprawy (film, klatki, kopia HTML), raporty, powiadomienia o wysokim ryzyku na żywo (Socket.io).
 - **Kalibracja:** próg ryzyka dla każdego modułu. Jego zmiana od razu przelicza FP/FN na decyzjach analityka.
 
