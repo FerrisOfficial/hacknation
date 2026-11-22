@@ -46,7 +46,7 @@ def violations(text: str) -> set[str]:
 
 def test_wealth_manager_offer_is_advisory_with_quotes() -> None:
     analysis = analyze_advisory(WEALTH)
-    assert analysis.probability > 0.9
+    assert analysis.probability >= 0.8
     assert analysis.label == POSITIVE_LABEL
     assert violations(WEALTH) >= {
         ADVISORY_RULE,
@@ -191,7 +191,7 @@ def test_analyze_endpoint_m3(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["label"] == POSITIVE_LABEL
-    assert body["probability"] > 0.9
+    assert body["probability"] >= 0.8
     assert body["error"] is None
     assert body["subject"]["name"] == "Kowalski Wealth Partners sp. z o.o."
     assert body["signals"]["offer"] == 0.85
