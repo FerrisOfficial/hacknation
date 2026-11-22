@@ -3,6 +3,7 @@ import { getDb } from "@app/db";
 import { MediaError } from "@/lib/media";
 import { MlError, ml } from "@/lib/ml";
 import { runAnalysis } from "@/lib/pipeline/analyze";
+import { bootstrap } from "@/lib/pipeline/bootstrap";
 import { enqueueDueSources } from "@/lib/pipeline/scheduler";
 import { runScrapeJob, ScrapeJobError } from "@/lib/pipeline/scrape";
 import { runVideoDownload } from "@/lib/pipeline/video";
@@ -33,6 +34,8 @@ function logThrottled(message: string): void {
 export async function startWorker(): Promise<void> {
   const boss = await getBoss();
   const db = getDb();
+  // IVE_MODE: źródła M1/M3 i zbiór demo przy pierwszym starcie (@/lib/pipeline/bootstrap).
+  await bootstrap(db);
 
   await boss.work<ScrapeJobData>(
     QUEUES.scrape,
