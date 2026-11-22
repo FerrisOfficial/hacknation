@@ -12,8 +12,12 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
  */
 export function step(label, command, args) {
   process.stdout.write(`› ${label}\n`);
+  // pnpm na Windowsie to pnpm.cmd — Node uruchamia .cmd tylko przez powłokę, a z powłoką
+  // przyjmuje jedno polecenie jako tekst (lista argumentów + shell = ostrzeżenie DEP0190).
   const shell = process.platform === "win32" && command === "pnpm";
-  const result = spawnSync(command, args, { cwd: ROOT, stdio: "inherit", shell });
+  const result = shell
+    ? spawnSync([command, ...args].join(" "), { cwd: ROOT, stdio: "inherit", shell })
+    : spawnSync(command, args, { cwd: ROOT, stdio: "inherit" });
   if (result.error?.code === "ENOENT") {
     process.stdout.write(`  ⚠ pominięto: brak \`${command}\` w PATH (sprawdzi CI)\n`);
     return true;

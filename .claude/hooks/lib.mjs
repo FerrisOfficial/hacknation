@@ -3,7 +3,7 @@
 //
 // Protokół (https://docs.claude.com/en/docs/claude-code/hooks): hook dostaje JSON na stdin.
 // Kod wyjścia 2 = blokada, a stderr trafia do agenta jako informacja zwrotna. Kod 0 = przepuść.
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,18 +38,23 @@ export function block(message) {
  * `missing` = narzędzia nie ma w PATH (np. brak uv) — hook wtedy pomija krok, zamiast blokować.
  */
 export function run(command, args, options = {}) {
-  // pnpm na Windowsie to pnpm.cmd — Node uruchamia pliki .cmd tylko przez powłokę.
+  // pnpm na Windowsie to pnpm.cmd — Node uruchamia .cmd tylko przez powłokę, a z powłoką
+  // przyjmuje jedno polecenie jako tekst (lista argumentów + shell = ostrzeżenie DEP0190).
   const shell = process.platform === "win32" && command === "pnpm";
-  const safeArgs = shell ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)) : args;
+  const opts = {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 60_000,
+    ...options,
+  };
   try {
-    const output = execFileSync(command, safeArgs, {
-      cwd: ROOT,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      shell,
-      timeout: 60_000,
-      ...options,
-    });
+    const output = shell
+      ? execSync(
+          [command, ...args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))].join(" "),
+          opts,
+        )
+      : execFileSync(command, args, opts);
     return { ok: true, output, missing: false };
   } catch (error) {
     const output = `${error.stdout ?? ""}${error.stderr ?? ""}`.trim();
