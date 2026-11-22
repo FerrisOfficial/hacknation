@@ -35,9 +35,9 @@ export const MODULE_NUMBER: Record<AnalysisModule, number> = {
 };
 
 export const MODULE_TITLE: Record<AnalysisModule, string> = {
-  finfluencer: "Reklamy firm inwestycyjnych publikowane przez osoby trzecie",
-  risk_disclosure: "Materiały firm bez wyraźnej informacji o ryzyku",
-  unauthorized_advisory: "Doradztwo bez zezwolenia KNF",
+  finfluencer: "Finfluencerzy reklamujący firmy",
+  risk_disclosure: "Materiały firm bez ostrzeżenia",
+  unauthorized_advisory: "Oferty podmiotów spoza KNF",
 };
 
 export const MODULE_BY_NUMBER: Record<string, AnalysisModule> = {

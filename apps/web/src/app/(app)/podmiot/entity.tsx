@@ -9,9 +9,9 @@ import { RegistryChip } from "@/components/iw/registry";
 import {
   Avatar,
   Card,
-  Chip,
   EmptyState,
   ErrorNote,
+  KindIcon,
   PageHeader,
   ScoreCell,
   SectionTitle,
@@ -30,7 +30,6 @@ import {
   fmtDateTime,
   fmtDayMonth,
   hostOf,
-  MODULE_SHORT,
   plural,
   reviewText,
   STATUS_LABEL,
@@ -108,7 +107,7 @@ function MaterialCard({ item }: { item: UiListItem }) {
           <span className="truncate font-medium text-ink-900 text-sm">{materialTitle(item)}</span>
         </span>
         <span className="flex flex-wrap items-center gap-3">
-          <Chip>{MODULE_SHORT[item.module]}</Chip>
+          <KindIcon module={item.module} />
           <PlatformLabel platform={item.platform} className="text-[13px]" />
           {threshold ? (
             <ScoreCell
@@ -186,7 +185,7 @@ export function Entity() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <nav aria-label="Ścieżka" className="flex items-center gap-2 text-[13px] text-ink-600">
         <Link href="/kolejka" className="hover:text-ink-900 hover:underline">
-          Kolejka
+          Naruszenia
         </Link>
         <ChevronRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
         <span>{name || "Podmiot"}</span>

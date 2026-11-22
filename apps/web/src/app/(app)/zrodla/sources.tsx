@@ -3,7 +3,7 @@
 import { Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { PlatformLabel } from "@/components/iw/icons";
+import { PlatformIcon } from "@/components/iw/icons";
 import {
   Button,
   Card,
@@ -99,11 +99,12 @@ function State({ source }: { source: SourceItem }) {
     return <span className="text-ink-700">Pobiera teraz…</span>;
   }
   return (
-    <span className="text-ink-700">
-      Działa
+    <span className="inline-flex items-center gap-2 text-ink-700">
+      <span className="size-2 rounded-full bg-success-700" aria-hidden="true" />
+      <span className="sr-only">Działa, </span>
       {source.lastScrapedAt
-        ? ` · pobrano ${fmtRelative(source.lastScrapedAt)}`
-        : " · jeszcze nie pobrano"}
+        ? `pobrano ${fmtRelative(source.lastScrapedAt)}`
+        : "jeszcze nie pobrano"}
     </span>
   );
 }
@@ -161,7 +162,6 @@ export function Sources() {
             <thead className="bg-surface-1 text-left font-medium text-ink-600 text-xs">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Źródło</th>
-                <th className="px-4 py-2.5 font-medium">Platforma</th>
                 <th className="px-4 py-2.5 text-right font-medium">Materiały</th>
                 <th className="px-4 py-2.5 text-right font-medium">Co ile</th>
                 <th className="px-4 py-2.5 font-medium">Stan</th>
@@ -179,13 +179,13 @@ export function Sources() {
                     className={cn("group hover:bg-surface-hover", error && "bg-surface-1")}
                   >
                     <td className="max-w-[360px] px-4 py-3">
-                      <span className="block truncate font-medium text-ink-900">{source.name}</span>
+                      <span className="flex items-center gap-2 truncate font-medium text-ink-900">
+                        <PlatformIcon platform={source.platform} className="text-ink-600" />
+                        {source.name}
+                      </span>
                       <span className="block truncate text-[13px] text-ink-600">
                         {describe(source)}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <PlatformLabel platform={source.platform} className="text-[13px]" />
                     </td>
                     <td className="tnum px-4 py-3 text-right text-ink-900">
                       {source.materialsCount}

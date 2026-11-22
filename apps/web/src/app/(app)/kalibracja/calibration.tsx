@@ -42,7 +42,7 @@ function round(value: number): number {
 // Różnica kolorowana po znaku: plus zielony, minus pomarańczowy (decyzja z 22.11, wariant A).
 function Delta({ value, digits = 0 }: { value: number; digits?: number }) {
   if (Math.abs(value) < 10 ** -(digits + 1)) {
-    return <Chip>bez zmian</Chip>;
+    return null;
   }
   return (
     <Chip
@@ -62,14 +62,12 @@ function Metric({
   before,
   after,
   digits,
-  labeled,
 }: {
   title: string;
   hint?: string;
   before: number | null | undefined;
   after: number | null | undefined;
   digits: number;
-  labeled: number | undefined;
 }) {
   const fmt = (value: number | null | undefined) =>
     value === null || value === undefined
@@ -101,9 +99,6 @@ function Metric({
           <Chip>nie do policzenia</Chip>
         )}
       </span>
-      <p className="text-[13px] text-ink-600">
-        z {labeled ?? "…"} {plural(labeled ?? 0, "decyzji", "decyzji", "decyzji")}
-      </p>
     </Card>
   );
 }
@@ -264,8 +259,8 @@ function DropList({
         <SectionTitle>Materiały przy progu {fmtScore(candidate)}</SectionTitle>
         <p className="mt-2 text-[13px] text-ink-600">
           {candidate < saved
-            ? `Niższy próg dokłada do Kolejki materiały z wynikiem od ${fmtScore(candidate)} do ${fmtScore(saved)}. Nikt ich jeszcze nie oceniał, więc nie zmieniają FP ani FN.`
-            : "Przesuń suwak, żeby zobaczyć, które materiały wypadną z Kolejki."}
+            ? `Niższy próg dokłada do Naruszeń materiały z wynikiem od ${fmtScore(candidate)} do ${fmtScore(saved)}. Nikt ich jeszcze nie oceniał, więc nie zmieniają FP ani FN.`
+            : "Przesuń suwak, żeby zobaczyć, które materiały wypadną z Naruszeń."}
         </p>
       </Card>
     );
@@ -297,7 +292,7 @@ function DropList({
                   </span>
                   <span className="block text-[13px] text-ink-600">
                     {item.status === "new" || item.status === "in_review"
-                      ? `${STATUS_LABEL[item.status]}, bez decyzji · zostaje w Kolejce`
+                      ? `${STATUS_LABEL[item.status]}, bez decyzji · zostaje w Naruszeniach`
                       : reviewText(item)}
                     {" · "}oflagowano {fmtDateTime(item.created_at)}
                   </span>
@@ -367,7 +362,7 @@ function ModuleCalibration({
           <Illustration name="kontrole" size={40} />
           <p className="text-[13px] text-ink-700">
             Za mało decyzji, żeby ufać liczbom: {labeled} z co najmniej {MIN_LABELED}. Przejrzyj
-            więcej materiałów w Kolejce, zanim zmienisz próg.
+            więcej materiałów w Naruszeniach, zanim zmienisz próg.
           </p>
         </Card>
       ) : null}
@@ -379,14 +374,12 @@ function ModuleCalibration({
           before={before.data?.fp}
           after={after.data?.fp}
           digits={0}
-          labeled={labeled}
         />
         <Metric
           title={ads ? "Przeoczone reklamy (FN)" : "Przeoczone naruszenia (FN)"}
           before={before.data?.fn}
           after={after.data?.fn}
           digits={0}
-          labeled={labeled}
         />
         <Metric
           title="Precyzja"
@@ -398,7 +391,6 @@ function ModuleCalibration({
           before={before.data?.precision}
           after={after.data?.precision}
           digits={2}
-          labeled={labeled}
         />
         <Metric
           title="Pełność"
@@ -410,7 +402,6 @@ function ModuleCalibration({
           before={before.data?.recall}
           after={after.data?.recall}
           digits={2}
-          labeled={labeled}
         />
       </div>
 
@@ -435,8 +426,8 @@ function ModuleCalibration({
         </Button>
         <p className="text-[13px] text-ink-600">
           {changed && diff !== null && diff > 0
-            ? `Zapis od razu zmienia Kolejkę: ${diff} ${plural(diff, "materiał zniknie", "materiały znikną", "materiałów zniknie")} z listy.`
-            : "Zapis od razu zmienia Kolejkę i wykres na Przeglądzie."}
+            ? `Zapis od razu zmienia Naruszenia: ${diff} ${plural(diff, "materiał zniknie", "materiały znikną", "materiałów zniknie")} z listy.`
+            : "Zapis od razu zmienia Naruszenia i wykres na Przeglądzie."}
         </p>
       </div>
 
@@ -455,7 +446,7 @@ export function Calibration() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-5">
       <PageHeader
         title="Kalibracja"
-        description="Próg flagi decyduje, co trafia do Kolejki naruszeń i do rejestru reklam. FP i FN liczymy z decyzji analityków."
+        description="Próg flagi decyduje, co trafia do Naruszeń i do rejestru reklam. FP i FN liczymy z decyzji analityków."
         actions={
           <Tabs
             label="Obszar"

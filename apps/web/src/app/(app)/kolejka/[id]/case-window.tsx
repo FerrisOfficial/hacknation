@@ -103,6 +103,12 @@ function detailTitle(detail: UiDetail): string {
   );
 }
 
+// „art. 44 ust. 2 lit. a rozporządzenia del. 2017/565” → „art. 44 ust. 2 lit. a”; pełna nazwa w dymku.
+function shortBasis(basis: string): string {
+  const cut = basis.search(/\s(rozporządzenia|ustawy|Rozporządzenie|Ustawa|dyrektywy)\b/);
+  return cut > 0 ? basis.slice(0, cut) : basis;
+}
+
 function fmtSeconds(seconds: number): string {
   const s = Math.floor(seconds);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -475,30 +481,27 @@ function WhyFlagged({
           Sygnał naruszenia: {escalationText(detail.details.entity)}.
         </p>
       ) : null}
-      <p className="mt-2 flex items-baseline gap-2">
-        <span
-          className={cn(
-            "tnum font-semibold text-[28px] leading-8",
-            high ? "text-risk-700" : "text-ink-900",
-          )}
-        >
-          {fmtScore(risk)}
-        </span>
-        <span className={cn("text-sm", high ? "text-risk-700" : "text-ink-600")}>
-          {ads ? "pewność, że to reklama" : `risk score · ${high ? "wysokie" : "średnie"}`}
-        </span>
-      </p>
-      {ads ? (
-        <p className="mt-1 mb-3 text-[13px] text-ink-600">
-          Reklama firmy inwestycyjnej publikowana przez osobę trzecią trafia do rejestru reklam. To
-          nie jest naruszenie samo w sobie.
+      <Tip
+        label={
+          ads
+            ? "Pewność, że to reklama firmy inwestycyjnej publikowana przez osobę trzecią. Sama reklama nie jest naruszeniem."
+            : `Wynik z ${aboveFlag} ${plural(aboveFlag, "naruszenia", "naruszeń", "naruszeń")} ponad próg flagi ${fmtScore(threshold.flag)}: im więcej wysokich, tym wyżej. Alert od ${fmtScore(threshold.alert)}.`
+        }
+      >
+        <p className="mt-2 mb-3 flex items-baseline gap-2">
+          <span
+            className={cn(
+              "tnum font-semibold text-[28px] leading-8",
+              high ? "text-risk-700" : "text-ink-900",
+            )}
+          >
+            {fmtScore(risk)}
+          </span>
+          <span className={cn("text-sm", high ? "text-risk-700" : "text-ink-600")}>
+            {ads ? "pewność, że to reklama" : high ? "wysokie" : "średnie"}
+          </span>
         </p>
-      ) : null}
-      <p className={cn("mt-1 mb-3 text-[13px] text-ink-600", ads && "hidden")}>
-        Z naruszeń ponad próg flagi {fmtScore(threshold.flag)}: {aboveFlag}{" "}
-        {plural(aboveFlag, "naruszenie", "naruszenia", "naruszeń")}. Im więcej wysokich, tym wyżej;
-        naruszenia poniżej progu się nie liczą (alert od {fmtScore(threshold.alert)}).
-      </p>
+      </Tip>
       {detail.details.error ? (
         <p className="mb-3 rounded-md bg-warning-100 px-3 py-2 text-[13px] text-warning-800">
           Analiza zgłosiła błąd: {detail.details.error}
@@ -536,7 +539,7 @@ function WhyFlagged({
               {flag.reason ? <p className="mt-1 text-[13px] text-ink-700">{flag.reason}</p> : null}
               <div className="mt-2 flex flex-wrap gap-2">
                 <Tip
-                  label={flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}
+                  label={`${flag.kind === "hard" ? "Wymóg z przepisu" : "Zalecenie, nie wymóg"}${flag.legal_basis ? `: ${flag.legal_basis}` : ""}`}
                   className="max-w-full"
                 >
                   <OutlineChip className="h-auto min-h-6 py-1 text-left">
@@ -545,18 +548,18 @@ function WhyFlagged({
                       strokeWidth={1.5}
                       aria-hidden="true"
                     />
-                    {flag.legal_basis || "podstawa prawna do uzupełnienia"}
+                    {shortBasis(flag.legal_basis) || "podstawa prawna do uzupełnienia"}
                   </OutlineChip>
                 </Tip>
                 <Tip label="Wynik naruszenia, porównywany z progiem flagi i alertu">
                   <OutlineChip
                     className={cn(
-                      ruleScore(flag) >= threshold.alert && "border-risk-700 text-risk-700",
+                      !ads && ruleScore(flag) >= threshold.alert && "border-risk-700 text-risk-700",
                     )}
                   >
                     <Gauge className="size-3.5 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
                     <span className="tnum">{fmtScore(ruleScore(flag))}</span>
-                    {ruleScore(flag) >= threshold.alert
+                    {!ads && ruleScore(flag) >= threshold.alert
                       ? " · ponad alert"
                       : ruleScore(flag) >= threshold.flag
                         ? " · ponad próg"
@@ -946,6 +949,8 @@ export function CaseWindow({ id }: { id: string }) {
   }
 
   const data = detail.data;
+  // Reklama otwarta z rejestru (?modul=1) wraca do rejestru, nie do Naruszeń.
+  const fromRegistry = data.module === "finfluencer" && params.module === "finfluencer";
   const threshold = thresholds.data[data.module];
   const groupName = entityName({
     firm_name: data.details.entity.firm_name,
@@ -966,8 +971,11 @@ export function CaseWindow({ id }: { id: string }) {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <div className="flex items-center justify-between text-[13px] text-ink-600">
         <nav aria-label="Ścieżka" className="flex items-center gap-2">
-          <Link href={`/kolejka${suffix}`} className="hover:text-ink-900 hover:underline">
-            Kolejka
+          <Link
+            href={fromRegistry ? "/reklamy" : `/kolejka${suffix}`}
+            className="hover:text-ink-900 hover:underline"
+          >
+            {fromRegistry ? "Reklamy" : "Naruszenia"}
           </Link>
           {groupName ? (
             <>
@@ -1058,18 +1066,14 @@ export function CaseWindow({ id }: { id: string }) {
           {data.material.published_at ? (
             <span>opublikowano {fmtDateTime(data.material.published_at)}</span>
           ) : null}
-          <span>wykryto {fmtDateTime(data.created_at)}</span>
-          <span className="inline-flex items-center gap-1.5">
-            <Fingerprint className="size-4" strokeWidth={1.5} aria-hidden="true" />
-            kopia {fmtDateTime(data.material.scraped_at)}
-            {hash ? (
-              <Tip label={`SHA-256 ${hash}`}>
-                <span className="font-mono text-xs">
-                  · SHA-256 {hash.slice(0, 4)}…{hash.slice(-4)}
-                </span>
-              </Tip>
-            ) : null}
-          </span>
+          <Tip
+            label={`Kopia z dnia pobrania${hash ? ` · SHA-256 ${hash.slice(0, 12)}…` : ""} · oflagowano ${fmtDateTime(data.created_at)}`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Fingerprint className="size-4" strokeWidth={1.5} aria-hidden="true" />
+              kopia z {fmtDateTime(data.material.scraped_at)}
+            </span>
+          </Tip>
         </div>
       </div>
 
