@@ -23,14 +23,14 @@ export async function bootstrap(db: Db): Promise<void> {
   const mode = iveMode();
   if (!mode) return;
 
-  await seedM1Sources(db);
-  await seedM3Sources(db);
-
+  // Tylko przy pierwszym starcie (pusta baza). Baza z danymi zostaje nietknięta: źródła zmienione
+  // albo usunięte w zakładce Źródła i stan harmonogramu nie wracają po restarcie kontenera.
   const [row] = await db.select({ n: count() }).from(materials);
   if ((row?.n ?? 0) > 0) return;
 
-  // Tylko przy pierwszym starcie (pusta baza): analityk może potem włączyć harmonogram sam.
   await setScrapePaused(db, mode === "quick");
+  await seedM1Sources(db);
+  await seedM3Sources(db);
   const inserted = await seedDemo(db);
   console.info(`[bootstrap] IVE_MODE=${mode}: zbiór demo, ${inserted} wyników`);
 }
