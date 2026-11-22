@@ -53,7 +53,6 @@ import {
   buildQueue,
   entityName,
   escalationText,
-  isEscalated,
   materialTitle,
   type QueueGroup,
   type QueueParams,
@@ -111,7 +110,7 @@ function Row({
             {materialTitle(item)}
           </span>
           <span className="block truncate text-[13px] text-ink-600">
-            {isEscalated(item) ? (
+            {item.in_register === false || item.on_warning_list ? (
               <Tip label={escalationText(item)}>
                 <span className="mr-1.5 inline-flex items-center gap-1 font-medium text-warning-800">
                   <TriangleAlert className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
@@ -236,6 +235,17 @@ function Group({
           {count} · {group.publishers}{" "}
           {plural(group.publishers, "publikujący", "publikujących", "publikujących")}
         </span>
+        {group.key !== "__bez_podmiotu" &&
+        (group.inRegister === false || group.items.some((item) => item.on_warning_list)) ? (
+          <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-medium text-[13px] text-warning-800">
+            <TriangleAlert className="size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+            {group.items.some((item) => item.on_warning_list)
+              ? "firma z listy ostrzeżeń KNF"
+              : group.hasFirm
+                ? "firma spoza rejestru KNF: możliwa reklama usług bez zezwolenia"
+                : "spoza rejestru KNF: możliwe usługi inwestycyjne bez zezwolenia"}
+          </span>
+        ) : null}
         {group.hasFirm ? (
           <Link
             href={`/podmiot?nazwa=${encodeURIComponent(group.name)}`}

@@ -6,6 +6,7 @@ import {
   Megaphone,
   PanelLeftClose,
   PanelLeftOpen,
+  Pause,
   RadioTower,
   SlidersHorizontal,
   TriangleAlert,
@@ -15,6 +16,7 @@ import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import {
   sourceHasError,
+  useEngine,
   useIncidents,
   useMe,
   useSources,
@@ -83,6 +85,8 @@ function NavItem({
 function LivePanel() {
   const { connected } = useRealtime();
   const collapsed = useContext(Collapsed);
+  const engine = useEngine();
+  const paused = engine.data?.paused ?? false;
   const sources = useSources();
   const items = sources.data?.items ?? [];
   const failed = items.filter(sourceHasError).length;
@@ -94,13 +98,13 @@ function LivePanel() {
   if (collapsed) {
     return (
       <span
-        title={`${connected ? "Na żywo" : "Bez połączenia na żywo"}${failed ? ` · ${failed} źródeł z błędem` : ""}`}
+        title={`${connected ? "Na żywo" : "Bez połączenia na żywo"}${paused ? " · skanowanie wstrzymane" : ""}${failed ? ` · ${failed} źródeł z błędem` : ""}`}
         className="flex h-9 items-center justify-center"
       >
         <span
           className={cn(
             "size-2.5 rounded-full",
-            failed ? "bg-warning-700" : connected ? "bg-success-700" : "bg-ink-400",
+            failed || paused ? "bg-warning-700" : connected ? "bg-success-700" : "bg-ink-400",
           )}
         />
       </span>
@@ -110,7 +114,7 @@ function LivePanel() {
     <div
       className={cn(
         "rounded-lg border bg-surface-0 p-3",
-        failed ? "border-warning-700" : "border-line-200",
+        failed || paused ? "border-warning-700" : "border-line-200",
       )}
     >
       <p className="flex items-center gap-2 font-medium text-[13px] text-ink-900">
@@ -123,6 +127,15 @@ function LivePanel() {
       <p className="mt-1 text-ink-600 text-xs">
         {last ? `ostatnie pobranie ${fmtTime(last)}` : "brak pobrań"}
       </p>
+      {paused ? (
+        <Link
+          href="/zrodla"
+          className="mt-2 flex items-center gap-1.5 rounded-md bg-warning-100 px-2 py-1.5 font-medium text-warning-800 text-xs hover:underline"
+        >
+          <Pause className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+          Skanowanie wstrzymane
+        </Link>
+      ) : null}
       {failed ? (
         <Link
           href="/zrodla"

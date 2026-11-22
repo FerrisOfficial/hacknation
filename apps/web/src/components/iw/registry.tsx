@@ -1,5 +1,6 @@
 "use client";
 
+import { Info } from "lucide-react";
 import type { IncidentEntity } from "@/lib/incidents/contract";
 import { OutlineChip, Tip } from "./ui";
 
@@ -20,12 +21,18 @@ export function RegistryChip({
               : "Firmy nie ma w rejestrze KNF. Może nie mieć zezwolenia na usługi inwestycyjne w Polsce."
           }
         >
-          <OutlineChip>{entity.in_register ? "w rejestrze KNF" : "spoza rejestru KNF"}</OutlineChip>
+          <OutlineChip>
+            {entity.in_register ? "w rejestrze KNF" : "spoza rejestru KNF"}
+            <Info className="size-3.5 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
+          </OutlineChip>
         </Tip>
       ) : null}
       {entity.on_warning_list ? (
         <Tip label="Firma jest na liście ostrzeżeń publicznych KNF.">
-          <OutlineChip className="border-risk-700 text-risk-700">lista ostrzeżeń KNF</OutlineChip>
+          <OutlineChip className="border-risk-700 text-risk-700">
+            lista ostrzeżeń KNF
+            <Info className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+          </OutlineChip>
         </Tip>
       ) : null}
     </span>

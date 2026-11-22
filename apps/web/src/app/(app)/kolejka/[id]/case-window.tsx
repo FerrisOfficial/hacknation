@@ -160,28 +160,30 @@ function MaterialText({
     return <p className="text-[13px] text-ink-600">Materiał nie ma zapisanej treści tekstowej.</p>;
   }
   return (
-    <p className="max-h-[420px] overflow-y-auto whitespace-pre-wrap text-ink-700 text-sm leading-[22px]">
-      {segments(text, flags).map((segment, index) =>
-        segment.rule ? (
-          <mark
+    <div className="relative min-h-0 flex-1">
+      <p className="absolute inset-0 overflow-y-auto whitespace-pre-wrap pr-1 text-ink-700 text-sm leading-[22px]">
+        {segments(text, flags).map((segment, index) =>
+          segment.rule ? (
+            <mark
+              // biome-ignore lint/suspicious/noArrayIndexKey: segmenty są stałe dla danego tekstu
+              key={index}
+              data-rule={segment.rule}
+              onMouseEnter={() => onActive(segment.rule ?? null)}
+              onMouseLeave={() => onActive(null)}
+              className={cn(
+                "rounded-sm bg-transparent font-semibold text-risk-700 underline decoration-[1.5px] underline-offset-2 transition-colors duration-150",
+                active === segment.rule && "bg-risk-50",
+              )}
+            >
+              {segment.text}
+            </mark>
+          ) : (
             // biome-ignore lint/suspicious/noArrayIndexKey: segmenty są stałe dla danego tekstu
-            key={index}
-            data-rule={segment.rule}
-            onMouseEnter={() => onActive(segment.rule ?? null)}
-            onMouseLeave={() => onActive(null)}
-            className={cn(
-              "rounded-sm bg-transparent font-semibold text-risk-700 underline decoration-[1.5px] underline-offset-2 transition-colors duration-150",
-              active === segment.rule && "bg-risk-50",
-            )}
-          >
-            {segment.text}
-          </mark>
-        ) : (
-          // biome-ignore lint/suspicious/noArrayIndexKey: segmenty są stałe dla danego tekstu
-          <span key={index}>{segment.text}</span>
-        ),
-      )}
-    </p>
+            <span key={index}>{segment.text}</span>
+          ),
+        )}
+      </p>
+    </div>
   );
 }
 
@@ -700,7 +702,25 @@ function AdvisorySignals({ detail }: { detail: UiDetail }) {
 // Ten sam materiał w innym module (R19). Karta tylko wtedy, gdy API podało inną ocenę.
 function RelatedCard({ detail, suffix }: { detail: UiDetail; suffix: string }) {
   const related = detail.related ?? [];
-  if (!related.length) return null;
+  const entity = detail.details.entity;
+  const flagged = entity.in_register === false || entity.on_warning_list === true;
+  // Reklama firmy spoza rejestru: ocena doradztwa ma zawsze swoje miejsce w oknie, także zanim
+  // backend ją policzy (wtedy informacja, że jej jeszcze nie ma).
+  if (!related.length && !(flagged && detail.module === "finfluencer")) return null;
+  if (!related.length) {
+    return (
+      <Card className="p-4">
+        <p className="flex items-center gap-2 text-[13px] text-ink-700">
+          <Link2 className="size-4 text-ink-600" strokeWidth={1.5} aria-hidden="true" />
+          Ten sam materiał w innym module
+        </p>
+        <p className="mt-2 rounded-md bg-surface-1 px-3 py-2.5 text-[13px] text-ink-700">
+          Firma spoza rejestru KNF: ten materiał trzeba też ocenić jako doradztwo bez zezwolenia.
+          Ocena jeszcze nie spłynęła.
+        </p>
+      </Card>
+    );
+  }
   return (
     <Card className="p-4">
       <p className="flex items-center gap-2 text-[13px] text-ink-700">
@@ -753,6 +773,16 @@ function EntityCard({ detail, related }: { detail: UiDetail; related: string | n
         <SectionTitle>{name}</SectionTitle>
         <RegistryChip entity={entity} />
       </div>
+      {entity.in_register === false || entity.on_warning_list ? (
+        <p className="mt-2 flex items-start gap-1.5 font-medium text-[13px] text-warning-800">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+          {entity.on_warning_list
+            ? "firma z listy ostrzeżeń KNF"
+            : entity.firm_name
+              ? "firma spoza rejestru KNF: możliwa reklama usług bez zezwolenia"
+              : "spoza rejestru KNF: możliwe usługi inwestycyjne bez zezwolenia"}
+        </p>
+      ) : null}
       {facts.length ? <p className="mt-2 text-[13px] text-ink-600">{facts.join(" · ")}</p> : null}
       {related ? <p className="mt-1 text-[13px] text-ink-600">{related}</p> : null}
       {entity.firm_name ? (
@@ -1199,7 +1229,9 @@ export function CaseWindow({ id }: { id: string }) {
         onDecide={decide}
       />
 
-      <div className="grid grid-cols-[minmax(0,1fr)_400px] items-start gap-4">
+      {/* Kolumny równej wysokości: treść materiału kończy się na linii ostatniej karty po prawej
+          i przewija się w środku. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_400px] items-stretch gap-4">
         <div className="flex min-w-0 flex-col gap-4">
           <CopyPanel
             key={data.id}
@@ -1209,7 +1241,7 @@ export function CaseWindow({ id }: { id: string }) {
             active={active}
             onActive={setActive}
           />
-          <Card className="p-4">
+          <Card className="flex min-h-[320px] flex-1 flex-col p-4">
             <p className="mb-2 font-medium text-ink-600 text-xs">
               {data.material.platform === "youtube" ? "Opis i transkrypcja" : "Treść materiału"} (z
               kopii)
