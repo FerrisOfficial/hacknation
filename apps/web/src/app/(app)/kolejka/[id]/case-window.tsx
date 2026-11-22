@@ -672,6 +672,11 @@ function AdvisorySignals({ detail }: { detail: UiDetail }) {
             </li>
           );
         })}
+      </ul>
+    </Card>
+  );
+}
+
 // Ten sam materiał w innym module (R19). Karta tylko wtedy, gdy API podało inną ocenę.
 function RelatedCard({ detail, suffix }: { detail: UiDetail; suffix: string }) {
   const related = detail.related ?? [];
