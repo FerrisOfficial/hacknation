@@ -79,7 +79,7 @@ pnpm audit          # znane podatności w zależnościach npm (CI sprawdza też 
 
 - Gałąź na funkcję, krótkie PR-y, merge w ciągu dnia.
 - Migracje (`pnpm db:generate`) robi jedna osoba (2), żeby nie było konfliktów. Po `git pull` każdy nakłada je u siebie: `pnpm db:migrate`.
-- Zasady dla agentów AI są w [CLAUDE.md](CLAUDE.md). Zmiany w nim przez osobny PR.
+- Zasady dla agentów AI są w [CLAUDE.md](CLAUDE.md), a cały proces (skille, hooki Claude Code, git hooki, recenzent, CI) w [docs/PROCES-AI.md](docs/PROCES-AI.md). Zmiany w nich przez osobny PR.
 
 ### Zasady na GitHubie
 

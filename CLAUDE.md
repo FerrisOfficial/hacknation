@@ -58,6 +58,16 @@ Każdy katalog może mieć własny CLAUDE.md z zasadami lokalnymi (np. `apps/web
 - Logowania na razie nie ma. Jeśli będzie potrzebne, uzgodnij z zespołem bibliotekę open source działającą lokalnie (np. Auth.js) — nie pisz własnej obsługi haseł ani sesji.
 - Nie zmieniaj plików poza obszarem zadania (formatowanie "przy okazji" = konflikty u innych).
 
+## Proces pracy z AI
+
+Pełny opis: [docs/PROCES-AI.md](docs/PROCES-AI.md).
+
+- **Skille** (`.claude/skills/`) — użyj pasującego, zamiast odtwarzać kroki z pamięci: `zmiana-api-ml`, `migracja-bazy`, `regula-m2`, `nowe-zrodlo`, `przed-pr`, `demo`.
+- **Recenzent** (`.claude/agents/recenzent.md`) — przed `gh pr create` uruchom subagenta `recenzent` na diffie i popraw zgłoszone błędy.
+- **Hooki** (`.claude/settings.json`) blokują łamanie zasad z tego pliku i formatują każdy edytowany plik. Komunikat hooka to instrukcja: wykonaj podaną alternatywę, nie obchodź blokady innym poleceniem.
+- **Git hooki** (`.githooks/`, włączane przez `pnpm install`) sprawdzają commit i push. Nigdy `--no-verify`.
+- Zmiana hooków = test w `.claude/hooks/hooks.test.mjs` i `pnpm test:hooks`.
+
 ## Git
 
 - `main` jest chroniony: zmiany tylko przez PR z zielonym CI.

@@ -35,6 +35,12 @@ jobs:
       # Dokładnie to samo, co `pnpm check` lokalnie (TS + Python).
       - run: pnpm check
 
+      # Bariery dla agentów AI i git hooki (docs/PROCES-AI.md): lint i testy blokad.
+      - name: Hooki agentów i gita
+        run: |
+          pnpm exec biome check .claude scripts
+          pnpm test:hooks
+
       - name: Kontrakt API (typy TS zgodne z FastAPI)
         run: |
           pnpm api:generate
