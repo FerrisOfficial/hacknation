@@ -1,6 +1,6 @@
 // Panel kalibracji: jak próg zmienia liczbę False Positive / False Negative.
 // Prawdę bazową dają decyzje analityków: `confirmed` = naruszenie, `dismissed` = fałszywy alarm.
-// Wyniki bez decyzji (`new`, `in_review`) liczymy osobno — pokazują, ile alertów wygeneruje próg.
+// Wyniki bez decyzji (`new`, `in_review`, `postponed`) liczymy osobno — pokazują, ile alertów wygeneruje próg.
 //
 // Wejście to histogram: liczba wyników w koszyku score (setne części) per rodzaj etykiety. Dzięki
 // temu baza zwraca najwyżej 101 × 3 wierszy niezależnie od liczby materiałów.

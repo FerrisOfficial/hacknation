@@ -50,6 +50,13 @@
       "when": 1795307186696,
       "tag": "0006_fine_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795308805050,
+      "tag": "0007_gorgeous_gambit",
+      "breakpoints": true
     }
   ]
 }

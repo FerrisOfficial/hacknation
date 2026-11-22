@@ -55,7 +55,22 @@ export const analysisModule = pgEnum("analysis_module", [
   "unauthorized_advisory",
 ]);
 
-export const reviewStatus = pgEnum("review_status", ["new", "in_review", "confirmed", "dismissed"]);
+// `postponed` (Odłożony): analityk wraca do sprawy później. Kalibracja traktuje go jak brak decyzji.
+export const reviewStatus = pgEnum("review_status", [
+  "new",
+  "in_review",
+  "postponed",
+  "confirmed",
+  "dismissed",
+]);
+
+// Zdarzenia w historii incydentu: oflagowanie, alert i ponowna analiza (system) albo zmiana statusu.
+export const incidentEventKind = pgEnum("incident_event_kind", [
+  "flagged",
+  "alert",
+  "reanalyzed",
+  "status",
+]);
 
 // Kto uruchomił zadanie scrapingu: harmonogram (cron), analityk z dashboardu albo API (skrypt).
 export const scrapeTrigger = pgEnum("scrape_trigger", ["schedule", "manual", "api"]);
@@ -157,6 +172,16 @@ export const materials = pgTable(
   ],
 ).enableRLS();
 
+// Analityk, który podejmuje decyzje w dashboardzie (autor decyzji, R16). Logowania nie ma, więc
+// aplikacja wpisuje tu użytkownika z env (UI_USER_*). Wiersz zostaje, żeby historia miała autora.
+export const reviewers = pgTable("reviewers", {
+  id: uuid("id").primaryKey(),
+  name: text("name").notNull(),
+  role: text("role"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Wynik jednego modułu AI dla materiału. `status` zmienia analityk w dashboardzie.
 export const analysisResults = pgTable(
   "analysis_results",
@@ -177,7 +202,7 @@ export const analysisResults = pgTable(
     details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
     model: text("model").notNull(),
     status: reviewStatus("status").notNull().default("new"),
-    reviewedBy: uuid("reviewed_by"),
+    reviewedBy: uuid("reviewed_by").references(() => reviewers.id, { onDelete: "set null" }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     reviewNote: text("review_note"),
     // Pierwsze wykrycie (trend incydentów w czasie) — ponowna analiza go nie zmienia.
@@ -193,6 +218,26 @@ export const analysisResults = pgTable(
     index("analysis_results_created_at_idx").on(table.createdAt),
   ],
 ).enableRLS();
+
+// Historia incydentu (Okno sprawy, teczka podmiotu): co i kiedy się z nim działo.
+// `actor_id` = null to system (pipeline analizy), inaczej analityk z `reviewers`.
+export const incidentEvents = pgTable(
+  "incident_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    resultId: uuid("result_id")
+      .notNull()
+      .references(() => analysisResults.id, { onDelete: "cascade" }),
+    kind: incidentEventKind("kind").notNull(),
+    actorId: uuid("actor_id").references(() => reviewers.id, { onDelete: "set null" }),
+    // Opis dla człowieka, np. „oflagowano 0,84 przy progu 0,55”, „Odłożony: dowód niepełny”.
+    action: text("action").notNull(),
+    // Status po zdarzeniu (tylko `kind = status`).
+    status: reviewStatus("status"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("incident_events_result_at_idx").on(table.resultId, table.at)],
+);
 
 // Progi kalibracji per moduł (panel kalibracji). Brak wiersza = domyślne progi z aplikacji.
 // `threshold` (próg `flag`): wynik ze `score >= threshold` jest incydentem, poniżej — negatywny.
@@ -213,6 +258,10 @@ export type NewMaterial = typeof materials.$inferInsert;
 export type AnalysisResult = typeof analysisResults.$inferSelect;
 export type NewAnalysisResult = typeof analysisResults.$inferInsert;
 export type ModuleSetting = typeof moduleSettings.$inferSelect;
+export type ReviewerRow = typeof reviewers.$inferSelect;
+export type IncidentEvent = typeof incidentEvents.$inferSelect;
+export type NewIncidentEvent = typeof incidentEvents.$inferInsert;
+export type IncidentEventKind = (typeof incidentEventKind.enumValues)[number];
 export type Platform = (typeof platform.enumValues)[number];
 export type AnalysisModule = (typeof analysisModule.enumValues)[number];
 export type ReviewStatus = (typeof reviewStatus.enumValues)[number];
