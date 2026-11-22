@@ -71,7 +71,7 @@ function SourceErrorBanner({ failed, total }: { failed: SourceItem[]; total: num
           {failed.length > 1 ? ` (i ${failed.length - 1} innych)` : ""}
         </p>
         <p className="text-[13px] text-ink-600">
-          Materiały z {failed.length > 1 ? "tych źródeł" : "tego źródła"} nie trafiają do Kolejki.
+          Materiały z {failed.length > 1 ? "tych źródeł" : "tego źródła"} nie trafiają do Naruszeń.
           {working > 0
             ? ` Pozostałe ${working} ${plural(working, "źródło działa", "źródła działają", "źródeł działa")}.`
             : ""}
@@ -136,7 +136,7 @@ function ModuleCard({
             <Tip
               label={
                 ads
-                  ? "Reklamy firm spoza rejestru KNF albo z listy ostrzeżeń: trafiają też do Kolejki."
+                  ? "Reklamy firm spoza rejestru KNF albo z listy ostrzeżeń: trafiają też do Naruszeń."
                   : `Nowe materiały z wynikiem od progu alertu${threshold ? ` ${fmtScore(threshold.alert)}` : ""} w górę. Przy nich system wysyła alert na żywo.`
               }
             >
@@ -163,7 +163,7 @@ function ModuleCard({
         href={ads ? "/reklamy" : `/kolejka?modul=${MODULE_NUMBER[module]}`}
         className="mt-auto inline-flex items-center gap-1 font-medium text-[13px] text-primary-700 hover:underline"
       >
-        {ads ? "Otwórz rejestr reklam" : "Pokaż w Kolejce"}
+        {ads ? "Otwórz rejestr reklam" : "Pokaż w Naruszeniach"}
         <ArrowRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
       </Link>
     </Card>
@@ -205,7 +205,7 @@ export function Overview() {
 
   const items = sources.data?.items ?? [];
   const failed = items.filter(sourceHasError);
-  const last = items
+  const _last = items
     .map((source) => source.lastScrapedAt)
     .filter((value): value is string => Boolean(value))
     .sort()
@@ -215,10 +215,10 @@ export function Overview() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-5">
       <PageHeader
         title="Przegląd"
-        description={`${fmtToday()}${last ? ` · ostatnie pobranie ${fmtTime(last)}` : ""}`}
+        description={fmtToday()}
         actions={
           <ButtonLink href="/kolejka" variant="primary" shortcut="Enter">
-            Otwórz Kolejkę
+            Otwórz Naruszenia
             {open !== undefined
               ? ` · ${open} ${plural(open, "nowe naruszenie", "nowe naruszenia", "nowych naruszeń")}`
               : ""}

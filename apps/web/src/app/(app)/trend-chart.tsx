@@ -56,7 +56,8 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
   const x = (index: number) =>
     PAD.left + (points.length <= 1 ? innerW / 2 : (index / (points.length - 1)) * innerW);
   const y = (value: number) => PAD.top + innerH - (value / max) * innerH;
-  const ticks = [0, max / 2, max];
+  // Liczba materiałów jest całkowita: środkowa podziałka tylko, gdy wypada na liczbie całkowitej.
+  const ticks = Number.isInteger(max / 2) ? [0, max / 2, max] : [0, max];
   const labelEvery = Math.max(1, Math.ceil(points.length / 8));
   const last = points.at(-1);
   // Etykiety końców linii rozsuwamy o co najmniej 13 px, żeby się nie nakładały przy równych wartościach.

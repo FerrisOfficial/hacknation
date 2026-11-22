@@ -135,7 +135,7 @@ function Nav() {
         />
         <NavItem
           href="/kolejka"
-          label="Kolejka"
+          label="Naruszenia"
           icon={<Inbox className="size-4" strokeWidth={1.5} />}
           meta={open !== undefined ? String(open) : undefined}
         />
