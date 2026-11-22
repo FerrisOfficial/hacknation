@@ -42,6 +42,7 @@ import type { UiListItem } from "@/lib/client/contract-ui";
 import {
   ACTIVE_PLATFORMS,
   fmtRelative,
+  MODULE_NAME,
   MODULE_SHORT,
   PLATFORM_LABEL,
   plural,
@@ -246,7 +247,7 @@ function exportConfirmed(items: UiListItem[]) {
   ];
   const rows = items.map((item) => [
     entityName(item),
-    MODULE_SHORT[item.module],
+    MODULE_NAME[item.module],
     item.title ?? item.summary,
     PLATFORM_LABEL[item.platform],
     item.url,
@@ -316,11 +317,11 @@ export function Queue() {
   });
 
   const moduleOptions: { value: QueueParams["module"]; label: string }[] = [
-    { value: "naruszenia", label: "naruszenia (M2, M3, M1 z sygnałem)" },
-    { value: "wszystkie", label: "wszystkie, z reklamami M1" },
-    { value: "finfluencer", label: "1" },
-    { value: "risk_disclosure", label: "2" },
-    { value: "unauthorized_advisory", label: "3" },
+    { value: "naruszenia", label: "naruszenia (ryzyko, doradztwo, reklamy z sygnałem)" },
+    { value: "wszystkie", label: "wszystko, także reklamy" },
+    { value: "finfluencer", label: "reklamy osób trzecich" },
+    { value: "risk_disclosure", label: "informacja o ryzyku" },
+    { value: "unauthorized_advisory", label: "doradztwo bez zezwolenia" },
   ];
   const platformOptions: { value: Platform | "wszystkie"; label: string }[] = [
     { value: "wszystkie", label: "wszystkie" },
@@ -332,7 +333,7 @@ export function Queue() {
     <div className="mx-auto flex max-w-[1160px] flex-col gap-4">
       <PageHeader
         title="Kolejka"
-        description="Potencjalne naruszenia. Reklamy osób trzecich bez sygnału naruszenia są w rejestrze Reklamy (M1)."
+        description="Potencjalne naruszenia. Reklamy osób trzecich bez sygnału naruszenia są w rejestrze Reklamy."
         actions={
           <span className="flex items-center gap-2 text-[13px] text-ink-600">
             <Kbd>Enter</Kbd> otwórz <Kbd>J</Kbd> następny <Kbd>K</Kbd> poprzedni
@@ -387,7 +388,7 @@ export function Queue() {
         />
         <FilterSelect
           icon={<Boxes className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
-          label="Moduł"
+          label="Rodzaj"
           value={params.module}
           allValue="naruszenia"
           onChange={(module) => update({ module })}

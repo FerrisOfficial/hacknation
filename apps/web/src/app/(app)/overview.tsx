@@ -36,6 +36,7 @@ import {
   fmtScore,
   fmtTime,
   fmtToday,
+  MODULE_NAME,
   MODULE_NUMBER,
   MODULE_TITLE,
   plural,
@@ -115,7 +116,7 @@ function ModuleCard({
       <div className="flex gap-3">
         <Illustration name={ILLUSTRATION[module]} size={32} />
         <div>
-          <SectionTitle>Moduł {MODULE_NUMBER[module]}</SectionTitle>
+          <SectionTitle>{MODULE_NAME[module]}</SectionTitle>
           <p className="mt-0.5 text-[13px] text-ink-600">{MODULE_TITLE[module]}</p>
         </div>
       </div>
